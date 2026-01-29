@@ -9,6 +9,7 @@ import { generateId } from '@/lib/firestoreCollections';
 import { getAccounts, updateAccount } from '@/lib/firestoreCollections';
 import { Plus, Edit2, Trash2, Receipt, X, ArrowUpCircle, ArrowDownCircle, Calendar, Filter, ArrowRightLeft, ArrowRight } from 'lucide-react';
 import { showToast } from '@/components/Toast';
+import UnifiedTransactionModal from '@/components/UnifiedTransactionModal';
 
 export default function TransactionsPage() {
   const { user } = useAuth();
@@ -548,6 +549,15 @@ export default function TransactionsPage() {
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            <UnifiedTransactionModal
+  isOpen={showModal}
+  onClose={() => setShowModal(false)}
+  onSubmit={handleSubmit}
+  accounts={accounts}
+  categories={categories}
+  editingTransaction={editingTransaction}  // optional
+/>
 
             {/* Modal Content - Scrollable */}
             <div className="overflow-y-auto flex-1 p-6">

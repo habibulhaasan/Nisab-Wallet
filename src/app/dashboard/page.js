@@ -7,6 +7,7 @@ import { getAccounts } from '@/lib/firestoreCollections';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useSettings, formatAmount, translate } from '@/hooks/useSettings';
+import SubscriptionBanner from '@/components/SubscriptionBanner';
 import { 
   gregorianToHijri, 
   addOneHijriYear, 
@@ -65,6 +66,8 @@ export default function DashboardPage() {
     }
   };
 
+  
+
   const loadActiveCycle = async () => {
     try {
       const cyclesRef = collection(db, 'users', user.uid, 'zakatCycles');
@@ -113,10 +116,18 @@ export default function DashboardPage() {
       zakatStatus = 'Ready to Monitor';
     }
   }
+  
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       {/* Welcome Header */}
+
+      <div>
+      <SubscriptionBanner />
+      {/* Rest of content */}
+    </div>
+
+    
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">
           {user?.displayName || 'User'}

@@ -1,0 +1,321 @@
+// src/lib/subscriptionUtils.js
+import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs, getDoc, query, where, orderBy, serverTimestamp } from 'firebase/firestore';
+import { db } from './firebase';
+import { generateId } from './firestoreCollections';
+
+// Subscription Status Types
+export const SUBSCRIPTION_STATUS = {
+  TRIAL: 'trial',
+  ACTIVE: 'active',
+  EXPIRED: 'expired',
+  PENDING: 'pending_approval',
+  REJECTED: 'rejected',
+  BLOCKED: 'blocked',
+  FREE: 'free_lifetime'
+};
+
+// Payment Method Types
+export const PAYMENT_METHODS = {
+  BKASH: 'bKash',
+  NAGAD: 'Nagad',
+  ROCKET: 'Rocket',
+  BANK: 'Bank Transfer',
+  CASH: 'Cash'
+};
+
+/**
+ * Create a subscription plan (Admin only)
+ */
+export const createSubscriptionPlan = async (planData) => {
+  try {
+    const planId = generateId();
+    const plansRef = collection(db, 'subscriptionPlans');
+    
+    const docRef = await addDoc(plansRef, {
+      planId,
+      name: planData.name,
+      duration: planData.duration, // 'monthly', 'quarterly', 'yearly'
+      durationDays: planData.durationDays, // 30, 90, 365
+      price: parseFloat(planData.price),
+      currency: planData.currency || 'BDT',
+      features: planData.features || [],
+      isActive: true,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+    
+    return { success: true, id: docRef.id, planId };
+  } catch (error) {
+    console.error('Error creating subscription plan:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Get all subscription plans
+ */
+export const getSubscriptionPlans = async (activeOnly = true) => {
+  try {
+    const plansRef = collection(db, 'subscriptionPlans');
+    let q = query(plansRef, orderBy('price', 'asc'));
+    
+    if (activeOnly) {
+      q = query(plansRef, where('isActive', '==', true), orderBy('price', 'asc'));
+    }
+    
+    const querySnapshot = await getDocs(q);
+    const plans = [];
+    
+    querySnapshot.forEach((doc) => {
+      plans.push({ id: doc.id, ...doc.data() });
+    });
+    
+    return { success: true, plans };
+  } catch (error) {
+    console.error('Error getting subscription plans:', error);
+    return { success: false, error: error.message, plans: [] };
+  }
+};
+
+/**
+ * Update subscription plan (Admin only)
+ */
+export const updateSubscriptionPlan = async (docId, planData) => {
+  try {
+    const planRef = doc(db, 'subscriptionPlans', docId);
+    await updateDoc(planRef, {
+      ...planData,
+      updatedAt: serverTimestamp()
+    });
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating subscription plan:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Delete subscription plan (Admin only)
+ */
+export const deleteSubscriptionPlan = async (docId) => {
+  try {
+    const planRef = doc(db, 'subscriptionPlans', docId);
+    await deleteDoc(planRef);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting subscription plan:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Create user subscription
+ */
+export const createUserSubscription = async (userId, subscriptionData) => {
+  try {
+    const subscriptionId = generateId();
+    const subsRef = collection(db, 'users', userId, 'subscriptions');
+    
+    const docRef = await addDoc(subsRef, {
+      subscriptionId,
+      planId: subscriptionData.planId,
+      planName: subscriptionData.planName,
+      status: subscriptionData.status || SUBSCRIPTION_STATUS.TRIAL,
+      startDate: subscriptionData.startDate,
+      endDate: subscriptionData.endDate,
+      paymentMethod: subscriptionData.paymentMethod || '',
+      transactionId: subscriptionData.transactionId || '',
+      amount: parseFloat(subscriptionData.amount || 0),
+      isFirstSubscription: subscriptionData.isFirstSubscription || false,
+      approvedBy: subscriptionData.approvedBy || null,
+      approvedAt: subscriptionData.approvedAt || null,
+      createdAt: serverTimestamp()
+    });
+    
+    return { success: true, id: docRef.id, subscriptionId };
+  } catch (error) {
+    console.error('Error creating user subscription:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Get user's current subscription
+ */
+export const getCurrentSubscription = async (userId) => {
+  try {
+    const subsRef = collection(db, 'users', userId, 'subscriptions');
+    const q = query(subsRef, orderBy('createdAt', 'desc'));
+    const querySnapshot = await getDocs(q);
+    
+    if (!querySnapshot.empty) {
+      const currentSub = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() };
+      return { success: true, subscription: currentSub };
+    }
+    
+    return { success: true, subscription: null };
+  } catch (error) {
+    console.error('Error getting current subscription:', error);
+    return { success: false, error: error.message, subscription: null };
+  }
+};
+
+/**
+ * Get all user subscriptions (history)
+ */
+export const getUserSubscriptionHistory = async (userId) => {
+  try {
+    const subsRef = collection(db, 'users', userId, 'subscriptions');
+    const q = query(subsRef, orderBy('createdAt', 'desc'));
+    const querySnapshot = await getDocs(q);
+    
+    const subscriptions = [];
+    querySnapshot.forEach((doc) => {
+      subscriptions.push({ id: doc.id, ...doc.data() });
+    });
+    
+    return { success: true, subscriptions };
+  } catch (error) {
+    console.error('Error getting subscription history:', error);
+    return { success: false, error: error.message, subscriptions: [] };
+  }
+};
+
+/**
+ * Update subscription status (Admin approval/rejection/extension)
+ */
+export const updateSubscriptionStatus = async (userId, subscriptionDocId, updateData) => {
+  try {
+    const subsRef = doc(db, 'users', userId, 'subscriptions', subscriptionDocId);
+    await updateDoc(subsRef, {
+      ...updateData,
+      updatedAt: serverTimestamp()
+    });
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating subscription status:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Check if user has valid access
+ */
+export const checkUserAccess = async (userId) => {
+  try {
+    // Get user profile
+    const userRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+    
+    if (!userSnap.exists()) {
+      return { hasAccess: false, reason: 'User not found' };
+    }
+    
+    const userData = userSnap.data();
+    
+    // Check if user is blocked
+    if (userData.isBlocked) {
+      return { hasAccess: false, reason: 'Account blocked', userData };
+    }
+    
+    // Check if user is grandfathered (free lifetime)
+    if (userData.subscriptionStatus === SUBSCRIPTION_STATUS.FREE) {
+      return { hasAccess: true, reason: 'Free lifetime access', userData };
+    }
+    
+    // Check if user is admin
+    if (userData.role === 'admin') {
+      return { hasAccess: true, reason: 'Admin access', userData };
+    }
+    
+    // Get current subscription
+    const { subscription } = await getCurrentSubscription(userId);
+    
+    if (!subscription) {
+      return { hasAccess: false, reason: 'No subscription found', userData };
+    }
+    
+    // Check trial status
+    if (subscription.status === SUBSCRIPTION_STATUS.TRIAL) {
+      const now = new Date();
+      const endDate = new Date(subscription.endDate);
+      
+      if (now <= endDate) {
+        return { hasAccess: true, reason: 'Trial period active', subscription, userData };
+      } else {
+        return { hasAccess: false, reason: 'Trial expired', subscription, userData };
+      }
+    }
+    
+    // Check active subscription
+    if (subscription.status === SUBSCRIPTION_STATUS.ACTIVE) {
+      const now = new Date();
+      const endDate = new Date(subscription.endDate);
+      
+      if (now <= endDate) {
+        return { hasAccess: true, reason: 'Active subscription', subscription, userData };
+      } else {
+        return { hasAccess: false, reason: 'Subscription expired', subscription, userData };
+      }
+    }
+    
+    // Check pending approval
+    if (subscription.status === SUBSCRIPTION_STATUS.PENDING) {
+      return { hasAccess: false, reason: 'Pending admin approval', subscription, userData };
+    }
+    
+    // Check rejected
+    if (subscription.status === SUBSCRIPTION_STATUS.REJECTED) {
+      return { hasAccess: false, reason: 'Subscription rejected', subscription, userData };
+    }
+    
+    // Default: no access
+    return { hasAccess: false, reason: 'Invalid subscription status', subscription, userData };
+    
+  } catch (error) {
+    console.error('Error checking user access:', error);
+    return { hasAccess: false, reason: 'Error checking access', error: error.message };
+  }
+};
+
+/**
+ * Calculate trial end date (5 days from start)
+ */
+export const calculateTrialEndDate = (startDate, trialDays = 5) => {
+  const start = new Date(startDate);
+  const endDate = new Date(start);
+  endDate.setDate(endDate.getDate() + trialDays);
+  return endDate.toISOString().split('T')[0];
+};
+
+/**
+ * Calculate subscription end date based on plan
+ */
+export const calculateSubscriptionEndDate = (startDate, durationDays) => {
+  const start = new Date(startDate);
+  const endDate = new Date(start);
+  endDate.setDate(endDate.getDate() + durationDays);
+  return endDate.toISOString().split('T')[0];
+};
+
+/**
+ * Get days until expiry
+ */
+export const getDaysUntilExpiry = (endDate) => {
+  const now = new Date();
+  const end = new Date(endDate);
+  const diffTime = end - now;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
+};
+
+/**
+ * Check if user should receive expiry notification
+ */
+export const shouldSendExpiryNotification = (endDate, notificationDays = [7, 3, 1]) => {
+  const daysLeft = getDaysUntilExpiry(endDate);
+  return notificationDays.includes(daysLeft);
+};
