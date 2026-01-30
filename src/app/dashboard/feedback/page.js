@@ -6,7 +6,8 @@ import { useAuth } from '@/context/AuthContext';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { MessageSquare, Star, Send, CheckCircle } from 'lucide-react';
-import { showToast } from '@/components/Toast';
+import { ToastContainer } from '@/components/ToastNotification';
+import { useToast } from '@/hooks/useToast';
 
 export default function FeedbackPage() {
   const { user } = useAuth();
@@ -17,6 +18,7 @@ export default function FeedbackPage() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const { toasts, addToast, removeToast } = useToast();
 
   const feedbackTypes = [
     { value: 'feedback', label: 'General Feedback', icon: '💬' },
@@ -29,31 +31,32 @@ export default function FeedbackPage() {
     e.preventDefault();
 
     if (!formData.message.trim()) {
-      showToast('Please enter your feedback message', 'error');
+      addToast('Please enter your feedback message', 'error');
       return;
     }
 
     if (formData.rating === 0) {
-      showToast('Please select a rating', 'error');
+      addToast('Please select a rating', 'error');
       return;
     }
 
     setSubmitting(true);
 
     try {
-      await addDoc(collection(db, 'feedback'), {
-        userId: user.uid,
-        userEmail: user.email,
-        userName: user.displayName || 'Anonymous',
+      // Save to user's feedback subcollection (this will work with current Firestore rules)
+      const feedbackRef = collection(db, 'users', user.uid, 'feedback');
+      await addDoc(feedbackRef, {
         type: formData.type,
         rating: formData.rating,
         message: formData.message,
         createdAt: serverTimestamp(),
         status: 'new',
+        userEmail: user.email,
+        userName: user.displayName || 'Anonymous',
       });
 
       setSubmitted(true);
-      showToast('Thank you for your feedback!', 'success');
+      addToast('Thank you for your feedback!', 'success');
       
       // Reset form after 3 seconds
       setTimeout(() => {
@@ -61,7 +64,8 @@ export default function FeedbackPage() {
         setFormData({ type: 'feedback', rating: 0, message: '' });
       }, 3000);
     } catch (error) {
-      showToast('Error submitting feedback: ' + error.message, 'error');
+      console.error('Feedback error:', error);
+      addToast('Error submitting feedback: ' + error.message, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -69,7 +73,7 @@ export default function FeedbackPage() {
 
   if (submitted) {
     return (
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-2xl mx-auto p-4">
         <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle className="w-8 h-8 text-green-600" />
@@ -84,15 +88,15 @@ export default function FeedbackPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto p-4 space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">Feedback & Support</h1>
-        <p className="text-sm text-gray-500 mt-1">Help us improve H Wallet by sharing your thoughts</p>
+        <p className="text-sm text-gray-500 mt-1">Help us improve Nisab Wallet by sharing your thoughts</p>
       </div>
 
       {/* Main Form */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <div className="bg-white rounded-lg border border-gray-200 p-4 md:p-6">
         <div className="flex items-center space-x-3 mb-6">
           <MessageSquare className="w-5 h-5 text-gray-700" />
           <h2 className="text-lg font-semibold text-gray-900">Share Your Feedback</h2>
@@ -110,14 +114,14 @@ export default function FeedbackPage() {
                   key={type.value}
                   type="button"
                   onClick={() => setFormData({ ...formData, type: type.value })}
-                  className={`flex items-center space-x-2 px-4 py-3 rounded-lg border-2 transition-all ${
+                  className={`flex items-center space-x-2 px-3 md:px-4 py-3 rounded-lg border-2 transition-all ${
                     formData.type === type.value
-                      ? 'border-gray-900 bg-gray-50'
+                      ? 'border-blue-600 bg-blue-50'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
                   <span className="text-xl">{type.icon}</span>
-                  <span className="text-sm font-medium text-gray-700">{type.label}</span>
+                  <span className="text-xs md:text-sm font-medium text-gray-700">{type.label}</span>
                 </button>
               ))}
             </div>
@@ -126,7 +130,7 @@ export default function FeedbackPage() {
           {/* Rating */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              How would you rate your experience?
+              How would you rate your experience? <span className="text-red-500">*</span>
             </label>
             <div className="flex items-center space-x-2">
               {[1, 2, 3, 4, 5].map((star) => (
@@ -156,12 +160,12 @@ export default function FeedbackPage() {
           {/* Message */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Your Message
+              Your Message <span className="text-red-500">*</span>
             </label>
             <textarea
               value={formData.message}
               onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm resize-none"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent text-sm resize-none"
               placeholder="Tell us what you think... What features would you like to see? What problems did you encounter?"
               rows="6"
               required
@@ -176,7 +180,7 @@ export default function FeedbackPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             {submitting ? (
               <>
@@ -200,6 +204,9 @@ export default function FeedbackPage() {
           We won't share your information with anyone.
         </p>
       </div>
+
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
     </div>
   );
 }

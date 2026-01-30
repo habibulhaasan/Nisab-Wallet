@@ -4,11 +4,17 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { isAdmin } from '@/lib/adminCheck';
+import { checkIsAdmin } from '@/lib/adminUtils';
 import { collection, getDocs, query, orderBy, where, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Users, MessageSquare, TrendingUp, Database, CheckCircle, XCircle, Trash2, Eye, Shield, Calendar, Mail } from 'lucide-react';
-import { showToast } from '@/components/Toast';
+import { formatDate } from '@/lib/dateUtils';
+import { ToastContainer } from '@/components/ToastNotification';
+import { useToast } from '@/hooks/useToast';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import { 
+  Users, MessageSquare, TrendingUp, Database, CheckCircle, XCircle, 
+  Trash2, Eye, Shield, Calendar, Mail, Star
+} from 'lucide-react';
 
 export default function AdminPage() {
   const { user } = useAuth();
@@ -24,17 +30,24 @@ export default function AdminPage() {
   const [feedback, setFeedback] = useState([]);
   const [users, setUsers] = useState([]);
   const [selectedFeedback, setSelectedFeedback] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
+  const { toasts, addToast, removeToast } = useToast();
 
   useEffect(() => {
     if (user) {
-      if (!isAdmin(user.email)) {
-        showToast('Access denied. Admin only.', 'error');
-        router.push('/dashboard');
-        return;
-      }
-      loadAdminData();
+      checkAdminAndLoad();
     }
-  }, [user, router]);
+  }, [user]);
+
+  const checkAdminAndLoad = async () => {
+    const adminStatus = await checkIsAdmin(user.uid);
+    if (!adminStatus) {
+      addToast('Access denied. Admin only.', 'error');
+      router.push('/dashboard');
+      return;
+    }
+    loadAdminData();
+  };
 
   const loadAdminData = async () => {
     setLoading(true);
@@ -53,26 +66,32 @@ export default function AdminPage() {
 
   const loadStats = async () => {
     try {
-      // Count total users (this is approximate based on feedback)
+      // Count total users
       const usersSnapshot = await getDocs(collection(db, 'users'));
       const totalUsers = usersSnapshot.size;
 
-      // Count feedback
-      const feedbackSnapshot = await getDocs(collection(db, 'feedback'));
-      const totalFeedback = feedbackSnapshot.size;
-      
-      const newFeedbackQuery = query(
-        collection(db, 'feedback'),
-        where('status', '==', 'new')
-      );
-      const newFeedbackSnapshot = await getDocs(newFeedbackQuery);
-      const newFeedback = newFeedbackSnapshot.size;
+      // Load all feedback from all users
+      let allFeedback = [];
+      for (const userDoc of usersSnapshot.docs) {
+        const feedbackRef = collection(db, 'users', userDoc.id, 'feedback');
+        const feedbackSnapshot = await getDocs(feedbackRef);
+        feedbackSnapshot.forEach(feedbackDoc => {
+          allFeedback.push({
+            id: feedbackDoc.id,
+            userId: userDoc.id,
+            ...feedbackDoc.data()
+          });
+        });
+      }
+
+      const totalFeedback = allFeedback.length;
+      const newFeedback = allFeedback.filter(f => f.status === 'new').length;
 
       setStats({
         totalUsers,
         totalFeedback,
         newFeedback,
-        totalTransactions: 0, // Can be calculated if needed
+        totalTransactions: 0,
       });
     } catch (error) {
       console.error('Error loading stats:', error);
@@ -81,13 +100,33 @@ export default function AdminPage() {
 
   const loadFeedback = async () => {
     try {
-      const q = query(collection(db, 'feedback'), orderBy('createdAt', 'desc'));
-      const snapshot = await getDocs(q);
-      const feedbackList = [];
-      snapshot.forEach((doc) => {
-        feedbackList.push({ id: doc.id, ...doc.data() });
+      const allFeedback = [];
+      
+      // Get all users
+      const usersSnapshot = await getDocs(collection(db, 'users'));
+      
+      // For each user, get their feedback
+      for (const userDoc of usersSnapshot.docs) {
+        const feedbackRef = collection(db, 'users', userDoc.id, 'feedback');
+        const feedbackSnapshot = await getDocs(query(feedbackRef, orderBy('createdAt', 'desc')));
+        
+        feedbackSnapshot.forEach(feedbackDoc => {
+          allFeedback.push({
+            id: feedbackDoc.id,
+            userId: userDoc.id,
+            ...feedbackDoc.data()
+          });
+        });
+      }
+      
+      // Sort by creation date (newest first)
+      allFeedback.sort((a, b) => {
+        const dateA = a.createdAt?.toDate?.() || new Date(0);
+        const dateB = b.createdAt?.toDate?.() || new Date(0);
+        return dateB - dateA;
       });
-      setFeedback(feedbackList);
+      
+      setFeedback(allFeedback);
     } catch (error) {
       console.error('Error loading feedback:', error);
     }
@@ -106,35 +145,62 @@ export default function AdminPage() {
     }
   };
 
-  const markFeedbackAsResolved = async (feedbackId) => {
+  const markFeedbackAsResolved = async (userId, feedbackId) => {
     try {
-      await updateDoc(doc(db, 'feedback', feedbackId), {
+      const feedbackRef = doc(db, 'users', userId, 'feedback', feedbackId);
+      await updateDoc(feedbackRef, {
         status: 'resolved',
+        resolvedAt: new Date(),
+        resolvedBy: user.uid
       });
-      showToast('Feedback marked as resolved', 'success');
+      addToast('Feedback marked as resolved', 'success');
       loadFeedback();
       loadStats();
     } catch (error) {
-      showToast('Error updating feedback: ' + error.message, 'error');
+      addToast('Error updating feedback: ' + error.message, 'error');
     }
   };
 
-  const deleteFeedback = async (feedbackId) => {
+  const toggleFeedbackFeatured = async (userId, feedbackId, currentStatus) => {
     try {
-      await deleteDoc(doc(db, 'feedback', feedbackId));
-      showToast('Feedback deleted successfully', 'success');
+      const feedbackRef = doc(db, 'users', userId, 'feedback', feedbackId);
+      await updateDoc(feedbackRef, {
+        featured: !currentStatus,
+        featuredAt: !currentStatus ? new Date() : null
+      });
+      
+      addToast(
+        !currentStatus ? 'Feedback featured on landing page' : 'Feedback removed from landing page',
+        'success'
+      );
       loadFeedback();
-      loadStats();
-      setSelectedFeedback(null);
     } catch (error) {
-      showToast('Error deleting feedback: ' + error.message, 'error');
+      addToast('Error updating feedback: ' + error.message, 'error');
     }
   };
 
-  const formatDate = (timestamp) => {
-    if (!timestamp) return 'N/A';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+  const deleteFeedback = (userId, feedbackId) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Feedback',
+      message: 'Are you sure you want to delete this feedback? This action cannot be undone.',
+      type: 'danger',
+      confirmText: 'Delete',
+      onConfirm: async () => {
+        try {
+          const feedbackRef = doc(db, 'users', userId, 'feedback', feedbackId);
+          await deleteDoc(feedbackRef);
+          
+          setConfirmDialog({ isOpen: false });
+          addToast('Feedback deleted successfully', 'success');
+          loadFeedback();
+          loadStats();
+          setSelectedFeedback(null);
+        } catch (error) {
+          addToast('Error deleting feedback: ' + error.message, 'error');
+        }
+      }
+    });
   };
 
   if (loading) {
@@ -146,7 +212,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6 p-4 md:p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -196,10 +262,10 @@ export default function AdminPage() {
       {/* Tabs */}
       <div className="bg-white rounded-lg border border-gray-200">
         <div className="border-b border-gray-200">
-          <div className="flex space-x-4 px-6">
+          <div className="flex space-x-4 px-6 overflow-x-auto">
             <button
               onClick={() => setActiveTab('overview')}
-              className={`py-3 text-sm font-medium border-b-2 transition-colors ${
+              className={`py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === 'overview'
                   ? 'border-gray-900 text-gray-900'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -209,7 +275,7 @@ export default function AdminPage() {
             </button>
             <button
               onClick={() => setActiveTab('feedback')}
-              className={`py-3 text-sm font-medium border-b-2 transition-colors ${
+              className={`py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === 'feedback'
                   ? 'border-gray-900 text-gray-900'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -219,7 +285,7 @@ export default function AdminPage() {
             </button>
             <button
               onClick={() => setActiveTab('users')}
-              className={`py-3 text-sm font-medium border-b-2 transition-colors ${
+              className={`py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === 'users'
                   ? 'border-gray-900 text-gray-900'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -237,7 +303,7 @@ export default function AdminPage() {
             <div className="space-y-6">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-3">Quick Actions</h3>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button
                     onClick={() => setActiveTab('feedback')}
                     className="flex items-center justify-center space-x-2 px-4 py-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
@@ -274,10 +340,10 @@ export default function AdminPage() {
                 </div>
               ) : (
                 feedback.map((item) => (
-                  <div key={item.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
-                    <div className="flex items-start justify-between mb-3">
+                  <div key={`${item.userId}-${item.id}`} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                       <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-2">
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
                           <span className={`px-2 py-1 rounded text-xs font-medium ${
                             item.status === 'new' 
                               ? 'bg-orange-100 text-orange-700'
@@ -285,29 +351,35 @@ export default function AdminPage() {
                           }`}>
                             {item.status === 'new' ? 'NEW' : 'RESOLVED'}
                           </span>
-                          <span className="text-xs text-gray-500">
-                            {item.type.toUpperCase()}
+                          <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs font-medium">
+                            {item.type?.toUpperCase() || 'FEEDBACK'}
                           </span>
                           <span className="text-xs text-gray-500">
-                            Rating: {'⭐'.repeat(item.rating)}
+                            Rating: {'⭐'.repeat(item.rating || 0)}
                           </span>
+                          {item.featured && (
+                            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium flex items-center">
+                              <Star size={12} className="mr-1 fill-current" />
+                              Featured
+                            </span>
+                          )}
                         </div>
-                        <div className="flex items-center space-x-2 text-sm text-gray-600 mb-2">
+                        <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600 mb-2">
                           <Mail className="w-3 h-3" />
-                          <span>{item.userEmail}</span>
+                          <span className="break-all">{item.userEmail}</span>
                           <span>•</span>
                           <span>{item.userName}</span>
                         </div>
-                        <p className="text-sm text-gray-700 mb-2">{item.message}</p>
-                        <div className="flex items-center space-x-2 text-xs text-gray-500">
+                        <p className="text-sm text-gray-700 mb-2 break-words">{item.message}</p>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
                           <Calendar className="w-3 h-3" />
                           <span>{formatDate(item.createdAt)}</span>
                         </div>
                       </div>
-                      <div className="flex items-center space-x-2 ml-4">
+                      <div className="flex md:flex-col items-center gap-2">
                         {item.status === 'new' && (
                           <button
-                            onClick={() => markFeedbackAsResolved(item.id)}
+                            onClick={() => markFeedbackAsResolved(item.userId, item.id)}
                             className="p-2 text-green-600 hover:bg-green-50 rounded transition-colors"
                             title="Mark as resolved"
                           >
@@ -315,7 +387,18 @@ export default function AdminPage() {
                           </button>
                         )}
                         <button
-                          onClick={() => deleteFeedback(item.id)}
+                          onClick={() => toggleFeedbackFeatured(item.userId, item.id, item.featured)}
+                          className={`p-2 rounded transition-colors ${
+                            item.featured 
+                              ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' 
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                          title={item.featured ? 'Remove from landing page' : 'Feature on landing page'}
+                        >
+                          <Star className={`w-4 h-4 ${item.featured ? 'fill-current' : ''}`} />
+                        </button>
+                        <button
+                          onClick={() => deleteFeedback(item.userId, item.id)}
                           className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
                           title="Delete"
                         >
@@ -344,7 +427,7 @@ export default function AdminPage() {
                   </p>
                   {users.map((userData) => (
                     <div key={userData.id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div>
                           <p className="text-sm font-medium text-gray-900">User ID: {userData.id}</p>
                           <p className="text-xs text-gray-500 mt-1">
@@ -353,7 +436,7 @@ export default function AdminPage() {
                         </div>
                         <button
                           onClick={() => router.push(`/dashboard/admin/user/${userData.id}`)}
-                          className="flex items-center space-x-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-sm"
+                          className="flex items-center justify-center space-x-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-sm whitespace-nowrap"
                         >
                           <Eye className="w-4 h-4" />
                           <span>View Details</span>
@@ -367,6 +450,20 @@ export default function AdminPage() {
           )}
         </div>
       </div>
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog({ isOpen: false })}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        type={confirmDialog.type}
+        confirmText={confirmDialog.confirmText}
+      />
+
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
     </div>
   );
 }
