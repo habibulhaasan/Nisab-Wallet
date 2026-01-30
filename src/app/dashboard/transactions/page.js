@@ -24,10 +24,12 @@ import {
   ArrowDownCircle,
   Calendar,
   Search,
-  Wallet,               // ← Fixed: added back
+  Wallet,
   AlertTriangle,
   ArrowRightLeft,
   ArrowRight,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
 
@@ -38,6 +40,7 @@ export default function TransactionsPage() {
   const [accounts, setAccounts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
   const [showModal, setShowModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -90,27 +93,119 @@ export default function TransactionsPage() {
   const loadTransactionsAndTransfers = async () => {
     try {
       const transRef = collection(db, 'users', user.uid, 'transactions');
-      const qTrans = query(transRef, orderBy('date', 'desc'));
-      const snapTrans = await getDocs(qTrans);
-      const normal = snapTrans.docs.map((doc) => ({
-        id: doc.id,
-        collectionType: 'transactions',
-        ...doc.data(),
-      }));
-
       const transferRef = collection(db, 'users', user.uid, 'transfers');
-      const qTransfer = query(transferRef, orderBy('date', 'desc'));
-      const snapTransfer = await getDocs(qTransfer);
-      const transfers = snapTransfer.docs.map((doc) => ({
-        id: doc.id,
-        collectionType: 'transfers',
-        type: 'Transfer',
-        ...doc.data(),
-      }));
+      
+      let normal = [];
+      let transfers = [];
 
-      const all = [...normal, ...transfers].sort((a, b) =>
-        b.date.localeCompare(a.date)
-      );
+      // Load transactions with error handling
+      try {
+        const qTrans = query(transRef, orderBy('date', 'desc'), orderBy('createdAt', 'desc'));
+        const snapTrans = await getDocs(qTrans);
+        normal = snapTrans.docs.map((doc) => ({
+          id: doc.id,
+          collectionType: 'transactions',
+          ...doc.data(),
+        }));
+      } catch (transError) {
+        console.log('Using fallback for transactions:', transError.message);
+        try {
+          const qTransSimple = query(transRef, orderBy('date', 'desc'));
+          const snapTrans = await getDocs(qTransSimple);
+          normal = snapTrans.docs.map((doc) => ({
+            id: doc.id,
+            collectionType: 'transactions',
+            ...doc.data(),
+          }));
+        } catch (fallbackError) {
+          const snapTrans = await getDocs(transRef);
+          normal = snapTrans.docs.map((doc) => ({
+            id: doc.id,
+            collectionType: 'transactions',
+            ...doc.data(),
+          }));
+        }
+      }
+
+      // Load transfers with error handling
+      try {
+        const qTransfer = query(transferRef, orderBy('date', 'desc'), orderBy('createdAt', 'desc'));
+        const snapTransfer = await getDocs(qTransfer);
+        transfers = snapTransfer.docs.map((doc) => ({
+          id: doc.id,
+          collectionType: 'transfers',
+          ...doc.data(),
+        }));
+      } catch (transferError) {
+        console.log('Using fallback for transfers:', transferError.message);
+        try {
+          const qTransferSimple = query(transferRef, orderBy('date', 'desc'));
+          const snapTransfer = await getDocs(qTransferSimple);
+          transfers = snapTransfer.docs.map((doc) => ({
+            id: doc.id,
+            collectionType: 'transfers',
+            ...doc.data(),
+          }));
+        } catch (fallbackError) {
+          const snapTransfer = await getDocs(transferRef);
+          transfers = snapTransfer.docs.map((doc) => ({
+            id: doc.id,
+            collectionType: 'transfers',
+            ...doc.data(),
+          }));
+        }
+      }
+
+      // Convert each transfer into TWO records: one expense and one income
+      const expandedTransfers = [];
+      transfers.forEach((transfer) => {
+        // Expense record (from account)
+        expandedTransfers.push({
+          id: `${transfer.id}-expense`,
+          originalId: transfer.id,
+          collectionType: 'transfers',
+          type: 'Expense',
+          amount: transfer.amount,
+          accountId: transfer.fromAccountId,
+          accountName: transfer.fromAccountName,
+          description: transfer.description || `Transfer to ${transfer.toAccountName}`,
+          date: transfer.date,
+          createdAt: transfer.createdAt,
+          isTransfer: true,
+          transferDirection: 'from',
+          relatedAccountId: transfer.toAccountId,
+          relatedAccountName: transfer.toAccountName,
+        });
+
+        // Income record (to account)
+        expandedTransfers.push({
+          id: `${transfer.id}-income`,
+          originalId: transfer.id,
+          collectionType: 'transfers',
+          type: 'Income',
+          amount: transfer.amount,
+          accountId: transfer.toAccountId,
+          accountName: transfer.toAccountName,
+          description: transfer.description || `Transfer from ${transfer.fromAccountName}`,
+          date: transfer.date,
+          createdAt: transfer.createdAt,
+          isTransfer: true,
+          transferDirection: 'to',
+          relatedAccountId: transfer.fromAccountId,
+          relatedAccountName: transfer.fromAccountName,
+        });
+      });
+
+      // Combine normal transactions and expanded transfers
+      const all = [...normal, ...expandedTransfers].sort((a, b) => {
+        const dateCompare = (b.date || '').localeCompare(a.date || '');
+        if (dateCompare !== 0) return dateCompare;
+        
+        const aTime = a.createdAt?.toMillis?.() || 0;
+        const bTime = b.createdAt?.toMillis?.() || 0;
+        return bTime - aTime;
+      });
+      
       setTransactions(all);
     } catch (error) {
       console.error('Error loading records:', error);
@@ -153,11 +248,13 @@ export default function TransactionsPage() {
       ? transactions.filter((t) => t.date >= range.start && t.date <= range.end)
       : transactions;
 
+    // For summary, we only count NON-transfer transactions
+    // Transfers don't affect total balance (they're just moving money)
     const inc = filtered
-      .filter((t) => t.type === 'Income')
+      .filter((t) => t.type === 'Income' && !t.isTransfer)
       .reduce((s, t) => s + Number(t.amount || 0), 0);
     const exp = filtered
-      .filter((t) => t.type === 'Expense')
+      .filter((t) => t.type === 'Expense' && !t.isTransfer)
       .reduce((s, t) => s + Number(t.amount || 0), 0);
 
     setSummaryIncome(inc);
@@ -206,6 +303,8 @@ export default function TransactionsPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+    
     if (modalTab === 'transfer') return handleTransferSubmit(e);
 
     if (!formData.amount || !formData.accountId || !formData.categoryId) {
@@ -220,6 +319,8 @@ export default function TransactionsPage() {
     if (formData.type === 'Expense' && account.balance < amount) {
       return showToast(`Insufficient balance in ${account.name}`, 'error');
     }
+
+    setSubmitting(true);
 
     try {
       if (editingTransaction) {
@@ -276,11 +377,14 @@ export default function TransactionsPage() {
       closeModal();
     } catch (err) {
       showToast('Error saving', 'error');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleTransferSubmit = async (e) => {
     e.preventDefault();
+    if (submitting) return;
 
     if (!transferData.fromAccountId || !transferData.toAccountId || !transferData.amount) {
       return showToast('Fill all required fields', 'error');
@@ -297,23 +401,39 @@ export default function TransactionsPage() {
     if (!from || !to) return showToast('Invalid accounts', 'error');
     if (from.balance < amount) return showToast('Insufficient balance', 'error');
 
+    setSubmitting(true);
+
     try {
       if (editingTransaction) {
-        const oldFrom = accounts.find((a) => a.id === editingTransaction.fromAccountId);
-        const oldTo = accounts.find((a) => a.id === editingTransaction.toAccountId);
-        if (oldFrom) {
-          await updateAccount(user.uid, oldFrom.id, {
-            balance: oldFrom.balance + editingTransaction.amount,
+        // Find the original transfer document
+        const originalTransferId = editingTransaction.originalId;
+        
+        // Determine which accounts were involved based on transfer direction
+        let revertFromId, revertToId;
+        if (editingTransaction.transferDirection === 'from') {
+          revertFromId = editingTransaction.accountId;
+          revertToId = editingTransaction.relatedAccountId;
+        } else {
+          revertFromId = editingTransaction.relatedAccountId;
+          revertToId = editingTransaction.accountId;
+        }
+
+        const revertFrom = accounts.find((a) => a.id === revertFromId);
+        const revertTo = accounts.find((a) => a.id === revertToId);
+
+        if (revertFrom) {
+          await updateAccount(user.uid, revertFrom.id, {
+            balance: revertFrom.balance + editingTransaction.amount,
           });
         }
-        if (oldTo) {
-          await updateAccount(user.uid, oldTo.id, {
-            balance: oldTo.balance - editingTransaction.amount,
+        if (revertTo) {
+          await updateAccount(user.uid, revertTo.id, {
+            balance: revertTo.balance - editingTransaction.amount,
           });
         }
 
         await updateDoc(
-          doc(db, 'users', user.uid, 'transfers', editingTransaction.id),
+          doc(db, 'users', user.uid, 'transfers', originalTransferId),
           {
             fromAccountId: transferData.fromAccountId,
             fromAccountName: from.name,
@@ -352,6 +472,8 @@ export default function TransactionsPage() {
       closeModal();
     } catch (err) {
       showToast('Error saving transfer', 'error');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -359,9 +481,22 @@ export default function TransactionsPage() {
     if (!transactionToDelete) return;
 
     try {
-      if (transactionToDelete.type === 'Transfer' || transactionToDelete.collectionType === 'transfers') {
-        const from = accounts.find((a) => a.id === transactionToDelete.fromAccountId);
-        const to = accounts.find((a) => a.id === transactionToDelete.toAccountId);
+      if (transactionToDelete.isTransfer) {
+        // For transfers, we need to delete the original transfer document
+        const originalTransferId = transactionToDelete.originalId;
+        
+        // Determine which accounts were involved
+        let fromAccountId, toAccountId;
+        if (transactionToDelete.transferDirection === 'from') {
+          fromAccountId = transactionToDelete.accountId;
+          toAccountId = transactionToDelete.relatedAccountId;
+        } else {
+          fromAccountId = transactionToDelete.relatedAccountId;
+          toAccountId = transactionToDelete.accountId;
+        }
+
+        const from = accounts.find((a) => a.id === fromAccountId);
+        const to = accounts.find((a) => a.id === toAccountId);
 
         if (from) {
           await updateAccount(user.uid, from.id, {
@@ -373,7 +508,10 @@ export default function TransactionsPage() {
             balance: to.balance - transactionToDelete.amount,
           });
         }
+
+        await deleteDoc(doc(db, 'users', user.uid, 'transfers', originalTransferId));
       } else {
+        // Regular transaction
         const acc = accounts.find((a) => a.id === transactionToDelete.accountId);
         if (acc) {
           const newBal =
@@ -382,10 +520,9 @@ export default function TransactionsPage() {
               : acc.balance + transactionToDelete.amount;
           await updateAccount(user.uid, acc.id, { balance: newBal });
         }
-      }
 
-      const col = transactionToDelete.collectionType === 'transfers' ? 'transfers' : 'transactions';
-      await deleteDoc(doc(db, 'users', user.uid, col, transactionToDelete.id));
+        await deleteDoc(doc(db, 'users', user.uid, 'transactions', transactionToDelete.id));
+      }
 
       showToast('Deleted successfully', 'success');
       await loadData();
@@ -401,15 +538,26 @@ export default function TransactionsPage() {
   const handleEdit = (record) => {
     setEditingTransaction(record);
 
-    if (record.type === 'Transfer' || record.collectionType === 'transfers') {
+    if (record.isTransfer) {
       setModalTab('transfer');
-      setTransferData({
-        fromAccountId: record.fromAccountId,
-        toAccountId: record.toAccountId,
-        amount: record.amount.toString(),
-        description: record.description || '',
-        date: record.date,
-      });
+      // Reconstruct transfer data from the expanded record
+      if (record.transferDirection === 'from') {
+        setTransferData({
+          fromAccountId: record.accountId,
+          toAccountId: record.relatedAccountId,
+          amount: record.amount.toString(),
+          description: record.description || '',
+          date: record.date,
+        });
+      } else {
+        setTransferData({
+          fromAccountId: record.relatedAccountId,
+          toAccountId: record.accountId,
+          amount: record.amount.toString(),
+          description: record.description || '',
+          date: record.date,
+        });
+      }
     } else {
       setModalTab(record.type.toLowerCase());
       setFormData({
@@ -429,6 +577,7 @@ export default function TransactionsPage() {
     setShowModal(false);
     setEditingTransaction(null);
     setModalTab('expense');
+    setSubmitting(false);
     setFormData({
       type: 'Expense',
       amount: '',
@@ -449,6 +598,7 @@ export default function TransactionsPage() {
   const getAccountName = (id) => accounts.find((a) => a.id === id)?.name || 'Unknown';
   const getCategoryName = (id) => categories.find((c) => c.id === id)?.name || 'Unknown';
   const getCategoryColor = (id) => categories.find((c) => c.id === id)?.color || '#6B7280';
+  const getAccountBalance = (id) => accounts.find((a) => a.id === id)?.balance || 0;
 
   const getDateRangeForFilter = () => {
     const today = new Date();
@@ -476,10 +626,7 @@ export default function TransactionsPage() {
     if (filterType !== 'All' && t.type !== filterType) return false;
 
     if (filterAccount !== 'All') {
-      if (t.collectionType === 'transactions' && t.accountId !== filterAccount) return false;
-      if (t.collectionType === 'transfers' &&
-          t.fromAccountId !== filterAccount &&
-          t.toAccountId !== filterAccount) return false;
+      if (t.accountId !== filterAccount) return false;
     }
 
     const range = getDateRangeForFilter();
@@ -490,13 +637,10 @@ export default function TransactionsPage() {
       const desc = (t.description || '').toLowerCase();
       let match = desc.includes(q) || String(t.amount).includes(q);
 
-      if (t.collectionType === 'transactions') {
+      if (!t.isTransfer) {
         match ||= getCategoryName(t.categoryId).toLowerCase().includes(q);
-        match ||= getAccountName(t.accountId).toLowerCase().includes(q);
-      } else {
-        const accStr = `${getAccountName(t.fromAccountId)} → ${getAccountName(t.toAccountId)}`.toLowerCase();
-        match ||= accStr.includes(q);
       }
+      match ||= getAccountName(t.accountId).toLowerCase().includes(q);
 
       if (!match) return false;
     }
@@ -512,6 +656,22 @@ export default function TransactionsPage() {
     return acc;
   }, {});
 
+  const getDisabledReason = () => {
+    if (accounts.length === 0 && categories.length === 0) {
+      return 'Please add accounts and categories first';
+    }
+    if (accounts.length === 0) {
+      return 'Please add at least one account first';
+    }
+    if (categories.length === 0) {
+      return 'Please add at least one category first';
+    }
+    return null;
+  };
+
+  const isButtonDisabled = accounts.length === 0 || categories.length === 0;
+  const disabledReason = getDisabledReason();
+
   return (
     <div className="max-w-7xl mx-auto space-y-5 pb-6">
       {/* Header */}
@@ -520,19 +680,30 @@ export default function TransactionsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Transactions</h1>
           <p className="text-sm text-gray-500 mt-1">Track your income, expenses and transfers</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          disabled={accounts.length === 0 || categories.length === 0}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 text-sm font-medium"
-        >
-          <Plus size={16} />
-          Add Transaction
-        </button>
+        <div className="relative group">
+          <button
+            onClick={() => setShowModal(true)}
+            disabled={isButtonDisabled}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+          >
+            <Plus size={16} />
+            Add Transaction
+          </button>
+          
+          {isButtonDisabled && (
+            <div className="absolute right-0 top-full mt-2 w-64 bg-gray-900 text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+              <div className="flex items-start gap-2">
+                <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                <p>{disabledReason}</p>
+              </div>
+              <div className="absolute -top-1 right-4 w-2 h-2 bg-gray-900 transform rotate-45"></div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Summary cards – Total Balance first */}
+      {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Balance - first position */}
         <div className="bg-white p-4 rounded-lg shadow-sm">
           <div className="flex items-center justify-between mb-1">
             <p className="text-xs font-medium text-gray-500 uppercase">Total Balance</p>
@@ -547,6 +718,7 @@ export default function TransactionsPage() {
             <ArrowUpCircle size={14} className="text-green-500" />
           </div>
           <p className="text-xl font-bold text-green-600">৳{summaryIncome.toLocaleString()}</p>
+          <p className="text-[10px] text-gray-400 mt-1">Excluding transfers</p>
         </div>
 
         <div className="bg-white p-4 rounded-lg shadow-sm">
@@ -555,6 +727,7 @@ export default function TransactionsPage() {
             <ArrowDownCircle size={14} className="text-red-500" />
           </div>
           <p className="text-xl font-bold text-red-600">৳{summaryExpense.toLocaleString()}</p>
+          <p className="text-[10px] text-gray-400 mt-1">Excluding transfers</p>
         </div>
 
         <div className="bg-white p-4 rounded-lg shadow-sm">
@@ -568,22 +741,22 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      {/* Individual Account Balances – even smaller */}
-        <div className="flex space-x-3 overflow-x-auto pb-2 scrollbar-hide">
+      {/* Individual Account Balances */}
+      <div className="flex space-x-3 overflow-x-auto pb-2 scrollbar-hide">
         {accounts.map((acc) => (
-            <div
+          <div
             key={acc.id}
             className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 min-w-[140px] flex flex-col justify-center"
-            >
+          >
             <p className="text-[10px] font-bold text-gray-400 uppercase leading-none mb-1">
-                {acc.name}
+              {acc.name}
             </p>
             <p className="text-sm font-black text-gray-900 truncate">
-                ৳{(acc.balance || 0).toLocaleString()}
+              ৳{(acc.balance || 0).toLocaleString()}
             </p>
-            </div>
+          </div>
         ))}
-        </div>
+      </div>
         
       {/* Filters */}
       <div className="bg-white rounded-lg shadow-sm p-4">
@@ -591,7 +764,7 @@ export default function TransactionsPage() {
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
             <div className="flex gap-1">
-              {['All', 'Income', 'Expense', 'Transfer'].map((t) => (
+              {['All', 'Income', 'Expense'].map((t) => (
                 <button
                   key={t}
                   onClick={() => setFilterType(t)}
@@ -708,35 +881,35 @@ export default function TransactionsPage() {
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <div
                       className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                        t.type === 'Income' ? 'bg-green-50' :
-                        t.type === 'Expense' ? 'bg-red-50' :
-                        'bg-blue-50'
+                        t.type === 'Income' ? 'bg-green-50' : 'bg-red-50'
                       }`}
                     >
                       {t.type === 'Income' ? (
                         <ArrowUpCircle size={16} className="text-green-600" />
-                      ) : t.type === 'Expense' ? (
-                        <ArrowDownCircle size={16} className="text-red-600" />
                       ) : (
-                        <ArrowRightLeft size={16} className="text-blue-600" />
+                        <ArrowDownCircle size={16} className="text-red-600" />
                       )}
                     </div>
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        {t.type !== 'Transfer' && (
+                        {!t.isTransfer && (
                           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getCategoryColor(t.categoryId) }} />
                         )}
+                        {t.isTransfer && (
+                          <ArrowRightLeft size={12} className="text-blue-500" />
+                        )}
                         <p className="text-sm font-medium truncate">
-                          {t.type === 'Transfer'
-                            ? `${getAccountName(t.fromAccountId)} → ${getAccountName(t.toAccountId)}`
-                            : getCategoryName(t.categoryId)}
+                          {t.isTransfer 
+                            ? (t.type === 'Income' 
+                                ? `From ${t.relatedAccountName}` 
+                                : `To ${t.relatedAccountName}`)
+                            : getCategoryName(t.categoryId)
+                          }
                         </p>
                       </div>
                       <p className="text-xs text-gray-600 truncate mt-0.5">
-                        {t.type === 'Transfer'
-                          ? `${getAccountName(t.fromAccountId)} → ${getAccountName(t.toAccountId)}`
-                          : getAccountName(t.accountId)}
+                        {getAccountName(t.accountId)}
                       </p>
                       {t.description && (
                         <p className="text-xs text-gray-500 truncate mt-0.5">{t.description}</p>
@@ -746,12 +919,10 @@ export default function TransactionsPage() {
 
                   <div className="flex items-center gap-3 flex-shrink-0">
                     <p className={`text-base font-semibold ${
-                      t.type === 'Income' ? 'text-green-600' :
-                      t.type === 'Expense' ? 'text-red-600' :
-                      'text-blue-600'
+                      t.type === 'Income' ? 'text-green-600' : 'text-red-600'
                     }`}>
-                      {t.type === 'Income' ? '+' : t.type === 'Expense' ? '-' : '↔ '}
-                      {Number(t.amount).toLocaleString()}
+                      {t.type === 'Income' ? '+' : '-'}
+                      ৳{Number(t.amount).toLocaleString()}
                     </p>
 
                     <div className="flex gap-1">
@@ -779,201 +950,294 @@ export default function TransactionsPage() {
         </div>
       )}
 
-      {/* Compact Modal */}
+      {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-md max-h-[92vh] flex flex-col shadow-xl">
-            <div className="px-4 py-3 border-b flex items-center justify-between">
-              <h2 className="text-lg font-semibold">
-                {editingTransaction ? 'Edit' : 'Add'} Transaction
+          <div className="bg-white rounded-lg w-full max-w-md p-6 shadow-2xl border border-gray-200">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-lg font-bold text-gray-900">
+                {editingTransaction ? 'Edit Transaction' : 'New Transaction'}
               </h2>
-              <button onClick={closeModal} className="p-1.5 hover:bg-gray-100 rounded-full">
-                <X size={18} />
+              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
               </button>
             </div>
 
-            {!editingTransaction && (
-              <div className="flex border-b text-sm font-medium">
-                {['expense', 'income', 'transfer'].map((tab) => (
+            <form onSubmit={modalTab === 'transfer' ? handleTransferSubmit : handleSubmit} className="space-y-4">
+              {!editingTransaction && (
+                <div className="flex bg-gray-100 p-1 rounded-md">
                   <button
-                    key={tab}
+                    type="button"
                     onClick={() => {
-                      if (tab === 'transfer' && accounts.length < 2) return;
-                      setModalTab(tab);
+                      setModalTab('income');
+                      setFormData(p => ({ ...p, type: 'Income', categoryId: '' }));
                     }}
-                    className={`flex-1 py-2 border-b-2 transition-colors ${
-                      modalTab === tab
-                        ? tab === 'income' ? 'border-green-500 text-green-700' :
-                          tab === 'expense' ? 'border-red-500 text-red-700' :
-                          'border-blue-500 text-blue-700'
-                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    className={`flex-1 py-2 text-xs font-bold rounded transition-all ${
+                      modalTab === 'income'
+                        ? 'bg-green-600 text-white shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
                     }`}
                   >
-                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                    Income
                   </button>
-                ))}
-              </div>
-            )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalTab('expense');
+                      setFormData(p => ({ ...p, type: 'Expense', categoryId: '' }));
+                    }}
+                    className={`flex-1 py-2 text-xs font-bold rounded transition-all ${
+                      modalTab === 'expense'
+                        ? 'bg-red-600 text-white shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Expense
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (accounts.length < 2) {
+                        showToast('Need at least 2 accounts for transfer', 'error');
+                        return;
+                      }
+                      setModalTab('transfer');
+                    }}
+                    className={`flex-1 py-2 text-xs font-bold rounded transition-all ${
+                      modalTab === 'transfer'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    } ${accounts.length < 2 ? 'opacity-50' : ''}`}
+                  >
+                    Transfer
+                  </button>
+                </div>
+              )}
 
-            <div className="p-4 space-y-2.5 flex-1 overflow-hidden">
               {modalTab === 'transfer' ? (
                 <>
-                  <div>
-                    <label className="block text-sm font-medium mb-0.5">From</label>
-                    <select
-                      value={transferData.fromAccountId}
-                      onChange={(e) => setTransferData((p) => ({ ...p, fromAccountId: e.target.value }))}
-                      className="w-full px-3 py-1.5 border rounded text-sm"
-                      required
-                    >
-                      {accounts.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name} (৳{(a.balance || 0).toLocaleString()})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="flex justify-center my-0.5">
-                    <ArrowRight size={16} className="text-gray-500" />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-0.5">To</label>
-                    <select
-                      value={transferData.toAccountId}
-                      onChange={(e) => setTransferData((p) => ({ ...p, toAccountId: e.target.value }))}
-                      className="w-full px-3 py-1.5 border rounded text-sm"
-                      required
-                    >
-                      {accounts.filter((a) => a.id !== transferData.fromAccountId).map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name} (৳{(a.balance || 0).toLocaleString()})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-0.5">Amount</label>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase ml-1 text-blue-600">
+                      Amount (৳)
+                    </label>
                     <input
                       type="number"
                       step="0.01"
                       value={transferData.amount}
-                      onChange={(e) => setTransferData((p) => ({ ...p, amount: e.target.value }))}
-                      className="w-full px-3 py-1.5 border rounded text-sm"
+                      onChange={(e) => setTransferData(p => ({ ...p, amount: e.target.value }))}
+                      className="w-full border-2 rounded-lg p-3 text-2xl font-bold text-center outline-none transition-colors bg-blue-50 text-blue-600 border-blue-100 focus:ring-1 focus:ring-blue-500"
+                      placeholder="0.00"
                       required
+                      disabled={submitting}
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium mb-0.5">Date</label>
-                    <input
-                      type="date"
-                      value={transferData.date}
-                      onChange={(e) => setTransferData((p) => ({ ...p, date: e.target.value }))}
-                      className="w-full px-3 py-1.5 border rounded text-sm"
-                      required
-                    />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block ml-1">
+                        From Account
+                      </label>
+                      <select
+                        value={transferData.fromAccountId}
+                        onChange={(e) => setTransferData(p => ({ ...p, fromAccountId: e.target.value }))}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
+                        required
+                        disabled={submitting}
+                      >
+                        {accounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name} (৳{(a.balance || 0).toLocaleString()})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-blue-500 uppercase mb-1 block ml-1">
+                        To Account
+                      </label>
+                      <select
+                        value={transferData.toAccountId}
+                        onChange={(e) => setTransferData(p => ({ ...p, toAccountId: e.target.value }))}
+                        className="w-full bg-blue-50 border-blue-100 rounded-lg p-2.5 text-xs font-bold focus:ring-1 focus:ring-blue-500 outline-none"
+                        required
+                        disabled={submitting}
+                      >
+                        <option value="">Select Destination</option>
+                        {accounts.filter(a => a.id !== transferData.fromAccountId).map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name} (৳{(a.balance || 0).toLocaleString()})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block ml-1">
+                        Date
+                      </label>
+                      <input
+                        type="date"
+                        value={transferData.date}
+                        onChange={(e) => setTransferData(p => ({ ...p, date: e.target.value }))}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
+                        required
+                        disabled={submitting}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block ml-1">
+                        Note
+                      </label>
+                      <input
+                        type="text"
+                        value={transferData.description}
+                        onChange={(e) => setTransferData(p => ({ ...p, description: e.target.value }))}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
+                        placeholder="e.g. Savings..."
+                        disabled={submitting}
+                      />
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium mb-0.5">Note</label>
-                    <textarea
-                      value={transferData.description}
-                      onChange={(e) => setTransferData((p) => ({ ...p, description: e.target.value }))}
-                      className="w-full px-3 py-1.5 border rounded text-sm min-h-[50px]"
-                      rows={2}
-                    />
-                  </div>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full py-4 text-white rounded-lg text-sm font-bold shadow-lg transition-all mt-2 uppercase tracking-widest bg-blue-600 hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 className="animate-spin" size={16} />
+                        <span>Confirming...</span>
+                      </>
+                    ) : (
+                      <span>{editingTransaction ? 'Update Transfer' : 'Confirm Transfer'}</span>
+                    )}
+                  </button>
                 </>
               ) : (
                 <>
-                  <div>
-                    <label className="block text-sm font-medium mb-0.5">Amount</label>
+                  <div className="space-y-1">
+                    <label className={`text-[10px] font-bold uppercase ml-1 ${
+                      modalTab === 'income' ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      Amount (৳)
+                    </label>
                     <input
                       type="number"
                       step="0.01"
                       value={formData.amount}
-                      onChange={(e) => setFormData((p) => ({ ...p, amount: e.target.value }))}
-                      className="w-full px-3 py-1.5 border rounded text-sm"
+                      onChange={(e) => setFormData(p => ({ ...p, amount: e.target.value }))}
+                      className={`w-full border-2 rounded-lg p-3 text-2xl font-bold text-center outline-none transition-colors ${
+                        modalTab === 'income'
+                          ? 'bg-green-50 text-green-600 border-green-100 focus:ring-green-500'
+                          : 'bg-red-50 text-red-600 border-red-100 focus:ring-red-500'
+                      } focus:ring-1`}
+                      placeholder="0.00"
                       required
+                      disabled={submitting}
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium mb-0.5">Account</label>
-                    <select
-                      value={formData.accountId}
-                      onChange={(e) => setFormData((p) => ({ ...p, accountId: e.target.value }))}
-                      className="w-full px-3 py-1.5 border rounded text-sm"
-                      required
-                    >
-                      {accounts.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name} (৳{(a.balance || 0).toLocaleString()})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-0.5">Category</label>
-                    <select
-                      value={formData.categoryId}
-                      onChange={(e) => setFormData((p) => ({ ...p, categoryId: e.target.value }))}
-                      className="w-full px-3 py-1.5 border rounded text-sm"
-                      required
-                    >
-                      <option value="">Select category</option>
-                      {categories
-                        .filter((c) => c.type?.toLowerCase() === formData.type.toLowerCase())
-                        .map((c) => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block ml-1">
+                        Account
+                      </label>
+                      <select
+                        value={formData.accountId}
+                        onChange={(e) => setFormData(p => ({ ...p, accountId: e.target.value }))}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
+                        required
+                        disabled={submitting}
+                      >
+                        {accounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name} (৳{(a.balance || 0).toLocaleString()})
+                          </option>
                         ))}
-                    </select>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className={`text-[10px] font-bold uppercase mb-1 block ml-1 ${
+                        modalTab === 'income' ? 'text-green-500' : 'text-red-500'
+                      }`}>
+                        Category
+                      </label>
+                      <select
+                        value={formData.categoryId}
+                        onChange={(e) => setFormData(p => ({ ...p, categoryId: e.target.value }))}
+                        className={`w-full rounded-lg p-2.5 text-xs font-bold focus:ring-1 outline-none ${
+                          modalTab === 'income'
+                            ? 'bg-green-50 border-green-100 focus:ring-green-500'
+                            : 'bg-red-50 border-red-100 focus:ring-red-500'
+                        }`}
+                        required
+                        disabled={submitting}
+                      >
+                        <option value="">Select Category</option>
+                        {categories
+                          .filter(c => c.type?.toLowerCase() === formData.type.toLowerCase())
+                          .map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block ml-1">
+                        Date
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.date}
+                        onChange={(e) => setFormData(p => ({ ...p, date: e.target.value }))}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
+                        required
+                        disabled={submitting}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block ml-1">
+                        Note
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.description}
+                        onChange={(e) => setFormData(p => ({ ...p, description: e.target.value }))}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
+                        placeholder="e.g. Rent, Salary..."
+                        disabled={submitting}
+                      />
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium mb-0.5">Date</label>
-                    <input
-                      type="date"
-                      value={formData.date}
-                      onChange={(e) => setFormData((p) => ({ ...p, date: e.target.value }))}
-                      className="w-full px-3 py-1.5 border rounded text-sm"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-0.5">Note</label>
-                    <textarea
-                      value={formData.description}
-                      onChange={(e) => setFormData((p) => ({ ...p, description: e.target.value }))}
-                      className="w-full px-3 py-1.5 border rounded text-sm min-h-[50px]"
-                      rows={2}
-                    />
-                  </div>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className={`w-full py-4 text-white rounded-lg text-sm font-bold shadow-lg transition-all mt-2 uppercase tracking-widest ${
+                      modalTab === 'income'
+                        ? 'bg-green-600 hover:bg-green-700'
+                        : 'bg-red-600 hover:bg-red-700'
+                    } disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 className="animate-spin" size={16} />
+                        <span>Confirming...</span>
+                      </>
+                    ) : (
+                      <span>{editingTransaction ? 'Update' : `Confirm ${modalTab === 'income' ? 'Income' : 'Expense'}`}</span>
+                    )}
+                  </button>
                 </>
               )}
-            </div>
-
-            <div className="flex gap-3 px-4 py-3 border-t">
-              <button
-                type="button"
-                onClick={closeModal}
-                className="flex-1 py-2 border rounded text-sm font-medium hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={modalTab === 'transfer' ? handleTransferSubmit : handleSubmit}
-                className="flex-1 py-2 bg-gray-900 text-white rounded text-sm font-medium hover:bg-gray-800"
-              >
-                {editingTransaction ? 'Update' : modalTab === 'transfer' ? 'Transfer' : 'Save'}
-              </button>
-            </div>
+            </form>
           </div>
         </div>
       )}
