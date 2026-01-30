@@ -24,7 +24,7 @@ import {
   ArrowDownCircle,
   Calendar,
   Search,
-  Wallet,               // ← Fixed: added back
+  Wallet,
   AlertTriangle,
   ArrowRightLeft,
   ArrowRight,
@@ -360,6 +360,7 @@ export default function TransactionsPage() {
 
     try {
       if (transactionToDelete.type === 'Transfer' || transactionToDelete.collectionType === 'transfers') {
+        // Revert transfer effect
         const from = accounts.find((a) => a.id === transactionToDelete.fromAccountId);
         const to = accounts.find((a) => a.id === transactionToDelete.toAccountId);
 
@@ -374,6 +375,7 @@ export default function TransactionsPage() {
           });
         }
       } else {
+        // Revert normal transaction
         const acc = accounts.find((a) => a.id === transactionToDelete.accountId);
         if (acc) {
           const newBal =
@@ -530,17 +532,8 @@ export default function TransactionsPage() {
         </button>
       </div>
 
-      {/* Summary cards – Total Balance first */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Balance - first position */}
-        <div className="bg-white p-4 rounded-lg shadow-sm">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-medium text-gray-500 uppercase">Total Balance</p>
-            <Wallet size={14} className="text-gray-600" />
-          </div>
-          <p className="text-xl font-bold text-gray-900">৳{totalBalance.toLocaleString()}</p>
-        </div>
-
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-4 rounded-lg shadow-sm">
           <div className="flex items-center justify-between mb-1">
             <p className="text-xs font-medium text-gray-500 uppercase">Income</p>
@@ -568,23 +561,28 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      {/* Individual Account Balances – even smaller */}
-        <div className="flex space-x-3 overflow-x-auto pb-2 scrollbar-hide">
-        {accounts.map((acc) => (
-            <div
-            key={acc.id}
-            className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 min-w-[140px] flex flex-col justify-center"
-            >
-            <p className="text-[10px] font-bold text-gray-400 uppercase leading-none mb-1">
-                {acc.name}
-            </p>
-            <p className="text-sm font-black text-gray-900 truncate">
-                ৳{(acc.balance || 0).toLocaleString()}
-            </p>
-            </div>
-        ))}
+      {/* Account Balances */}
+      <div className="bg-white p-5 rounded-lg shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-base font-semibold flex items-center gap-2">
+            <Wallet size={18} className="text-gray-500" />
+            Account Balances
+          </h3>
+          <div className="text-right">
+            <p className="text-xs text-gray-500">Total</p>
+            <p className="text-lg font-bold">৳{totalBalance.toLocaleString()}</p>
+          </div>
         </div>
-        
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          {accounts.map((acc) => (
+            <div key={acc.id} className="text-sm">
+              <p className="text-gray-600 text-xs truncate">{acc.name}</p>
+              <p className="font-semibold">৳{(acc.balance || 0).toLocaleString()}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Filters */}
       <div className="bg-white rounded-lg shadow-sm p-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -686,10 +684,10 @@ export default function TransactionsPage() {
           No records found
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden max-h-[65vh] overflow-y-auto">
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden divide-y divide-gray-100">
           {Object.entries(grouped).map(([date, { records, dayIncome, dayExpense }]) => (
             <div key={date}>
-              <div className="sticky top-0 bg-gray-50 px-4 py-2.5 flex justify-between items-center z-10 border-b border-gray-100">
+              <div className="bg-gray-50 px-4 py-2.5 flex justify-between items-center sticky top-0 z-10">
                 <div className="flex items-center gap-2">
                   <Calendar size={14} className="text-gray-500" />
                   <span className="text-sm font-medium">{formatDate(date)}</span>
@@ -703,7 +701,7 @@ export default function TransactionsPage() {
               {records.map((t) => (
                 <div
                   key={t.id}
-                  className="px-4 py-3 hover:bg-gray-50 flex items-center justify-between gap-3 border-b border-gray-100 last:border-b-0"
+                  className="px-4 py-3 hover:bg-gray-50 flex items-center justify-between gap-3"
                 >
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <div
@@ -779,7 +777,7 @@ export default function TransactionsPage() {
         </div>
       )}
 
-      {/* Compact Modal */}
+      {/* Compact Add/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg w-full max-w-md max-h-[92vh] flex flex-col shadow-xl">
@@ -815,7 +813,7 @@ export default function TransactionsPage() {
               </div>
             )}
 
-            <div className="p-4 space-y-2.5 flex-1 overflow-hidden">
+            <div className="p-4 space-y-3 flex-1 overflow-hidden">
               {modalTab === 'transfer' ? (
                 <>
                   <div>
@@ -834,7 +832,7 @@ export default function TransactionsPage() {
                     </select>
                   </div>
 
-                  <div className="flex justify-center my-0.5">
+                  <div className="flex justify-center my-1">
                     <ArrowRight size={16} className="text-gray-500" />
                   </div>
 
@@ -882,7 +880,7 @@ export default function TransactionsPage() {
                     <textarea
                       value={transferData.description}
                       onChange={(e) => setTransferData((p) => ({ ...p, description: e.target.value }))}
-                      className="w-full px-3 py-1.5 border rounded text-sm min-h-[50px]"
+                      className="w-full px-3 py-1.5 border rounded text-sm"
                       rows={2}
                     />
                   </div>
@@ -950,7 +948,7 @@ export default function TransactionsPage() {
                     <textarea
                       value={formData.description}
                       onChange={(e) => setFormData((p) => ({ ...p, description: e.target.value }))}
-                      className="w-full px-3 py-1.5 border rounded text-sm min-h-[50px]"
+                      className="w-full px-3 py-1.5 border rounded text-sm"
                       rows={2}
                     />
                   </div>
