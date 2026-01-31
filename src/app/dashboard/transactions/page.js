@@ -197,6 +197,11 @@ export default function TransactionsPage() {
         return 0;
       });
       
+      // Debug: log all unique dates
+      const uniqueDates = [...new Set(all.map(t => t.date))].sort().reverse();
+      console.log('All transaction dates loaded:', uniqueDates);
+      console.log('Total transactions:', all.length);
+      
       setTransactions(all);
     } catch (error) {
       console.error('Error loading records:', error);
@@ -680,22 +685,36 @@ export default function TransactionsPage() {
     const today = new Date();
     const str = today.toISOString().split('T')[0];
 
+    let range;
     switch (dateFilter) {
       case 'Daily':
-        return { start: str, end: str };
+        range = { start: str, end: str };
+        break;
       case 'Monthly':
         const fm = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
         const lm = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
-        return { start: fm, end: lm };
+        range = { start: fm, end: lm };
+        break;
       case 'Yearly':
         const fy = new Date(today.getFullYear(), 0, 1).toISOString().split('T')[0];
         const ly = new Date(today.getFullYear(), 11, 31).toISOString().split('T')[0];
-        return { start: fy, end: ly };
+        range = { start: fy, end: ly };
+        break;
       case 'Custom':
-        return customDateRange.start && customDateRange.end ? customDateRange : null;
+        range = customDateRange.start && customDateRange.end ? customDateRange : null;
+        break;
       default:
-        return null;
+        range = null;
     }
+    
+    // Debug logging
+    if (dateFilter === 'Monthly') {
+      console.log('Monthly filter range:', range);
+      console.log('Today:', today.toISOString().split('T')[0]);
+      console.log('Month:', today.getMonth(), 'Year:', today.getFullYear());
+    }
+    
+    return range;
   };
 
   const filteredTransactions = transactions.filter((t) => {
