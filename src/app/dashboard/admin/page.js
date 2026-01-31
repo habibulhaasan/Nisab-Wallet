@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/useToast';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { 
   Users, MessageSquare, TrendingUp, Database, CheckCircle, XCircle, 
-  Trash2, Eye, Shield, Calendar, Mail, Star
+  Trash2, Eye, Shield, Calendar, Mail, Star, StickyNote, X, Save
 } from 'lucide-react';
 
 export default function AdminPage() {
@@ -31,6 +31,9 @@ export default function AdminPage() {
   const [users, setUsers] = useState([]);
   const [selectedFeedback, setSelectedFeedback] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [currentNotes, setCurrentNotes] = useState('');
+  const [editingNotesFor, setEditingNotesFor] = useState(null);
   const { toasts, addToast, removeToast } = useToast();
 
   useEffect(() => {
@@ -179,6 +182,39 @@ export default function AdminPage() {
     }
   };
 
+  const openNotesModal = (feedbackItem) => {
+    setEditingNotesFor(feedbackItem);
+    setCurrentNotes(feedbackItem.adminNotes || '');
+    setShowNotesModal(true);
+  };
+
+  const saveNotes = async () => {
+    if (!editingNotesFor) return;
+
+    try {
+      const feedbackRef = doc(db, 'users', editingNotesFor.userId, 'feedback', editingNotesFor.id);
+      await updateDoc(feedbackRef, {
+        adminNotes: currentNotes,
+        notesUpdatedAt: new Date(),
+        notesUpdatedBy: user.uid
+      });
+      
+      addToast('Notes saved successfully', 'success');
+      setShowNotesModal(false);
+      setEditingNotesFor(null);
+      setCurrentNotes('');
+      loadFeedback();
+    } catch (error) {
+      addToast('Error saving notes: ' + error.message, 'error');
+    }
+  };
+
+  const closeNotesModal = () => {
+    setShowNotesModal(false);
+    setEditingNotesFor(null);
+    setCurrentNotes('');
+  };
+
   const deleteFeedback = (userId, feedbackId) => {
     setConfirmDialog({
       isOpen: true,
@@ -205,64 +241,69 @@ export default function AdminPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading admin panel...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 p-4 md:p-6">
+    <div className="max-w-7xl mx-auto space-y-6 pb-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <div className="flex items-center space-x-3">
-            <Shield className="w-6 h-6 text-red-600" />
-            <h1 className="text-2xl font-semibold text-gray-900">Admin Dashboard</h1>
-          </div>
-          <p className="text-sm text-gray-500 mt-1">Manage users, feedback, and application data</p>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center">
+            <Shield className="w-7 h-7 mr-2 text-blue-600" />
+            Admin Overview
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">Manage users and feedback</p>
         </div>
       </div>
 
-      {/* Stats Grid */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg p-5 border border-gray-200">
+        <div className="bg-white rounded-lg border border-gray-200 p-5">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Users</p>
-            <Users className="w-4 h-4 text-blue-500" />
+            <p className="text-sm font-medium text-gray-600">Total Users</p>
+            <Users className="w-5 h-5 text-blue-600" />
           </div>
-          <p className="text-2xl font-semibold text-gray-900">{stats.totalUsers}</p>
+          <p className="text-3xl font-bold text-gray-900">{stats.totalUsers}</p>
         </div>
 
-        <div className="bg-white rounded-lg p-5 border border-gray-200">
+        <div className="bg-white rounded-lg border border-gray-200 p-5">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Feedback</p>
-            <MessageSquare className="w-4 h-4 text-green-500" />
+            <p className="text-sm font-medium text-gray-600">Total Feedback</p>
+            <MessageSquare className="w-5 h-5 text-green-600" />
           </div>
-          <p className="text-2xl font-semibold text-gray-900">{stats.totalFeedback}</p>
+          <p className="text-3xl font-bold text-gray-900">{stats.totalFeedback}</p>
         </div>
 
-        <div className="bg-white rounded-lg p-5 border border-gray-200">
+        <div className="bg-white rounded-lg border border-gray-200 p-5">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">New Feedback</p>
-            <TrendingUp className="w-4 h-4 text-orange-500" />
+            <p className="text-sm font-medium text-gray-600">New Feedback</p>
+            <TrendingUp className="w-5 h-5 text-orange-600" />
           </div>
-          <p className="text-2xl font-semibold text-orange-600">{stats.newFeedback}</p>
+          <p className="text-3xl font-bold text-gray-900">{stats.newFeedback}</p>
         </div>
 
-        <div className="bg-white rounded-lg p-5 border border-gray-200">
+        <div className="bg-white rounded-lg border border-gray-200 p-5">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Database</p>
-            <Database className="w-4 h-4 text-purple-500" />
+            <p className="text-sm font-medium text-gray-600">Featured</p>
+            <Star className="w-5 h-5 text-yellow-600" />
           </div>
-          <p className="text-sm font-semibold text-gray-900">Active</p>
+          <p className="text-3xl font-bold text-gray-900">
+            {feedback.filter(f => f.featured).length}
+          </p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="bg-white rounded-lg border border-gray-200">
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="border-b border-gray-200">
-          <div className="flex space-x-4 px-6 overflow-x-auto">
+          <div className="flex space-x-8 px-6 overflow-x-auto">
             <button
               onClick={() => setActiveTab('overview')}
               className={`py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
@@ -363,6 +404,12 @@ export default function AdminPage() {
                               Featured
                             </span>
                           )}
+                          {item.adminNotes && (
+                            <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium flex items-center">
+                              <StickyNote size={12} className="mr-1" />
+                              Has Notes
+                            </span>
+                          )}
                         </div>
                         <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600 mb-2">
                           <Mail className="w-3 h-3" />
@@ -371,7 +418,13 @@ export default function AdminPage() {
                           <span>{item.userName}</span>
                         </div>
                         <p className="text-sm text-gray-700 mb-2 break-words">{item.message}</p>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                        {item.adminNotes && (
+                          <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded text-xs">
+                            <p className="font-medium text-purple-900 mb-1">Admin Notes:</p>
+                            <p className="text-purple-700">{item.adminNotes}</p>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 text-xs text-gray-500 mt-2">
                           <Calendar className="w-3 h-3" />
                           <span>{formatDate(item.createdAt)}</span>
                         </div>
@@ -396,6 +449,17 @@ export default function AdminPage() {
                           title={item.featured ? 'Remove from landing page' : 'Feature on landing page'}
                         >
                           <Star className={`w-4 h-4 ${item.featured ? 'fill-current' : ''}`} />
+                        </button>
+                        <button
+                          onClick={() => openNotesModal(item)}
+                          className={`p-2 rounded transition-colors ${
+                            item.adminNotes
+                              ? 'text-purple-600 bg-purple-50 hover:bg-purple-100'
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                          title="Add/Edit notes"
+                        >
+                          <StickyNote className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => deleteFeedback(item.userId, item.id)}
@@ -450,6 +514,57 @@ export default function AdminPage() {
           )}
         </div>
       </div>
+
+      {/* Notes Modal */}
+      {showNotesModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg w-full max-w-2xl p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center">
+                <StickyNote className="w-5 h-5 mr-2 text-purple-600" />
+                Admin Notes
+              </h3>
+              <button
+                onClick={closeNotesModal}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {editingNotesFor && (
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <p className="text-xs text-gray-500 mb-1">Feedback from:</p>
+                <p className="text-sm font-medium text-gray-900">{editingNotesFor.userName}</p>
+                <p className="text-sm text-gray-600 mt-1">{editingNotesFor.message}</p>
+              </div>
+            )}
+
+            <textarea
+              value={currentNotes}
+              onChange={(e) => setCurrentNotes(e.target.value)}
+              placeholder="Add internal notes for this feedback (only visible to admins)..."
+              className="w-full h-40 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent text-sm resize-none"
+            />
+
+            <div className="flex justify-end gap-3 mt-4">
+              <button
+                onClick={closeNotesModal}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveNotes}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" />
+                Save Notes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Confirm Dialog */}
       <ConfirmDialog

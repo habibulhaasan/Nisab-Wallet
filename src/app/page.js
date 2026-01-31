@@ -4,6 +4,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSubscriptionPlans } from '@/lib/subscriptionUtils';
+import { collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { 
   CheckCircle, Star, TrendingUp, Shield, Wallet, BarChart3, 
   Smartphone, Lock, Users, ArrowRight, Menu, X, DollarSign 
@@ -13,15 +15,140 @@ export default function LandingPage() {
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [subscriptionPlans, setSubscriptionPlans] = useState([]);
+  const [testimonials, setTestimonials] = useState([]);
+  const [loadingTestimonials, setLoadingTestimonials] = useState(true);
 
   useEffect(() => {
     loadPlans();
+    loadFeaturedFeedback();
   }, []);
 
   const loadPlans = async () => {
     const result = await getSubscriptionPlans(true);
     if (result.success) {
       setSubscriptionPlans(result.plans);
+    }
+  };
+
+  const loadFeaturedFeedback = async () => {
+    setLoadingTestimonials(true);
+    try {
+      const allFeaturedFeedback = [];
+      
+      // Get all users
+      const usersSnapshot = await getDocs(collection(db, 'users'));
+      
+      // For each user, get their featured feedback
+      for (const userDoc of usersSnapshot.docs) {
+        const feedbackRef = collection(db, 'users', userDoc.id, 'feedback');
+        const featuredQuery = query(
+          feedbackRef, 
+          where('featured', '==', true),
+          orderBy('featuredAt', 'desc')
+        );
+        
+        try {
+          const feedbackSnapshot = await getDocs(featuredQuery);
+          feedbackSnapshot.forEach(feedbackDoc => {
+            const data = feedbackDoc.data();
+            allFeaturedFeedback.push({
+              id: `${userDoc.id}-${feedbackDoc.id}`,
+              userId: userDoc.id,
+              rating: data.rating || 5,
+              message: data.message || '',
+              userName: data.userName || 'Anonymous User',
+              role: data.userRole || 'User',
+              featuredAt: data.featuredAt
+            });
+          });
+        } catch (error) {
+          // If query fails (e.g., missing index), try without orderBy
+          console.warn('Featured query failed for user, trying fallback:', error);
+          try {
+            const fallbackQuery = query(feedbackRef, where('featured', '==', true));
+            const feedbackSnapshot = await getDocs(fallbackQuery);
+            feedbackSnapshot.forEach(feedbackDoc => {
+              const data = feedbackDoc.data();
+              allFeaturedFeedback.push({
+                id: `${userDoc.id}-${feedbackDoc.id}`,
+                userId: userDoc.id,
+                rating: data.rating || 5,
+                message: data.message || '',
+                userName: data.userName || 'Anonymous User',
+                role: data.userRole || 'User',
+                featuredAt: data.featuredAt
+              });
+            });
+          } catch (fallbackError) {
+            console.error('Fallback query also failed:', fallbackError);
+          }
+        }
+      }
+
+      // Sort by featured date (newest first)
+      allFeaturedFeedback.sort((a, b) => {
+        const dateA = a.featuredAt?.toDate?.() || new Date(0);
+        const dateB = b.featuredAt?.toDate?.() || new Date(0);
+        return dateB - dateA;
+      });
+
+      // If we have featured feedback, use it; otherwise fall back to static testimonials
+      if (allFeaturedFeedback.length > 0) {
+        setTestimonials(allFeaturedFeedback.slice(0, 6)); // Show max 6 testimonials
+      } else {
+        // Fallback to static testimonials
+        setTestimonials([
+          {
+            id: 1,
+            rating: 5,
+            message: "This app has transformed how I manage my finances. The Zakat calculation feature is incredibly helpful!",
+            userName: "Ahmed Hassan",
+            role: "Business Owner"
+          },
+          {
+            id: 2,
+            rating: 5,
+            message: "Simple, intuitive, and follows Islamic principles perfectly. Highly recommended for every Muslim.",
+            userName: "Fatima Rahman",
+            role: "Teacher"
+          },
+          {
+            id: 3,
+            rating: 5,
+            message: "The analytics dashboard gives me clear insights into my spending. Managing multiple accounts has never been easier!",
+            userName: "Ibrahim Ali",
+            role: "Software Engineer"
+          }
+        ]);
+      }
+    } catch (error) {
+      console.error('Error loading featured feedback:', error);
+      // Fallback to static testimonials on error
+      setTestimonials([
+        {
+          id: 1,
+          rating: 5,
+          message: "This app has transformed how I manage my finances. The Zakat calculation feature is incredibly helpful!",
+          userName: "Ahmed Hassan",
+          role: "Business Owner"
+        },
+        {
+          id: 2,
+          rating: 5,
+          message: "Simple, intuitive, and follows Islamic principles perfectly. Highly recommended for every Muslim.",
+          userName: "Fatima Rahman",
+          role: "Teacher"
+        },
+        {
+          id: 3,
+          rating: 5,
+          message: "The analytics dashboard gives me clear insights into my spending. Managing multiple accounts has never been easier!",
+          userName: "Ibrahim Ali",
+          role: "Software Engineer"
+        }
+      ]);
+    } finally {
+      setLoadingTestimonials(false);
     }
   };
 
@@ -55,31 +182,6 @@ export default function LandingPage() {
       icon: <Smartphone className="w-6 h-6 text-indigo-600" />,
       title: 'Mobile Responsive',
       description: 'Access your finances anywhere on any device'
-    }
-  ];
-
-  // Static testimonials that don't require database access
-  const testimonials = [
-    {
-      id: 1,
-      rating: 5,
-      message: "This app has transformed how I manage my finances. The Zakat calculation feature is incredibly helpful!",
-      userName: "Ahmed Hassan",
-      role: "Business Owner"
-    },
-    {
-      id: 2,
-      rating: 5,
-      message: "Simple, intuitive, and follows Islamic principles perfectly. Highly recommended for every Muslim.",
-      userName: "Fatima Rahman",
-      role: "Teacher"
-    },
-    {
-      id: 3,
-      rating: 5,
-      message: "The analytics dashboard gives me clear insights into my spending. Managing multiple accounts has never been easier!",
-      userName: "Ibrahim Ali",
-      role: "Software Engineer"
     }
   ];
 
@@ -205,7 +307,7 @@ export default function LandingPage() {
               View Demo
             </button>
           </div>
-          <p className="text-sm text-gray-500 mt-6 flex items-center justify-center space-x-2">
+          <p className="text-sm text-gray-500 mt-6 flex items-center justify-center space-x-2 flex-wrap">
             <CheckCircle className="w-4 h-4 text-green-500" />
             <span>5-day free trial</span>
             <span className="text-gray-300">•</span>
@@ -336,40 +438,47 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {testimonials.map((testimonial) => (
-              <div 
-                key={testimonial.id} 
-                className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-xl hover:border-blue-200 transition-all duration-300"
-              >
-                <div className="flex items-center mb-4">
-                  {[...Array(5)].map((_, i) => (
-                    <Star
-                      key={i}
-                      size={20}
-                      className={`${
-                        i < testimonial.rating
-                          ? 'text-yellow-400 fill-current'
-                          : 'text-gray-300'
-                      }`}
-                    />
-                  ))}
-                </div>
-                <p className="text-gray-700 mb-6 italic leading-relaxed">
-                  "{testimonial.message}"
-                </p>
-                <div className="flex items-center">
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold text-lg mr-3 shadow-md">
-                    {testimonial.userName?.charAt(0).toUpperCase()}
+          {loadingTestimonials ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="text-gray-500 mt-4">Loading testimonials...</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {testimonials.map((testimonial) => (
+                <div 
+                  key={testimonial.id} 
+                  className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-xl hover:border-blue-200 transition-all duration-300"
+                >
+                  <div className="flex items-center mb-4">
+                    {[...Array(5)].map((_, i) => (
+                      <Star
+                        key={i}
+                        size={20}
+                        className={`${
+                          i < testimonial.rating
+                            ? 'text-yellow-400 fill-current'
+                            : 'text-gray-300'
+                        }`}
+                      />
+                    ))}
                   </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">{testimonial.userName}</p>
-                    <p className="text-sm text-gray-500">{testimonial.role}</p>
+                  <p className="text-gray-700 mb-6 italic leading-relaxed">
+                    "{testimonial.message}"
+                  </p>
+                  <div className="flex items-center">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold text-lg mr-3 shadow-md">
+                      {testimonial.userName?.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">{testimonial.userName}</p>
+                      <p className="text-sm text-gray-500">{testimonial.role}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

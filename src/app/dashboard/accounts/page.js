@@ -4,12 +4,25 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { getAccounts, addAccount, updateAccount, deleteAccount } from '@/lib/firestoreCollections';
-import { Plus, Edit2, Trash2, Wallet, CreditCard, Smartphone, Coins, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Wallet, CreditCard, Smartphone, Coins, X, Download, Sparkles } from 'lucide-react';
+import { showToast } from '@/components/Toast';
+import { collection, addDoc, getDocs, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { generateId } from '@/lib/firestoreCollections';
+
+// Default accounts data
+const DEFAULT_ACCOUNTS = [
+  { name: 'Cash', type: 'Cash', balance: 0, isDefault: true },
+  { name: 'Bank 1', type: 'Bank', balance: 0, isDefault: true },
+  { name: 'bKash', type: 'Mobile Banking', balance: 0, isDefault: true },
+  { name: 'Bank 2', type: 'Bank', balance: 0, isDefault: true }
+];
 
 export default function AccountsPage() {
   const { user } = useAuth();
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingDefaults, setLoadingDefaults] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState(null);
   const [formData, setFormData] = useState({
@@ -26,7 +39,6 @@ export default function AccountsPage() {
     { value: 'Silver', label: 'Silver', icon: Coins },
   ];
 
-  // Load accounts
   useEffect(() => {
     if (user) {
       loadAccounts();
@@ -42,31 +54,96 @@ export default function AccountsPage() {
     setLoading(false);
   };
 
+  // Load default accounts
+  const loadDefaultAccounts = async () => {
+    setLoadingDefaults(true);
+    try {
+      const accountsRef = collection(db, 'users', user.uid, 'accounts');
+      
+      // Get existing account names (case-insensitive)
+      const existingNames = accounts.map(a => a.name.toLowerCase().trim());
+      
+      // Filter out accounts that already exist
+      const accountsToAdd = DEFAULT_ACCOUNTS.filter(
+        defAcc => !existingNames.includes(defAcc.name.toLowerCase().trim())
+      );
+
+      if (accountsToAdd.length === 0) {
+        showToast('All default accounts already exist', 'info');
+        setLoadingDefaults(false);
+        return;
+      }
+
+      // Add new default accounts
+      const promises = accountsToAdd.map(account => 
+        addDoc(accountsRef, {
+          accountId: generateId(),
+          ...account,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        })
+      );
+
+      await Promise.all(promises);
+      
+      showToast(`Added ${accountsToAdd.length} default account${accountsToAdd.length > 1 ? 's' : ''}`, 'success');
+      await loadAccounts();
+    } catch (error) {
+      console.error('Error loading defaults:', error);
+      showToast('Failed to load default accounts', 'error');
+    } finally {
+      setLoadingDefaults(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!formData.name || !formData.balance) {
-      alert('Please fill in all fields');
+      showToast('Please fill in all fields', 'error');
+      return;
+    }
+
+    // Check for duplicate names (case-insensitive, trimmed)
+    const trimmedName = formData.name.trim();
+    const isDuplicate = accounts.some(account => {
+      // Skip the current account when editing
+      if (editingAccount && account.id === editingAccount.id) {
+        return false;
+      }
+      return account.name.toLowerCase().trim() === trimmedName.toLowerCase();
+    });
+
+    if (isDuplicate) {
+      showToast('An account with this name already exists', 'error');
       return;
     }
 
     if (editingAccount) {
       // Update existing account
-      const result = await updateAccount(user.uid, editingAccount.id, formData);
+      const result = await updateAccount(user.uid, editingAccount.id, {
+        ...formData,
+        name: trimmedName
+      });
       if (result.success) {
+        showToast('Account updated successfully', 'success');
         await loadAccounts();
         closeModal();
       } else {
-        alert('Error updating account: ' + result.error);
+        showToast('Error updating account: ' + result.error, 'error');
       }
     } else {
       // Add new account
-      const result = await addAccount(user.uid, formData);
+      const result = await addAccount(user.uid, {
+        ...formData,
+        name: trimmedName
+      });
       if (result.success) {
+        showToast('Account added successfully', 'success');
         await loadAccounts();
         closeModal();
       } else {
-        alert('Error adding account: ' + result.error);
+        showToast('Error adding account: ' + result.error, 'error');
       }
     }
   };
@@ -85,9 +162,10 @@ export default function AccountsPage() {
     if (confirm(`Are you sure you want to delete "${account.name}"?`)) {
       const result = await deleteAccount(user.uid, account.id);
       if (result.success) {
+        showToast('Account deleted successfully', 'success');
         await loadAccounts();
       } else {
-        alert('Error deleting account: ' + result.error);
+        showToast('Error deleting account: ' + result.error, 'error');
       }
     }
   };
@@ -113,13 +191,32 @@ export default function AccountsPage() {
           <h1 className="text-2xl font-semibold text-gray-900">Accounts</h1>
           <p className="text-sm text-gray-500 mt-1">Manage your financial accounts</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center space-x-2 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          <span className="text-sm font-medium">Add Account</span>
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={loadDefaultAccounts}
+            disabled={loadingDefaults}
+            className="flex items-center space-x-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loadingDefaults ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                <span className="text-sm font-medium">Loading...</span>
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                <span className="text-sm font-medium">Load Defaults</span>
+              </>
+            )}
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center space-x-2 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="text-sm font-medium">Add Account</span>
+          </button>
+        </div>
       </div>
 
       {/* Total Balance Card */}
@@ -139,21 +236,39 @@ export default function AccountsPage() {
         <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
           <Wallet className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <p className="text-gray-600 mb-2">No accounts yet</p>
-          <p className="text-sm text-gray-400 mb-4">Create your first account to start tracking your finances</p>
-          <button
-            onClick={() => setShowModal(true)}
-            className="inline-flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="text-sm">Add Account</span>
-          </button>
+          <p className="text-sm text-gray-400 mb-4">Create your first account or load defaults to start</p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={loadDefaultAccounts}
+              disabled={loadingDefaults}
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              <Download className="w-4 h-4" />
+              <span className="text-sm">Load Defaults</span>
+            </button>
+            <button
+              onClick={() => setShowModal(true)}
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="text-sm">Add Account</span>
+            </button>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {accounts.map((account) => {
             const Icon = getAccountIcon(account.type);
             return (
-              <div key={account.id} className="bg-white rounded-lg border border-gray-200 p-5 hover:border-gray-300 transition-colors">
+              <div key={account.id} className="bg-white rounded-lg border border-gray-200 p-5 hover:border-gray-300 transition-colors relative">
+                {account.isDefault && (
+                  <div className="absolute top-2 right-2">
+                    <div className="flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-600 rounded-full text-xs font-medium">
+                      <Sparkles className="w-3 h-3" />
+                      <span>Default</span>
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">

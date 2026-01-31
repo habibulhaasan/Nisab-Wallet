@@ -6,12 +6,29 @@ import { useAuth } from '@/context/AuthContext';
 import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { generateId } from '@/lib/firestoreCollections';
-import { Plus, Edit2, Trash2, FolderOpen, X, Tag } from 'lucide-react';
+import { Plus, Edit2, Trash2, FolderOpen, X, Tag, Download, Sparkles } from 'lucide-react';
+import { showToast } from '@/components/Toast';
+
+// Default categories data
+const DEFAULT_INCOME_CATEGORIES = [
+  { name: 'Salary', type: 'Income', color: '#10B981', isDefault: true },
+  { name: 'Bonus', type: 'Income', color: '#3B82F6', isDefault: true },
+  { name: 'Loan', type: 'Income', color: '#F59E0B', isDefault: true }
+];
+
+const DEFAULT_EXPENSE_CATEGORIES = [
+  { name: 'Transportation', type: 'Expense', color: '#EF4444', isDefault: true },
+  { name: 'Shopping', type: 'Expense', color: '#8B5CF6', isDefault: true },
+  { name: 'Foods', type: 'Expense', color: '#EC4899', isDefault: true },
+  { name: 'Healthcare', type: 'Expense', color: '#06B6D4', isDefault: true },
+  { name: 'Loan Repay', type: 'Expense', color: '#F97316', isDefault: true }
+];
 
 export default function CategoriesPage() {
   const { user } = useAuth();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingDefaults, setLoadingDefaults] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
   const [formData, setFormData] = useState({
@@ -44,15 +61,82 @@ export default function CategoriesPage() {
       setCategories(cats);
     } catch (error) {
       console.error('Error loading categories:', error);
+      showToast('Failed to load categories', 'error');
     }
     setLoading(false);
+  };
+
+  // Load default categories
+  const loadDefaultCategories = async () => {
+    setLoadingDefaults(true);
+    try {
+      const categoriesRef = collection(db, 'users', user.uid, 'categories');
+      
+      // Get existing category names (case-insensitive, per type)
+      const existingNames = categories.reduce((acc, cat) => {
+        const key = `${cat.type.toLowerCase()}_${cat.name.toLowerCase().trim()}`;
+        acc.add(key);
+        return acc;
+      }, new Set());
+      
+      // Combine all default categories
+      const allDefaults = [...DEFAULT_INCOME_CATEGORIES, ...DEFAULT_EXPENSE_CATEGORIES];
+      
+      // Filter out categories that already exist
+      const categoriesToAdd = allDefaults.filter(defCat => {
+        const key = `${defCat.type.toLowerCase()}_${defCat.name.toLowerCase().trim()}`;
+        return !existingNames.has(key);
+      });
+
+      if (categoriesToAdd.length === 0) {
+        showToast('All default categories already exist', 'info');
+        setLoadingDefaults(false);
+        return;
+      }
+
+      // Add new default categories
+      const promises = categoriesToAdd.map(category => 
+        addDoc(categoriesRef, {
+          categoryId: generateId(),
+          ...category,
+          createdAt: serverTimestamp()
+        })
+      );
+
+      await Promise.all(promises);
+      
+      showToast(`Added ${categoriesToAdd.length} default categor${categoriesToAdd.length > 1 ? 'ies' : 'y'}`, 'success');
+      await loadCategories();
+    } catch (error) {
+      console.error('Error loading defaults:', error);
+      showToast('Failed to load default categories', 'error');
+    } finally {
+      setLoadingDefaults(false);
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!formData.name) {
-      alert('Please enter a category name');
+      showToast('Please enter a category name', 'error');
+      return;
+    }
+
+    // Check for duplicate names within the same type (case-insensitive, trimmed)
+    const trimmedName = formData.name.trim();
+    const isDuplicate = categories.some(category => {
+      // Skip the current category when editing
+      if (editingCategory && category.id === editingCategory.id) {
+        return false;
+      }
+      // Check if same type and same name
+      return category.type === formData.type && 
+             category.name.toLowerCase().trim() === trimmedName.toLowerCase();
+    });
+
+    if (isDuplicate) {
+      showToast(`A ${formData.type.toLowerCase()} category with this name already exists`, 'error');
       return;
     }
 
@@ -60,25 +144,27 @@ export default function CategoriesPage() {
       if (editingCategory) {
         const categoryRef = doc(db, 'users', user.uid, 'categories', editingCategory.id);
         await updateDoc(categoryRef, {
-          name: formData.name,
+          name: trimmedName,
           type: formData.type,
           color: formData.color,
           updatedAt: serverTimestamp(),
         });
+        showToast('Category updated successfully', 'success');
       } else {
         const categoryId = generateId();
         await addDoc(collection(db, 'users', user.uid, 'categories'), {
           categoryId,
-          name: formData.name,
+          name: trimmedName,
           type: formData.type,
           color: formData.color,
           createdAt: serverTimestamp(),
         });
+        showToast('Category added successfully', 'success');
       }
       await loadCategories();
       closeModal();
     } catch (error) {
-      alert('Error: ' + error.message);
+      showToast('Error: ' + error.message, 'error');
     }
   };
 
@@ -96,9 +182,10 @@ export default function CategoriesPage() {
     if (confirm(`Delete "${category.name}"?`)) {
       try {
         await deleteDoc(doc(db, 'users', user.uid, 'categories', category.id));
+        showToast('Category deleted successfully', 'success');
         await loadCategories();
       } catch (error) {
-        alert('Error: ' + error.message);
+        showToast('Error: ' + error.message, 'error');
       }
     }
   };
@@ -119,13 +206,32 @@ export default function CategoriesPage() {
           <h1 className="text-2xl font-semibold text-gray-900">Categories</h1>
           <p className="text-sm text-gray-500 mt-1">Organize your transactions</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center space-x-2 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          <span className="text-sm font-medium">Add Category</span>
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={loadDefaultCategories}
+            disabled={loadingDefaults}
+            className="flex items-center space-x-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loadingDefaults ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                <span className="text-sm font-medium">Loading...</span>
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                <span className="text-sm font-medium">Load Defaults</span>
+              </>
+            )}
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center space-x-2 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="text-sm font-medium">Add Category</span>
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -136,14 +242,24 @@ export default function CategoriesPage() {
         <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
           <FolderOpen className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <p className="text-gray-600 mb-2">No categories yet</p>
-          <p className="text-sm text-gray-400 mb-4">Create categories to organize your transactions</p>
-          <button
-            onClick={() => setShowModal(true)}
-            className="inline-flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="text-sm">Add Category</span>
-          </button>
+          <p className="text-sm text-gray-400 mb-4">Create categories or load defaults to organize your transactions</p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={loadDefaultCategories}
+              disabled={loadingDefaults}
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              <Download className="w-4 h-4" />
+              <span className="text-sm">Load Defaults</span>
+            </button>
+            <button
+              onClick={() => setShowModal(true)}
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="text-sm">Add Category</span>
+            </button>
+          </div>
         </div>
       ) : (
         <div className="space-y-6">
@@ -153,26 +269,38 @@ export default function CategoriesPage() {
               <Tag className="w-5 h-5 mr-2 text-green-600" />
               Income Categories ({incomeCategories.length})
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {incomeCategories.map((category) => (
-                <div key={category.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: category.color + '20' }}>
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: category.color }}></div>
+            {incomeCategories.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-4">No income categories yet</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {incomeCategories.map((category) => (
+                  <div key={category.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors relative">
+                    {category.isDefault && (
+                      <div className="absolute -top-2 -right-2">
+                        <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full text-[10px] font-medium border border-blue-200">
+                          <Sparkles className="w-2.5 h-2.5" />
+                          <span>Default</span>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: category.color + '20' }}>
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: category.color }}></div>
+                      </div>
+                      <span className="text-sm font-medium text-gray-900">{category.name}</span>
                     </div>
-                    <span className="text-sm font-medium text-gray-900">{category.name}</span>
+                    <div className="flex items-center space-x-1">
+                      <button onClick={() => handleEdit(category)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded">
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleDelete(category)} className="p-1.5 text-gray-400 hover:text-red-600 rounded">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-1">
-                    <button onClick={() => handleEdit(category)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded">
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => handleDelete(category)} className="p-1.5 text-gray-400 hover:text-red-600 rounded">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Expense Categories */}
@@ -181,26 +309,38 @@ export default function CategoriesPage() {
               <Tag className="w-5 h-5 mr-2 text-red-600" />
               Expense Categories ({expenseCategories.length})
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {expenseCategories.map((category) => (
-                <div key={category.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: category.color + '20' }}>
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: category.color }}></div>
+            {expenseCategories.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-4">No expense categories yet</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {expenseCategories.map((category) => (
+                  <div key={category.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors relative">
+                    {category.isDefault && (
+                      <div className="absolute -top-2 -right-2">
+                        <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full text-[10px] font-medium border border-blue-200">
+                          <Sparkles className="w-2.5 h-2.5" />
+                          <span>Default</span>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: category.color + '20' }}>
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: category.color }}></div>
+                      </div>
+                      <span className="text-sm font-medium text-gray-900">{category.name}</span>
                     </div>
-                    <span className="text-sm font-medium text-gray-900">{category.name}</span>
+                    <div className="flex items-center space-x-1">
+                      <button onClick={() => handleEdit(category)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded">
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleDelete(category)} className="p-1.5 text-gray-400 hover:text-red-600 rounded">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-1">
-                    <button onClick={() => handleEdit(category)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded">
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => handleDelete(category)} className="p-1.5 text-gray-400 hover:text-red-600 rounded">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
