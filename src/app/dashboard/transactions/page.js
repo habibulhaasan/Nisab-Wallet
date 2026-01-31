@@ -10,7 +10,7 @@ import {
   getDocs,
   query,
   orderBy,
-  serverTimestamp,
+  Timestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getAccounts, updateAccount } from '@/lib/firestoreCollections';
@@ -360,7 +360,7 @@ export default function TransactionsPage() {
             categoryId: formData.categoryId,
             description: formData.description,
             date: formData.date,
-            updatedAt: serverTimestamp(),
+            updatedAt: Timestamp.now(),
           }
         );
 
@@ -401,7 +401,7 @@ export default function TransactionsPage() {
           categoryId: formData.categoryId,
           description: formData.description,
           date: formData.date,
-          createdAt: serverTimestamp(),
+          createdAt: Timestamp.now(),
         });
 
         const newBal =
@@ -500,7 +500,7 @@ export default function TransactionsPage() {
             amount,
             description: transferData.description || '',
             date: transferData.date,
-            updatedAt: serverTimestamp(),
+            updatedAt: Timestamp.now(),
           }
         );
 
@@ -533,7 +533,7 @@ export default function TransactionsPage() {
           amount,
           description: transferData.description || '',
           date: transferData.date,
-          createdAt: serverTimestamp(),
+          createdAt: Timestamp.now(),
         });
 
         await updateAccount(user.uid, from.id, { balance: from.balance - amount });
