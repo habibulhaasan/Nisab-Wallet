@@ -48,7 +48,7 @@ export default function BlockedPage() {
             <div className="space-y-2 text-sm text-gray-600">
               <div className="flex items-center justify-center">
                 <Mail size={16} className="mr-2" />
-                <span>support@nisabwallet.com</span>
+                <span>nisabwallet@gmail.com</span>
               </div>
             </div>
           </div>

@@ -7,8 +7,11 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
-  updateProfile
+  updateProfile,
+  sendPasswordResetEmail,
+  confirmPasswordReset
 } from 'firebase/auth';
+
 import { doc, setDoc, serverTimestamp, collection, addDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { createUserSubscription, calculateTrialEndDate, SUBSCRIPTION_STATUS } from '@/lib/subscriptionUtils';
@@ -239,6 +242,27 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Send password reset email
+const sendPasswordReset = async (email) => {
+  try {
+    await sendPasswordResetEmail(auth, email);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Confirm new password using reset code
+const confirmPasswordResetFn = async (code, newPassword) => {
+  try {
+    await confirmPasswordReset(auth, code, newPassword);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
+
   // Logout user
   const logout = async () => {
     try {
@@ -251,12 +275,15 @@ export const AuthProvider = ({ children }) => {
   };
 
   const value = {
-    user,
-    loading,
-    signup,
-    login,
-    logout
-  };
+  user,
+  loading,
+  signup,
+  login,
+  logout,
+  sendPasswordReset,
+  confirmPasswordReset: confirmPasswordResetFn
+};
+
 
   return (
     <AuthContext.Provider value={value}>

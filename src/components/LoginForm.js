@@ -1,7 +1,6 @@
-// src/components/LoginForm.js
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 
@@ -12,9 +11,16 @@ export default function LoginForm() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  
-  const { login } = useAuth();
+
+  const { login, user, authLoading } = useAuth();
   const router = useRouter();
+
+  // ✅ Redirect logged-in users away from login page
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.replace('/dashboard');
+    }
+  }, [user, authLoading, router]);
 
   const handleChange = (e) => {
     setFormData({
@@ -37,21 +43,37 @@ export default function LoginForm() {
 
     const result = await login(formData.email, formData.password);
 
-    if (result.success) {
-      router.push('/dashboard');
+    if (result?.success) {
+      router.replace('/dashboard');
     } else {
       setError('Invalid email or password');
       setLoading(false);
     }
   };
 
+  // Prevent UI flash while auth state resolves
+  if (authLoading || user) return null;
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="max-w-md w-full bg-white rounded-lg border border-gray-200 p-8">
+
+        {/* ✅ Back to Home */}
+        <button
+          onClick={() => router.push('/')}
+          className="text-sm text-gray-500 hover:text-gray-900 mb-6"
+        >
+          ← Back to Home
+        </button>
+
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-2">Welcome back</h1>
-          <p className="text-sm text-gray-500">Login to your H Wallet account</p>
+          <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+            Welcome back
+          </h1>
+          <p className="text-sm text-gray-500">
+            Login to your H Wallet account
+          </p>
         </div>
 
         {/* Error Message */}
@@ -65,7 +87,10 @@ export default function LoginForm() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Email Field */}
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label
+              htmlFor="email"
+              className="block text-sm font-medium text-gray-700 mb-1.5"
+            >
               Email
             </label>
             <input
@@ -82,7 +107,10 @@ export default function LoginForm() {
 
           {/* Password Field */}
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label
+              htmlFor="password"
+              className="block text-sm font-medium text-gray-700 mb-1.5"
+            >
               Password
             </label>
             <input
@@ -107,13 +135,27 @@ export default function LoginForm() {
           </button>
         </form>
 
+        <div className="text-right">
+  <button
+    type="button"
+    onClick={() => router.push('/forgot-password')}
+    className="text-sm text-gray-600 hover:text-gray-900 hover:underline"
+  >
+    Forgot password?
+  </button>
+</div>
+
+
         {/* Register Link */}
         <div className="mt-6 text-center">
           <p className="text-sm text-gray-600">
-            Don't have an account?{' '}
-            <a href="/register" className="text-gray-900 font-medium hover:underline">
+            Don&apos;t have an account?{' '}
+            <button
+              onClick={() => router.push('/register')}
+              className="text-gray-900 font-medium hover:underline"
+            >
               Sign up
-            </a>
+            </button>
           </p>
         </div>
       </div>
