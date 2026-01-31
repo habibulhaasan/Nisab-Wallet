@@ -320,39 +320,43 @@ export default function TransactionsPage() {
 
     try {
       if (editingTransaction) {
-        // STEP 1: Revert the old transaction effect
-        const oldAcc = accounts.find((a) => a.id === editingTransaction.accountId);
         const oldAmount = parseFloat(editingTransaction.amount);
+        const oldAcc = accounts.find((a) => a.id === editingTransaction.accountId);
+        const newAcc = accounts.find((a) => a.id === formData.accountId);
         
-        let revertedOldBalance;
+        if (!newAcc) return showToast('Invalid account', 'error');
+
+        // Calculate what the balance SHOULD be after reverting the old transaction
+        let revertedBalance;
         if (oldAcc) {
-          revertedOldBalance =
-            editingTransaction.type === 'Income'
-              ? oldAcc.balance - oldAmount
-              : oldAcc.balance + oldAmount;
-          await updateAccount(user.uid, oldAcc.id, { balance: revertedOldBalance });
+          if (editingTransaction.type === 'Income') {
+            revertedBalance = oldAcc.balance - oldAmount;
+          } else {
+            revertedBalance = oldAcc.balance + oldAmount;
+          }
         }
 
-        // STEP 2: Check if new expense can be afforded (using reverted balance)
+        // STEP 1: Check if the new transaction can be afforded
         if (formData.type === 'Expense') {
-          // Get the balance to check against
-          let balanceToCheck;
-          if (oldAcc?.id === account.id) {
-            // Same account - use the reverted balance we just calculated
-            balanceToCheck = revertedOldBalance;
+          let availableBalance;
+          
+          if (oldAcc?.id === newAcc.id) {
+            // Same account - check against reverted balance
+            availableBalance = revertedBalance;
           } else {
-            // Different account - use current balance of new account
-            balanceToCheck = account.balance;
+            // Different account - check against current balance of new account
+            availableBalance = newAcc.balance;
           }
 
-          if (balanceToCheck < amount) {
-            // Rollback: restore old transaction
-            if (oldAcc) {
-              await updateAccount(user.uid, oldAcc.id, { balance: oldAcc.balance });
-            }
+          if (availableBalance < amount) {
             setSubmitting(false);
-            return showToast(`Insufficient balance in ${account.name}`, 'error');
+            return showToast(`Insufficient balance in ${newAcc.name}. Available: ৳${availableBalance.toLocaleString()}`, 'error');
           }
+        }
+
+        // STEP 2: Revert the old transaction
+        if (oldAcc) {
+          await updateAccount(user.uid, oldAcc.id, { balance: revertedBalance });
         }
 
         // STEP 3: Update the transaction document
@@ -369,21 +373,27 @@ export default function TransactionsPage() {
           }
         );
 
-        // STEP 4: Apply the new transaction effect
+        // STEP 4: Apply the new transaction
         let finalBalance;
-        if (oldAcc?.id === account.id) {
-          // Same account - calculate from the reverted balance
-          finalBalance = formData.type === 'Income' 
-            ? revertedOldBalance + amount 
-            : revertedOldBalance - amount;
+        
+        if (oldAcc?.id === newAcc.id) {
+          // Same account - apply new transaction to reverted balance
+          if (formData.type === 'Income') {
+            finalBalance = revertedBalance + amount;
+          } else {
+            finalBalance = revertedBalance - amount;
+          }
         } else {
-          // Different account - calculate from current balance
-          finalBalance = formData.type === 'Income'
-            ? account.balance + amount
-            : account.balance - amount;
+          // Different accounts
+          // New account gets the new transaction
+          if (formData.type === 'Income') {
+            finalBalance = newAcc.balance + amount;
+          } else {
+            finalBalance = newAcc.balance - amount;
+          }
         }
         
-        await updateAccount(user.uid, account.id, { balance: finalBalance });
+        await updateAccount(user.uid, newAcc.id, { balance: finalBalance });
 
         showToast('Updated', 'success');
       } else {
