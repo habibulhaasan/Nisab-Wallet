@@ -100,60 +100,42 @@ export default function TransactionsPage() {
 
       // Load transactions with error handling
       try {
-        const qTrans = query(transRef, orderBy('date', 'desc'), orderBy('createdAt', 'desc'));
-        const snapTrans = await getDocs(qTrans);
+        // Try to load with date ordering first (most reliable)
+        const qTransSimple = query(transRef, orderBy('date', 'desc'));
+        const snapTrans = await getDocs(qTransSimple);
         normal = snapTrans.docs.map((doc) => ({
           id: doc.id,
           collectionType: 'transactions',
           ...doc.data(),
         }));
-      } catch (transError) {
-        console.log('Using fallback for transactions:', transError.message);
-        try {
-          const qTransSimple = query(transRef, orderBy('date', 'desc'));
-          const snapTrans = await getDocs(qTransSimple);
-          normal = snapTrans.docs.map((doc) => ({
-            id: doc.id,
-            collectionType: 'transactions',
-            ...doc.data(),
-          }));
-        } catch (fallbackError) {
-          const snapTrans = await getDocs(transRef);
-          normal = snapTrans.docs.map((doc) => ({
-            id: doc.id,
-            collectionType: 'transactions',
-            ...doc.data(),
-          }));
-        }
+      } catch (fallbackError) {
+        // If that fails, just get all documents
+        const snapTrans = await getDocs(transRef);
+        normal = snapTrans.docs.map((doc) => ({
+          id: doc.id,
+          collectionType: 'transactions',
+          ...doc.data(),
+        }));
       }
 
       // Load transfers with error handling
       try {
-        const qTransfer = query(transferRef, orderBy('date', 'desc'), orderBy('createdAt', 'desc'));
-        const snapTransfer = await getDocs(qTransfer);
+        // Try to load with date ordering first (most reliable)
+        const qTransferSimple = query(transferRef, orderBy('date', 'desc'));
+        const snapTransfer = await getDocs(qTransferSimple);
         transfers = snapTransfer.docs.map((doc) => ({
           id: doc.id,
           collectionType: 'transfers',
           ...doc.data(),
         }));
-      } catch (transferError) {
-        console.log('Using fallback for transfers:', transferError.message);
-        try {
-          const qTransferSimple = query(transferRef, orderBy('date', 'desc'));
-          const snapTransfer = await getDocs(qTransferSimple);
-          transfers = snapTransfer.docs.map((doc) => ({
-            id: doc.id,
-            collectionType: 'transfers',
-            ...doc.data(),
-          }));
-        } catch (fallbackError) {
-          const snapTransfer = await getDocs(transferRef);
-          transfers = snapTransfer.docs.map((doc) => ({
-            id: doc.id,
-            collectionType: 'transfers',
-            ...doc.data(),
-          }));
-        }
+      } catch (fallbackError) {
+        // If that fails, just get all documents
+        const snapTransfer = await getDocs(transferRef);
+        transfers = snapTransfer.docs.map((doc) => ({
+          id: doc.id,
+          collectionType: 'transfers',
+          ...doc.data(),
+        }));
       }
 
       // Convert each transfer into TWO records: one expense and one income
@@ -198,12 +180,21 @@ export default function TransactionsPage() {
 
       // Combine normal transactions and expanded transfers
       const all = [...normal, ...expandedTransfers].sort((a, b) => {
+        // Primary sort by date (descending - newest first)
         const dateCompare = (b.date || '').localeCompare(a.date || '');
         if (dateCompare !== 0) return dateCompare;
         
+        // Secondary sort by createdAt timestamp if available
         const aTime = a.createdAt?.toMillis?.() || 0;
         const bTime = b.createdAt?.toMillis?.() || 0;
-        return bTime - aTime;
+        
+        // If both have timestamps, sort by time
+        if (aTime !== 0 || bTime !== 0) {
+          return bTime - aTime;
+        }
+        
+        // If neither has timestamp, maintain insertion order (0)
+        return 0;
       });
       
       setTransactions(all);
