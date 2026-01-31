@@ -399,8 +399,21 @@ export default function TransactionsPage() {
     const to = accounts.find((a) => a.id === transferData.toAccountId);
 
     if (!from || !to) return showToast('Invalid accounts', 'error');
-    if (from.balance < amount) return showToast('Insufficient balance', 'error');
 
+// If editing, only check if balance can cover the difference
+if (editingTransaction) {
+  const oldAmount = editingTransaction.amount;
+  const amountDifference = amount - oldAmount;
+  
+  if (amountDifference > 0 && from.balance < amountDifference) {
+    return showToast('Insufficient balance', 'error');
+  }
+} else {
+  // For new transfers, check full amount
+  if (from.balance < amount) {
+    return showToast('Insufficient balance', 'error');
+  }
+}
     setSubmitting(true);
 
     try {
