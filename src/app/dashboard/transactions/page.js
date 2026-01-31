@@ -316,8 +316,22 @@ export default function TransactionsPage() {
 
     if (!account) return showToast('Invalid account', 'error');
 
-    if (formData.type === 'Expense' && account.balance < amount) {
-      return showToast(`Insufficient balance in ${account.name}`, 'error');
+    // If editing, only check if balance can cover the difference
+if (editingTransaction) {
+  const oldAmount = editingTransaction.amount;
+  const amountDifference = formData.type === 'Expense' 
+    ? amount - oldAmount 
+    : oldAmount - amount;
+  
+  if (amountDifference > 0 && account.balance < amountDifference) {
+    return showToast(`Insufficient balance in ${account.name}`, 'error');
+  }
+} else {
+  // For new transactions, check full amount
+  if (formData.type === 'Expense' && account.balance < amount) {
+    return showToast(`Insufficient balance in ${account.name}`, 'error');
+  }
+
     }
 
     setSubmitting(true);
