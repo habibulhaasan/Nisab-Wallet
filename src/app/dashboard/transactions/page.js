@@ -49,7 +49,7 @@ export default function TransactionsPage() {
 
   const [filterType, setFilterType] = useState('All');
   const [filterAccount, setFilterAccount] = useState('All');
-  const [dateFilter, setDateFilter] = useState('Monthly');
+  const [dateFilter, setDateFilter] = useState('Weekly'); // Changed default to Weekly
   const [customDateRange, setCustomDateRange] = useState({ start: '', end: '' });
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -98,9 +98,7 @@ export default function TransactionsPage() {
       let normal = [];
       let transfers = [];
 
-      // Load transactions with error handling
       try {
-        // Try to load with date ordering first (most reliable)
         const qTransSimple = query(transRef, orderBy('date', 'desc'));
         const snapTrans = await getDocs(qTransSimple);
         normal = snapTrans.docs.map((doc) => ({
@@ -109,7 +107,6 @@ export default function TransactionsPage() {
           ...doc.data(),
         }));
       } catch (fallbackError) {
-        // If that fails, just get all documents
         const snapTrans = await getDocs(transRef);
         normal = snapTrans.docs.map((doc) => ({
           id: doc.id,
@@ -118,9 +115,7 @@ export default function TransactionsPage() {
         }));
       }
 
-      // Load transfers with error handling
       try {
-        // Try to load with date ordering first (most reliable)
         const qTransferSimple = query(transferRef, orderBy('date', 'desc'));
         const snapTransfer = await getDocs(qTransferSimple);
         transfers = snapTransfer.docs.map((doc) => ({
@@ -129,7 +124,6 @@ export default function TransactionsPage() {
           ...doc.data(),
         }));
       } catch (fallbackError) {
-        // If that fails, just get all documents
         const snapTransfer = await getDocs(transferRef);
         transfers = snapTransfer.docs.map((doc) => ({
           id: doc.id,
@@ -138,10 +132,8 @@ export default function TransactionsPage() {
         }));
       }
 
-      // Convert each transfer into TWO records: one expense and one income
       const expandedTransfers = [];
       transfers.forEach((transfer) => {
-        // Expense record (from account)
         expandedTransfers.push({
           id: `${transfer.id}-expense`,
           originalId: transfer.id,
@@ -159,7 +151,6 @@ export default function TransactionsPage() {
           relatedAccountName: transfer.toAccountName,
         });
 
-        // Income record (to account)
         expandedTransfers.push({
           id: `${transfer.id}-income`,
           originalId: transfer.id,
@@ -178,29 +169,19 @@ export default function TransactionsPage() {
         });
       });
 
-      // Combine normal transactions and expanded transfers
       const all = [...normal, ...expandedTransfers].sort((a, b) => {
-        // Primary sort by date (descending - newest first)
         const dateCompare = (b.date || '').localeCompare(a.date || '');
         if (dateCompare !== 0) return dateCompare;
         
-        // Secondary sort by createdAt timestamp if available
         const aTime = a.createdAt?.toMillis?.() || 0;
         const bTime = b.createdAt?.toMillis?.() || 0;
         
-        // If both have timestamps, sort by time
         if (aTime !== 0 || bTime !== 0) {
           return bTime - aTime;
         }
         
-        // If neither has timestamp, maintain insertion order (0)
         return 0;
       });
-      
-      // Debug: log all unique dates
-      const uniqueDates = [...new Set(all.map(t => t.date))].sort().reverse();
-      console.log('All transaction dates loaded:', uniqueDates);
-      console.log('Total transactions:', all.length);
       
       setTransactions(all);
     } catch (error) {
@@ -244,8 +225,6 @@ export default function TransactionsPage() {
       ? transactions.filter((t) => t.date >= range.start && t.date <= range.end)
       : transactions;
 
-    // For summary, we only count NON-transfer transactions
-    // Transfers don't affect total balance (they're just moving money)
     const inc = filtered
       .filter((t) => t.type === 'Income' && !t.isTransfer)
       .reduce((s, t) => s + Number(t.amount || 0), 0);
@@ -259,31 +238,68 @@ export default function TransactionsPage() {
   }, [transactions, dateFilter, customDateRange.start, customDateRange.end]);
 
   const getSummaryDateRange = () => {
-    const today = new Date();
-    const y = today.getFullYear();
-    const m = today.getMonth();
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const day = now.getDate();
 
-    if (dateFilter === 'Monthly') {
-      return {
-        start: new Date(y, m, 1).toISOString().split('T')[0],
-        end: new Date(y, m + 1, 0).toISOString().split('T')[0],
-      };
-    }
     if (dateFilter === 'Daily') {
-      const d = today.toISOString().split('T')[0];
-      return { start: d, end: d };
+      const todayStr = formatDateToISO(now);
+      return { start: todayStr, end: todayStr };
     }
-    if (dateFilter === 'Yearly') {
+    
+    if (dateFilter === 'Weekly') {
+      const dayOfWeek = now.getDay();
+      const daysFromSaturday = dayOfWeek === 6 ? 0 : (dayOfWeek + 1);
+      
+      const weekStart = new Date(now);
+      weekStart.setDate(day - daysFromSaturday);
+      weekStart.setHours(0, 0, 0, 0);
+      
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      weekEnd.setHours(23, 59, 59, 999);
+      
       return {
-        start: new Date(y, 0, 1).toISOString().split('T')[0],
-        end: new Date(y, 11, 31).toISOString().split('T')[0],
+        start: formatDateToISO(weekStart),
+        end: formatDateToISO(weekEnd),
       };
     }
+    
+    if (dateFilter === 'Monthly') {
+      // Create dates at noon to avoid timezone issues
+      const monthStart = new Date(year, month, 1, 12, 0, 0);
+      const monthEnd = new Date(year, month + 1, 0, 12, 0, 0); // Last day of current month
+      
+      return {
+        start: formatDateToISO(monthStart),
+        end: formatDateToISO(monthEnd),
+      };
+    }
+    
+    if (dateFilter === 'Yearly') {
+      const yearStart = new Date(year, 0, 1, 12, 0, 0);
+      const yearEnd = new Date(year, 11, 31, 12, 0, 0);
+      
+      return {
+        start: formatDateToISO(yearStart),
+        end: formatDateToISO(yearEnd),
+      };
+    }
+    
     if (dateFilter === 'Custom' && customDateRange.start && customDateRange.end) {
       return customDateRange;
     }
-    // For 'All', return null to show all transactions
+    
     return null;
+  };
+
+  // Helper function to format date consistently
+  const formatDateToISO = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   };
 
   const formatDate = (dStr) => {
@@ -323,7 +339,6 @@ export default function TransactionsPage() {
         
         if (!newAcc) return showToast('Invalid account', 'error');
 
-        // Calculate what the balance SHOULD be after reverting the old transaction
         let revertedBalance;
         if (oldAcc) {
           if (editingTransaction.type === 'Income') {
@@ -333,15 +348,12 @@ export default function TransactionsPage() {
           }
         }
 
-        // STEP 1: Check if the new transaction can be afforded
         if (formData.type === 'Expense') {
           let availableBalance;
           
           if (oldAcc?.id === newAcc.id) {
-            // Same account - check against reverted balance
             availableBalance = revertedBalance;
           } else {
-            // Different account - check against current balance of new account
             availableBalance = newAcc.balance;
           }
 
@@ -351,12 +363,10 @@ export default function TransactionsPage() {
           }
         }
 
-        // STEP 2: Revert the old transaction
         if (oldAcc) {
           await updateAccount(user.uid, oldAcc.id, { balance: revertedBalance });
         }
 
-        // STEP 3: Update the transaction document
         await updateDoc(
           doc(db, 'users', user.uid, 'transactions', editingTransaction.id),
           {
@@ -370,19 +380,15 @@ export default function TransactionsPage() {
           }
         );
 
-        // STEP 4: Apply the new transaction
         let finalBalance;
         
         if (oldAcc?.id === newAcc.id) {
-          // Same account - apply new transaction to reverted balance
           if (formData.type === 'Income') {
             finalBalance = revertedBalance + amount;
           } else {
             finalBalance = revertedBalance - amount;
           }
         } else {
-          // Different accounts
-          // New account gets the new transaction
           if (formData.type === 'Income') {
             finalBalance = newAcc.balance + amount;
           } else {
@@ -394,7 +400,6 @@ export default function TransactionsPage() {
 
         showToast('Updated', 'success');
       } else {
-        // New transaction logic (unchanged)
         if (formData.type === 'Expense' && account.balance < amount) {
           setSubmitting(false);
           return showToast(`Insufficient balance in ${account.name}`, 'error');
@@ -451,7 +456,6 @@ export default function TransactionsPage() {
 
     try {
       if (editingTransaction) {
-        // STEP 1: Revert the old transfer
         const originalTransferId = editingTransaction.originalId;
         const oldAmount = parseFloat(editingTransaction.amount);
         
@@ -478,13 +482,11 @@ export default function TransactionsPage() {
           });
         }
 
-        // STEP 2: Check if new transfer can be afforded (using reverted balance)
         const fromAccountAfterRevert = revertFrom?.id === from.id
           ? { ...from, balance: revertFrom.balance + oldAmount }
           : from;
 
         if (fromAccountAfterRevert.balance < amount) {
-          // Rollback: restore old transfer
           if (revertFrom) {
             await updateAccount(user.uid, revertFrom.id, { balance: revertFrom.balance });
           }
@@ -495,7 +497,6 @@ export default function TransactionsPage() {
           return showToast('Insufficient balance', 'error');
         }
 
-        // STEP 3: Update the transfer document
         await updateDoc(
           doc(db, 'users', user.uid, 'transfers', originalTransferId),
           {
@@ -510,8 +511,6 @@ export default function TransactionsPage() {
           }
         );
 
-        // STEP 4: Apply the new transfer
-        // Calculate final balances accounting for reverts
         const fromFinalBalance = revertFrom?.id === from.id
           ? revertFrom.balance + oldAmount - amount
           : from.balance - amount;
@@ -525,7 +524,6 @@ export default function TransactionsPage() {
 
         showToast('Transfer updated', 'success');
       } else {
-        // New transfer logic (unchanged)
         if (from.balance < amount) {
           setSubmitting(false);
           return showToast('Insufficient balance', 'error');
@@ -563,10 +561,8 @@ export default function TransactionsPage() {
 
     try {
       if (transactionToDelete.isTransfer) {
-        // For transfers, we need to delete the original transfer document
         const originalTransferId = transactionToDelete.originalId;
         
-        // Determine which accounts were involved
         let fromAccountId, toAccountId;
         if (transactionToDelete.transferDirection === 'from') {
           fromAccountId = transactionToDelete.accountId;
@@ -592,7 +588,6 @@ export default function TransactionsPage() {
 
         await deleteDoc(doc(db, 'users', user.uid, 'transfers', originalTransferId));
       } else {
-        // Regular transaction
         const acc = accounts.find((a) => a.id === transactionToDelete.accountId);
         if (acc) {
           const newBal =
@@ -621,7 +616,6 @@ export default function TransactionsPage() {
 
     if (record.isTransfer) {
       setModalTab('transfer');
-      // Reconstruct transfer data from the expanded record
       if (record.transferDirection === 'from') {
         setTransferData({
           fromAccountId: record.accountId,
@@ -679,39 +673,65 @@ export default function TransactionsPage() {
   const getAccountName = (id) => accounts.find((a) => a.id === id)?.name || 'Unknown';
   const getCategoryName = (id) => categories.find((c) => c.id === id)?.name || 'Unknown';
   const getCategoryColor = (id) => categories.find((c) => c.id === id)?.color || '#6B7280';
-  const getAccountBalance = (id) => accounts.find((a) => a.id === id)?.balance || 0;
 
   const getDateRangeForFilter = () => {
-    const today = new Date();
-    const str = today.toISOString().split('T')[0];
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const day = now.getDate();
 
     let range;
     switch (dateFilter) {
       case 'Daily':
-        range = { start: str, end: str };
+        const todayStr = formatDateToISO(now);
+        range = { start: todayStr, end: todayStr };
         break;
+        
+      case 'Weekly':
+        const dayOfWeek = now.getDay();
+        const daysFromSaturday = dayOfWeek === 6 ? 0 : (dayOfWeek + 1);
+        
+        const weekStart = new Date(now);
+        weekStart.setDate(day - daysFromSaturday);
+        weekStart.setHours(0, 0, 0, 0);
+        
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        weekEnd.setHours(23, 59, 59, 999);
+        
+        range = {
+          start: formatDateToISO(weekStart),
+          end: formatDateToISO(weekEnd),
+        };
+        break;
+        
       case 'Monthly':
-        const fm = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
-        const lm = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
-        range = { start: fm, end: lm };
+        // Use noon time to avoid timezone edge cases
+        const monthStart = new Date(year, month, 1, 12, 0, 0);
+        const monthEnd = new Date(year, month + 1, 0, 12, 0, 0); // Day 0 = last day of previous month
+        
+        range = {
+          start: formatDateToISO(monthStart),
+          end: formatDateToISO(monthEnd),
+        };
         break;
+        
       case 'Yearly':
-        const fy = new Date(today.getFullYear(), 0, 1).toISOString().split('T')[0];
-        const ly = new Date(today.getFullYear(), 11, 31).toISOString().split('T')[0];
-        range = { start: fy, end: ly };
+        const yearStart = new Date(year, 0, 1, 12, 0, 0);
+        const yearEnd = new Date(year, 11, 31, 12, 0, 0);
+        
+        range = {
+          start: formatDateToISO(yearStart),
+          end: formatDateToISO(yearEnd),
+        };
         break;
+        
       case 'Custom':
         range = customDateRange.start && customDateRange.end ? customDateRange : null;
         break;
+        
       default:
         range = null;
-    }
-    
-    // Debug logging
-    if (dateFilter === 'Monthly') {
-      console.log('Monthly filter range:', range);
-      console.log('Today:', today.toISOString().split('T')[0]);
-      console.log('Month:', today.getMonth(), 'Year:', today.getFullYear());
     }
     
     return range;
@@ -726,18 +746,6 @@ export default function TransactionsPage() {
 
     const range = getDateRangeForFilter();
     if (range) {
-      // Debug logging - remove after fixing
-      if (t.date === '2026-01-31') {
-        console.log('Checking Jan 31 transaction:', {
-          date: t.date,
-          rangeStart: range.start,
-          rangeEnd: range.end,
-          lessThanStart: t.date < range.start,
-          greaterThanEnd: t.date > range.end,
-          willBeFiltered: (t.date < range.start || t.date > range.end)
-        });
-      }
-      
       if (t.date < range.start || t.date > range.end) return false;
     }
 
@@ -912,6 +920,7 @@ export default function TransactionsPage() {
               className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
             >
               <option value="Daily">Today</option>
+              <option value="Weekly">This Week</option>
               <option value="Monthly">This Month</option>
               <option value="Yearly">This Year</option>
               <option value="All">All Time</option>
@@ -1059,7 +1068,7 @@ export default function TransactionsPage() {
         </div>
       )}
 
-      {/* Modal */}
+      {/* Modal - Keeping your existing modal code exactly as is */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg w-full max-w-md p-6 shadow-2xl border border-gray-200">
