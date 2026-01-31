@@ -316,37 +316,40 @@ export default function TransactionsPage() {
 
     if (!account) return showToast('Invalid account', 'error');
 
-    // If editing, only check if balance can cover the difference
-if (editingTransaction) {
-  const oldAmount = editingTransaction.amount;
-  const amountDifference = formData.type === 'Expense' 
-    ? amount - oldAmount 
-    : oldAmount - amount;
-  
-  if (amountDifference > 0 && account.balance < amountDifference) {
-    return showToast(`Insufficient balance in ${account.name}`, 'error');
-  }
-} else {
-  // For new transactions, check full amount
-  if (formData.type === 'Expense' && account.balance < amount) {
-    return showToast(`Insufficient balance in ${account.name}`, 'error');
-  }
-
-    }
-
     setSubmitting(true);
 
     try {
       if (editingTransaction) {
+        // STEP 1: Revert the old transaction effect
         const oldAcc = accounts.find((a) => a.id === editingTransaction.accountId);
+        const oldAmount = parseFloat(editingTransaction.amount);
+        
         if (oldAcc) {
-          const reverted =
+          const revertedBalance =
             editingTransaction.type === 'Income'
-              ? oldAcc.balance - editingTransaction.amount
-              : oldAcc.balance + editingTransaction.amount;
-          await updateAccount(user.uid, oldAcc.id, { balance: reverted });
+              ? oldAcc.balance - oldAmount
+              : oldAcc.balance + oldAmount;
+          await updateAccount(user.uid, oldAcc.id, { balance: revertedBalance });
         }
 
+        // STEP 2: Check if new expense can be afforded (using reverted balance)
+        if (formData.type === 'Expense') {
+          // Get fresh account balance after revert
+          const accountAfterRevert = oldAcc?.id === account.id 
+            ? { ...account, balance: oldAcc.balance - oldAmount } // Same account, use reverted balance
+            : account; // Different account, use current balance
+
+          if (accountAfterRevert.balance < amount) {
+            // Rollback: restore old transaction
+            if (oldAcc) {
+              await updateAccount(user.uid, oldAcc.id, { balance: oldAcc.balance });
+            }
+            setSubmitting(false);
+            return showToast(`Insufficient balance in ${account.name}`, 'error');
+          }
+        }
+
+        // STEP 3: Update the transaction document
         await updateDoc(
           doc(db, 'users', user.uid, 'transactions', editingTransaction.id),
           {
@@ -360,14 +363,29 @@ if (editingTransaction) {
           }
         );
 
-        const newBal =
+        // STEP 4: Apply the new transaction effect
+        const newBalance =
           formData.type === 'Income'
             ? account.balance + amount
             : account.balance - amount;
-        await updateAccount(user.uid, account.id, { balance: newBal });
+        
+        // Adjust for if we already reverted this same account
+        const finalBalance = oldAcc?.id === account.id
+          ? (formData.type === 'Income' 
+              ? oldAcc.balance - oldAmount + amount 
+              : oldAcc.balance + oldAmount - amount)
+          : newBalance;
+        
+        await updateAccount(user.uid, account.id, { balance: finalBalance });
 
         showToast('Updated', 'success');
       } else {
+        // New transaction logic (unchanged)
+        if (formData.type === 'Expense' && account.balance < amount) {
+          setSubmitting(false);
+          return showToast(`Insufficient balance in ${account.name}`, 'error');
+        }
+
         await addDoc(collection(db, 'users', user.uid, 'transactions'), {
           type: formData.type,
           amount,
@@ -390,6 +408,7 @@ if (editingTransaction) {
       await loadData();
       closeModal();
     } catch (err) {
+      console.error(err);
       showToast('Error saving', 'error');
     } finally {
       setSubmitting(false);
@@ -414,28 +433,14 @@ if (editingTransaction) {
 
     if (!from || !to) return showToast('Invalid accounts', 'error');
 
-// If editing, only check if balance can cover the difference
-if (editingTransaction) {
-  const oldAmount = editingTransaction.amount;
-  const amountDifference = amount - oldAmount;
-  
-  if (amountDifference > 0 && from.balance < amountDifference) {
-    return showToast('Insufficient balance', 'error');
-  }
-} else {
-  // For new transfers, check full amount
-  if (from.balance < amount) {
-    return showToast('Insufficient balance', 'error');
-  }
-}
     setSubmitting(true);
 
     try {
       if (editingTransaction) {
-        // Find the original transfer document
+        // STEP 1: Revert the old transfer
         const originalTransferId = editingTransaction.originalId;
+        const oldAmount = parseFloat(editingTransaction.amount);
         
-        // Determine which accounts were involved based on transfer direction
         let revertFromId, revertToId;
         if (editingTransaction.transferDirection === 'from') {
           revertFromId = editingTransaction.accountId;
@@ -450,15 +455,33 @@ if (editingTransaction) {
 
         if (revertFrom) {
           await updateAccount(user.uid, revertFrom.id, {
-            balance: revertFrom.balance + editingTransaction.amount,
+            balance: revertFrom.balance + oldAmount,
           });
         }
         if (revertTo) {
           await updateAccount(user.uid, revertTo.id, {
-            balance: revertTo.balance - editingTransaction.amount,
+            balance: revertTo.balance - oldAmount,
           });
         }
 
+        // STEP 2: Check if new transfer can be afforded (using reverted balance)
+        const fromAccountAfterRevert = revertFrom?.id === from.id
+          ? { ...from, balance: revertFrom.balance + oldAmount }
+          : from;
+
+        if (fromAccountAfterRevert.balance < amount) {
+          // Rollback: restore old transfer
+          if (revertFrom) {
+            await updateAccount(user.uid, revertFrom.id, { balance: revertFrom.balance });
+          }
+          if (revertTo) {
+            await updateAccount(user.uid, revertTo.id, { balance: revertTo.balance });
+          }
+          setSubmitting(false);
+          return showToast('Insufficient balance', 'error');
+        }
+
+        // STEP 3: Update the transfer document
         await updateDoc(
           doc(db, 'users', user.uid, 'transfers', originalTransferId),
           {
@@ -473,11 +496,27 @@ if (editingTransaction) {
           }
         );
 
-        await updateAccount(user.uid, from.id, { balance: from.balance - amount });
-        await updateAccount(user.uid, to.id, { balance: to.balance + amount });
+        // STEP 4: Apply the new transfer
+        // Calculate final balances accounting for reverts
+        const fromFinalBalance = revertFrom?.id === from.id
+          ? revertFrom.balance + oldAmount - amount
+          : from.balance - amount;
+        
+        const toFinalBalance = revertTo?.id === to.id
+          ? revertTo.balance - oldAmount + amount
+          : to.balance + amount;
+
+        await updateAccount(user.uid, from.id, { balance: fromFinalBalance });
+        await updateAccount(user.uid, to.id, { balance: toFinalBalance });
 
         showToast('Transfer updated', 'success');
       } else {
+        // New transfer logic (unchanged)
+        if (from.balance < amount) {
+          setSubmitting(false);
+          return showToast('Insufficient balance', 'error');
+        }
+
         await addDoc(collection(db, 'users', user.uid, 'transfers'), {
           fromAccountId: transferData.fromAccountId,
           fromAccountName: from.name,
@@ -498,6 +537,7 @@ if (editingTransaction) {
       await loadData();
       closeModal();
     } catch (err) {
+      console.error(err);
       showToast('Error saving transfer', 'error');
     } finally {
       setSubmitting(false);
