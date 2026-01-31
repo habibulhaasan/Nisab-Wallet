@@ -706,7 +706,21 @@ export default function TransactionsPage() {
     }
 
     const range = getDateRangeForFilter();
-    if (range && (t.date < range.start || t.date > range.end)) return false;
+    if (range) {
+      // Debug logging - remove after fixing
+      if (t.date === '2026-01-31') {
+        console.log('Checking Jan 31 transaction:', {
+          date: t.date,
+          rangeStart: range.start,
+          rangeEnd: range.end,
+          lessThanStart: t.date < range.start,
+          greaterThanEnd: t.date > range.end,
+          willBeFiltered: (t.date < range.start || t.date > range.end)
+        });
+      }
+      
+      if (t.date < range.start || t.date > range.end) return false;
+    }
 
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
