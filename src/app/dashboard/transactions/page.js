@@ -258,7 +258,7 @@ export default function TransactionsPage() {
     const y = today.getFullYear();
     const m = today.getMonth();
 
-    if (dateFilter === 'All' || dateFilter === 'Monthly') {
+    if (dateFilter === 'Monthly') {
       return {
         start: new Date(y, m, 1).toISOString().split('T')[0],
         end: new Date(y, m + 1, 0).toISOString().split('T')[0],
@@ -277,6 +277,7 @@ export default function TransactionsPage() {
     if (dateFilter === 'Custom' && customDateRange.start && customDateRange.end) {
       return customDateRange;
     }
+    // For 'All', return null to show all transactions
     return null;
   };
 
