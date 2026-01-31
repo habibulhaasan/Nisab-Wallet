@@ -1,5 +1,5 @@
 // src/lib/adminUtils.js
-import { collection, getDocs, getDoc, doc, updateDoc, query, orderBy, where, serverTimestamp, addDoc } from 'firebase/firestore';
+import { collection, getDocs, getDoc, doc, updateDoc, query, orderBy, where, serverTimestamp, addDoc, limit, deleteField } from 'firebase/firestore';
 import { db } from './firebase';
 import { SUBSCRIPTION_STATUS } from './subscriptionUtils';
 
@@ -24,7 +24,7 @@ export const checkIsAdmin = async (userId) => {
 };
 
 /**
- * Get all users (Admin only)
+ * Get all users (Admin only) - with admin notes
  */
 export const getAllUsers = async () => {
   try {
@@ -33,9 +33,30 @@ export const getAllUsers = async () => {
     const querySnapshot = await getDocs(q);
     
     const users = [];
-    querySnapshot.forEach((doc) => {
-      users.push({ id: doc.id, ...doc.data() });
-    });
+    
+    // Fetch each user with their latest admin note
+    for (const userDoc of querySnapshot.docs) {
+      const userData = { id: userDoc.id, ...userDoc.data() };
+      
+      // Get the latest admin note for this user
+      try {
+        const notesRef = collection(db, 'users', userDoc.id, 'adminNotes');
+        const notesQuery = query(notesRef, orderBy('createdAt', 'desc'), limit(1));
+        const notesSnapshot = await getDocs(notesQuery);
+        
+        const notes = [];
+        notesSnapshot.forEach((noteDoc) => {
+          notes.push({ id: noteDoc.id, ...noteDoc.data() });
+        });
+        
+        userData.adminNotes = notes;
+      } catch (noteError) {
+        console.error(`Error fetching notes for user ${userDoc.id}:`, noteError);
+        userData.adminNotes = [];
+      }
+      
+      users.push(userData);
+    }
     
     return { success: true, users };
   } catch (error) {
@@ -175,13 +196,25 @@ export const toggleBlockUser = async (userId, isBlocked, adminId, reason = '') =
   try {
     const userRef = doc(db, 'users', userId);
     
-    await updateDoc(userRef, {
-      isBlocked,
-      blockedBy: isBlocked ? adminId : null,
-      blockedAt: isBlocked ? serverTimestamp() : null,
-      blockReason: reason,
-      updatedAt: serverTimestamp()
-    });
+    if (isBlocked) {
+      // Blocking the user
+      await updateDoc(userRef, {
+        isBlocked: true,
+        blockedBy: adminId,
+        blockedAt: serverTimestamp(),
+        blockReason: reason,
+        updatedAt: serverTimestamp()
+      });
+    } else {
+      // Unblocking the user - use deleteField for proper cleanup
+      await updateDoc(userRef, {
+        isBlocked: false,
+        blockedBy: deleteField(),
+        blockedAt: deleteField(),
+        blockReason: deleteField(),
+        updatedAt: serverTimestamp()
+      });
+    }
     
     return { success: true };
   } catch (error) {
@@ -228,23 +261,64 @@ export const extendSubscription = async (userId, extensionData) => {
 };
 
 /**
- * Grant free lifetime access (Admin only)
+ * Grant free access (Admin only) - supports both lifetime and time-limited
  */
-export const grantFreeLifetimeAccess = async (userId, adminId, reason = '') => {
+export const grantFreeLifetimeAccess = async (userId, adminId, reason = '', days = null) => {
   try {
     const userRef = doc(db, 'users', userId);
+    const subsRef = collection(db, 'users', userId, 'subscriptions');
     
-    await updateDoc(userRef, {
-      subscriptionStatus: SUBSCRIPTION_STATUS.FREE,
-      grantedBy: adminId,
-      grantedAt: serverTimestamp(),
-      grantReason: reason,
-      updatedAt: serverTimestamp()
-    });
+    if (days && days > 0) {
+      // Grant time-limited free access by creating a subscription
+      const startDate = new Date();
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + parseInt(days));
+      
+      // Create free subscription
+      await addDoc(subsRef, {
+        subscriptionId: `free-${Date.now()}`,
+        planId: 'free_access',
+        planName: `Free Access (${days} days)`,
+        status: SUBSCRIPTION_STATUS.ACTIVE,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        amount: 0,
+        paymentMethod: 'Free Access (Admin)',
+        transactionId: 'FREE-ADMIN',
+        grantedBy: adminId,
+        grantReason: reason,
+        isFreeAccess: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
+      // Update user profile
+      await updateDoc(userRef, {
+        subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
+        grantReason: reason,
+        updatedAt: serverTimestamp()
+      });
+      
+      // Create notification
+      const { createNotification, NOTIFICATION_TYPES } = await import('./notificationUtils');
+      await createNotification(userId, NOTIFICATION_TYPES.PAYMENT_APPROVED, {
+        planName: `Free Access (${days} days)`,
+        amount: 0
+      });
+    } else {
+      // Grant lifetime free access
+      await updateDoc(userRef, {
+        subscriptionStatus: SUBSCRIPTION_STATUS.FREE,
+        grantedBy: adminId,
+        grantedAt: serverTimestamp(),
+        grantReason: reason,
+        updatedAt: serverTimestamp()
+      });
+    }
     
     return { success: true };
   } catch (error) {
-    console.error('Error granting free lifetime access:', error);
+    console.error('Error granting free access:', error);
     return { success: false, error: error.message };
   }
 };
@@ -256,12 +330,14 @@ export const addAdminNote = async (userId, noteData) => {
   try {
     const notesRef = collection(db, 'users', userId, 'adminNotes');
     
-    await addDoc(notesRef, {
+    const newNote = {
       note: noteData.note,
       createdBy: noteData.adminId,
       createdByName: noteData.adminName,
       createdAt: serverTimestamp()
-    });
+    };
+    
+    await addDoc(notesRef, newNote);
     
     return { success: true };
   } catch (error) {

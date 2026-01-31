@@ -10,12 +10,14 @@ import {
   approveSubscription,
   rejectSubscription,
   toggleBlockUser,
-  grantFreeLifetimeAccess
+  grantFreeLifetimeAccess,
+  addAdminNote
 } from '@/lib/adminUtils';
 import { getCurrentSubscription } from '@/lib/subscriptionUtils';
 import { 
   Users, Search, Filter, CheckCircle, XCircle, Lock, Unlock, 
-  Clock, Star, Eye, MoreVertical, Gift
+  Clock, Star, Eye, MoreVertical, Gift, Mail, Phone, Hash, MessageSquare,
+  AlertCircle, Calendar
 } from 'lucide-react';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { ToastContainer } from '@/components/ToastNotification';
@@ -33,7 +35,31 @@ export default function AdminUsersPage() {
   const [showActionMenu, setShowActionMenu] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
   const [inputValue, setInputValue] = useState('');
+  const [freeAccessDays, setFreeAccessDays] = useState('');
+  const [userNote, setUserNote] = useState('');
   const { toasts, addToast, removeToast } = useToast();
+
+  // Format date as dd/mm/yyyy
+  const formatDate = (date) => {
+    if (!date) return 'Never';
+    const d = date instanceof Date ? date : (date.toDate ? date.toDate() : new Date(date));
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
+  // Format date and time
+  const formatDateTime = (date) => {
+    if (!date) return 'Never';
+    const d = date instanceof Date ? date : (date.toDate ? date.toDate() : new Date(date));
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${day}/${month}/${year} ${hours}:${minutes}`;
+  };
 
   useEffect(() => {
     if (user) {
@@ -44,6 +70,88 @@ export default function AdminUsersPage() {
   useEffect(() => {
     filterAndSearchUsers();
   }, [searchTerm, filterStatus, users]);
+
+  // Close action menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showActionMenu) {
+        setShowActionMenu(null);
+      }
+    };
+
+    if (showActionMenu) {
+      document.addEventListener('click', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [showActionMenu]);
+
+  // Central confirm handler that reads current state values
+  const handleConfirm = async () => {
+    const { actionType, userId, userName } = confirmDialog;
+
+    if (actionType === 'grantFree') {
+      // Grant free access
+      const trimmedInput = (inputValue || '').trim();
+      
+      if (!trimmedInput) {
+        addToast('Please enter a reason', 'error');
+        return;
+      }
+      
+      const days = freeAccessDays ? parseInt(freeAccessDays) : null;
+      
+      if (freeAccessDays && (!days || days <= 0)) {
+        addToast('Please enter a valid number of days', 'error');
+        return;
+      }
+      
+      const result = await grantFreeLifetimeAccess(userId, user.uid, trimmedInput, days);
+      
+      setConfirmDialog({ isOpen: false });
+      setInputValue('');
+      setFreeAccessDays('');
+      
+      if (result.success) {
+        const accessType = days ? `${days} days free access` : 'lifetime free access';
+        addToast(`Successfully granted ${accessType}`, 'success');
+        loadUsers();
+      } else {
+        addToast('Error: ' + result.error, 'error');
+      }
+      setShowActionMenu(null);
+    } else if (actionType === 'addNote') {
+      // Add note
+      const trimmedNote = (userNote || '').trim();
+      
+      if (!trimmedNote) {
+        addToast('Please enter a note', 'error');
+        return;
+      }
+      
+      const result = await addAdminNote(userId, {
+        note: trimmedNote,
+        adminId: user.uid,
+        adminName: user.displayName || user.email
+      });
+      
+      setConfirmDialog({ isOpen: false });
+      setUserNote('');
+      
+      if (result.success) {
+        addToast('Note saved successfully', 'success');
+        loadUsers();
+      } else {
+        addToast('Error: ' + result.error, 'error');
+      }
+      setShowActionMenu(null);
+    } else if (confirmDialog.onConfirm) {
+      // For other dialogs that still use onConfirm callback
+      await confirmDialog.onConfirm();
+    }
+  };
 
   const checkAdminAndLoad = async () => {
     const adminStatus = await checkIsAdmin(user.uid);
@@ -162,8 +270,11 @@ export default function AdminUsersPage() {
     });
   };
 
-  const handleBlock = (userId, isBlocked) => {
-    if (isBlocked) {
+  const handleBlock = (userId, currentlyBlocked) => {
+    console.log('Block handler called:', { userId, currentlyBlocked });
+    
+    if (!currentlyBlocked) {
+      // User is NOT blocked, so we want to block them
       setInputValue('');
       setConfirmDialog({
         isOpen: true,
@@ -174,9 +285,15 @@ export default function AdminUsersPage() {
         requireInput: true,
         inputPlaceholder: 'Enter block reason...',
         onConfirm: async () => {
-          if (!inputValue.trim()) return;
+          if (!inputValue.trim()) {
+            addToast('Please enter a reason', 'error');
+            return;
+          }
           
-          const result = await toggleBlockUser(userId, isBlocked, user.uid, inputValue);
+          console.log('Blocking user with:', { userId, reason: inputValue });
+          const result = await toggleBlockUser(userId, true, user.uid, inputValue);
+          console.log('Block result:', result);
+          
           setConfirmDialog({ isOpen: false });
           setInputValue('');
           if (result.success) {
@@ -189,6 +306,7 @@ export default function AdminUsersPage() {
         }
       });
     } else {
+      // User is blocked, so we want to unblock them
       setConfirmDialog({
         isOpen: true,
         title: 'Unblock User',
@@ -196,7 +314,10 @@ export default function AdminUsersPage() {
         type: 'success',
         confirmText: 'Unblock',
         onConfirm: async () => {
-          const result = await toggleBlockUser(userId, isBlocked, user.uid, '');
+          console.log('Unblocking user:', userId);
+          const result = await toggleBlockUser(userId, false, user.uid, '');
+          console.log('Unblock result:', result);
+          
           setConfirmDialog({ isOpen: false });
           if (result.success) {
             addToast('User unblocked successfully', 'success');
@@ -212,28 +333,41 @@ export default function AdminUsersPage() {
 
   const handleGrantFree = (userId) => {
     setInputValue('');
+    setFreeAccessDays('');
     setConfirmDialog({
       isOpen: true,
-      title: 'Grant Free Lifetime Access',
-      message: 'Please provide a reason for granting free lifetime access:',
+      title: 'Grant Free Access',
+      message: 'Choose access type and provide a reason:',
       type: 'success',
       confirmText: 'Grant Access',
       requireInput: true,
+      requireDays: true,
       inputPlaceholder: 'Enter reason...',
-      onConfirm: async () => {
-        if (!inputValue.trim()) return;
-        
-        const result = await grantFreeLifetimeAccess(userId, user.uid, inputValue);
-        setConfirmDialog({ isOpen: false });
-        setInputValue('');
-        if (result.success) {
-          addToast('Free lifetime access granted', 'success');
-          loadUsers();
-        } else {
-          addToast('Error: ' + result.error, 'error');
-        }
-        setShowActionMenu(null);
-      }
+      userId: userId,
+      actionType: 'grantFree'
+    });
+  };
+
+  const handleAddNote = async (userId, userName) => {
+    // Load existing notes to show in the dialog
+    const existingNotes = users.find(u => u.id === userId)?.adminNotes || [];
+    const latestNote = existingNotes.length > 0 ? existingNotes[0].note : '';
+    
+    setUserNote(latestNote); // Pre-fill with existing note if available
+    setConfirmDialog({
+      isOpen: true,
+      title: `${latestNote ? 'Update' : 'Add'} Note for ${userName}`,
+      message: latestNote 
+        ? 'Edit the existing note or write a new one (visible only to admins):'
+        : 'Enter a note about this user (visible only to admins):',
+      type: 'info',
+      confirmText: latestNote ? 'Update Note' : 'Save Note',
+      requireInput: true,
+      requireNote: true,
+      inputPlaceholder: 'Enter your note...',
+      userId: userId,
+      userName: userName,
+      actionType: 'addNote'
     });
   };
 
@@ -367,11 +501,9 @@ export default function AdminUsersPage() {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">UID</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status & Last Login</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subscription</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Login</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes & Reasons</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
@@ -381,37 +513,99 @@ export default function AdminUsersPage() {
                   <td className="px-4 py-3">
                     <div>
                       <p className="font-medium text-gray-900">{u.name}</p>
-                      <p className="text-xs text-gray-500">{u.email}</p>
+                      <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
+                        <Mail size={12} className="text-gray-400" />
+                        <span>{u.email}</span>
+                      </div>
+                      {u.mobile && (
+                        <div className="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
+                          <Phone size={12} className="text-gray-400" />
+                          <span>{u.mobile}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1 text-xs text-gray-400 font-mono mt-0.5">
+                        <Hash size={12} className="text-gray-400" />
+                        <span>{u.id.substring(0, 8)}...</span>
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <p className="text-xs font-mono text-gray-600">{u.id.substring(0, 8)}...</p>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
-                    {u.mobile}
-                  </td>
-                  <td className="px-4 py-3">
-                    {getStatusBadge(u)}
+                    <div className="space-y-2">
+                      {getStatusBadge(u)}
+                      <div className="flex items-center gap-1 text-xs text-gray-500">
+                        <Calendar size={12} className="text-gray-400" />
+                        <span>{formatDateTime(u.lastLoginAt)}</span>
+                      </div>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-sm">
                     {u.currentSubscription ? (
                       <div>
                         <p className="text-gray-900">{u.currentSubscription.planName}</p>
                         <p className="text-xs text-gray-500">
-                          Until {new Date(u.currentSubscription.endDate).toLocaleDateString()}
+                          Until {formatDate(u.currentSubscription.endDate)}
                         </p>
                       </div>
                     ) : (
                       <span className="text-gray-400">None</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
-                    {u.lastLoginAt ? new Date(u.lastLoginAt.toDate()).toLocaleDateString() : 'Never'}
+                  <td className="px-4 py-3">
+                    <div className="text-xs space-y-2 max-w-xs">
+                      {/* Admin Notes */}
+                      {u.adminNotes && u.adminNotes.length > 0 && (
+                        <div className="bg-blue-50 border border-blue-200 rounded p-2">
+                          <div className="flex items-start gap-1">
+                            <MessageSquare size={12} className="text-blue-600 mt-0.5 flex-shrink-0" />
+                            <div>
+                              <p className="font-medium text-blue-900">Latest Note:</p>
+                              <p className="text-blue-700 mt-1">{u.adminNotes[0].note}</p>
+                              <p className="text-blue-600 mt-1 text-[10px]">
+                                by {u.adminNotes[0].createdByName} - {formatDateTime(u.adminNotes[0].createdAt)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Block Reason */}
+                      {u.isBlocked && u.blockReason && (
+                        <div className="bg-red-50 border border-red-200 rounded p-2">
+                          <div className="flex items-start gap-1">
+                            <AlertCircle size={12} className="text-red-600 mt-0.5 flex-shrink-0" />
+                            <div>
+                              <p className="font-medium text-red-900">Blocked:</p>
+                              <p className="text-red-700 mt-1">{u.blockReason}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Free Grant Reason */}
+                      {(u.subscriptionStatus === 'free_lifetime' || u.grantReason) && u.grantReason && (
+                        <div className="bg-green-50 border border-green-200 rounded p-2">
+                          <div className="flex items-start gap-1">
+                            <Gift size={12} className="text-green-600 mt-0.5 flex-shrink-0" />
+                            <div>
+                              <p className="font-medium text-green-900">Free Access:</p>
+                              <p className="text-green-700 mt-1">{u.grantReason}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {!u.adminNotes?.length && !u.blockReason && !u.grantReason && (
+                        <span className="text-gray-400">No notes</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="relative inline-block">
                       <button
-                        onClick={() => setShowActionMenu(showActionMenu === u.id ? null : u.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowActionMenu(showActionMenu === u.id ? null : u.id);
+                        }}
                         className="p-1 hover:bg-gray-100 rounded"
                       >
                         <MoreVertical size={18} className="text-gray-600" />
@@ -426,6 +620,14 @@ export default function AdminUsersPage() {
                             >
                               <Eye size={16} className="mr-2" />
                               View Details
+                            </button>
+
+                            <button
+                              onClick={() => handleAddNote(u.id, u.name)}
+                              className="w-full text-left px-4 py-2 text-sm text-blue-700 hover:bg-blue-50 flex items-center"
+                            >
+                              <MessageSquare size={16} className="mr-2" />
+                              Add Note
                             </button>
 
                             {u.currentSubscription?.status === 'pending_approval' && (
@@ -450,7 +652,7 @@ export default function AdminUsersPage() {
                             {u.role !== 'admin' && (
                               <>
                                 <button
-                                  onClick={() => handleBlock(u.id, !u.isBlocked)}
+                                  onClick={() => handleBlock(u.id, u.isBlocked)}
                                   className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center ${
                                     u.isBlocked ? 'text-green-700' : 'text-red-700'
                                   }`}
@@ -495,20 +697,28 @@ export default function AdminUsersPage() {
         onClose={() => {
           setConfirmDialog({ isOpen: false });
           setInputValue('');
+          setFreeAccessDays('');
+          setUserNote('');
         }}
-        onConfirm={confirmDialog.onConfirm}
+        onConfirm={handleConfirm}
         title={confirmDialog.title}
         message={confirmDialog.message}
         type={confirmDialog.type}
         confirmText={confirmDialog.confirmText}
         requireInput={confirmDialog.requireInput}
+        requireDays={confirmDialog.requireDays}
+        requireNote={confirmDialog.requireNote}
         inputPlaceholder={confirmDialog.inputPlaceholder}
         inputValue={inputValue}
         onInputChange={setInputValue}
+        daysValue={freeAccessDays}
+        onDaysChange={setFreeAccessDays}
+        noteValue={userNote}
+        onNoteChange={setUserNote}
       />
 
-      {/* Toast Notifications */}
-      <ToastContainer toasts={toasts} removeToast={removeToast} />
+      {/* Toast Notifications - Positioned at top */}
+      <ToastContainer toasts={toasts} removeToast={removeToast} position="top" />
     </div>
   );
 }
