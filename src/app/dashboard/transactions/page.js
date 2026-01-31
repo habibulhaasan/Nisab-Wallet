@@ -324,22 +324,28 @@ export default function TransactionsPage() {
         const oldAcc = accounts.find((a) => a.id === editingTransaction.accountId);
         const oldAmount = parseFloat(editingTransaction.amount);
         
+        let revertedOldBalance;
         if (oldAcc) {
-          const revertedBalance =
+          revertedOldBalance =
             editingTransaction.type === 'Income'
               ? oldAcc.balance - oldAmount
               : oldAcc.balance + oldAmount;
-          await updateAccount(user.uid, oldAcc.id, { balance: revertedBalance });
+          await updateAccount(user.uid, oldAcc.id, { balance: revertedOldBalance });
         }
 
         // STEP 2: Check if new expense can be afforded (using reverted balance)
         if (formData.type === 'Expense') {
-          // Get fresh account balance after revert
-          const accountAfterRevert = oldAcc?.id === account.id 
-            ? { ...account, balance: oldAcc.balance - oldAmount } // Same account, use reverted balance
-            : account; // Different account, use current balance
+          // Get the balance to check against
+          let balanceToCheck;
+          if (oldAcc?.id === account.id) {
+            // Same account - use the reverted balance we just calculated
+            balanceToCheck = revertedOldBalance;
+          } else {
+            // Different account - use current balance of new account
+            balanceToCheck = account.balance;
+          }
 
-          if (accountAfterRevert.balance < amount) {
+          if (balanceToCheck < amount) {
             // Rollback: restore old transaction
             if (oldAcc) {
               await updateAccount(user.uid, oldAcc.id, { balance: oldAcc.balance });
@@ -364,17 +370,18 @@ export default function TransactionsPage() {
         );
 
         // STEP 4: Apply the new transaction effect
-        const newBalance =
-          formData.type === 'Income'
+        let finalBalance;
+        if (oldAcc?.id === account.id) {
+          // Same account - calculate from the reverted balance
+          finalBalance = formData.type === 'Income' 
+            ? revertedOldBalance + amount 
+            : revertedOldBalance - amount;
+        } else {
+          // Different account - calculate from current balance
+          finalBalance = formData.type === 'Income'
             ? account.balance + amount
             : account.balance - amount;
-        
-        // Adjust for if we already reverted this same account
-        const finalBalance = oldAcc?.id === account.id
-          ? (formData.type === 'Income' 
-              ? oldAcc.balance - oldAmount + amount 
-              : oldAcc.balance + oldAmount - amount)
-          : newBalance;
+        }
         
         await updateAccount(user.uid, account.id, { balance: finalBalance });
 
