@@ -7,7 +7,9 @@ import { useAuth } from '@/context/AuthContext';
 import { 
   LayoutDashboard, CreditCard, Receipt, FolderOpen, Star, BarChart3, 
   LogOut, Menu, X, ArrowRightLeft, Settings, MessageSquare, 
-  Shield, Users, Package, DollarSign, ChevronDown, ChevronRight
+  Shield, Users, Package, DollarSign, ChevronDown, ChevronRight,
+  // → New icons added
+  HandCoins, MessageCircleQuestion   // or use MessageSquare if you prefer
 } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
 import { checkIsAdmin } from '@/lib/adminUtils';
@@ -27,7 +29,6 @@ export default function DashboardNav() {
   }, [user]);
 
   useEffect(() => {
-    // Auto-open admin menu if on admin page
     if (pathname?.startsWith('/dashboard/admin')) {
       setAdminMenuOpen(true);
     }
@@ -44,22 +45,26 @@ export default function DashboardNav() {
   };
 
   const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Accounts', href: '/dashboard/accounts', icon: CreditCard },
-    { name: 'Transactions', href: '/dashboard/transactions', icon: Receipt },
-    { name: 'Transfer', href: '/dashboard/transfer', icon: ArrowRightLeft },
-    { name: 'Categories', href: '/dashboard/categories', icon: FolderOpen },
-    { name: 'Zakat', href: '/dashboard/zakat', icon: Star },
-    { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
-    { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+    { name: 'Dashboard',    href: '/dashboard',               icon: LayoutDashboard },
+    { name: 'Accounts',     href: '/dashboard/accounts',      icon: CreditCard },
+    { name: 'Transactions', href: '/dashboard/transactions',  icon: Receipt },
+    { name: 'Transfer',     href: '/dashboard/transfer',      icon: ArrowRightLeft },
+    // → Added here
+    { name: 'Loans',        href: '/dashboard/loans',         icon: HandCoins },
+    { name: 'Categories',   href: '/dashboard/categories',    icon: FolderOpen },
+    { name: 'Zakat',        href: '/dashboard/zakat',         icon: Star },
+    { name: 'Analytics',    href: '/dashboard/analytics',     icon: BarChart3 },
+    // → Added here (you can move it higher if preferred)
+    { name: 'Feedback',     href: '/dashboard/feedback',      icon: MessageCircleQuestion },
+    { name: 'Settings',     href: '/dashboard/settings',      icon: Settings },
   ];
 
   const adminNavigation = [
-    { name: 'Admin Overview', href: '/dashboard/admin', icon: Shield },
-    { name: 'User Management', href: '/dashboard/admin/users', icon: Users },
-    { name: 'Subscription Plans', href: '/dashboard/admin/subscription-plans', icon: Package },
-    { name: 'Payment Methods', href: '/dashboard/admin/payment-methods', icon: CreditCard },
-    { name: 'Finance Dashboard', href: '/dashboard/admin/finance', icon: DollarSign },
+    { name: 'Admin Overview',       href: '/dashboard/admin',                    icon: Shield },
+    { name: 'User Management',      href: '/dashboard/admin/users',              icon: Users },
+    { name: 'Subscription Plans',   href: '/dashboard/admin/subscription-plans', icon: Package },
+    { name: 'Payment Methods',      href: '/dashboard/admin/payment-methods',    icon: CreditCard },
+    { name: 'Finance Dashboard',    href: '/dashboard/admin/finance',            icon: DollarSign },
   ];
 
   const isActive = (href) => pathname === href;
@@ -76,16 +81,11 @@ export default function DashboardNav() {
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2 text-gray-600 hover:text-gray-900"
             >
-              {mobileMenuOpen ? (
-                <X className="w-5 h-5" />
-              ) : (
-                <Menu className="w-5 h-5" />
-              )}
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
 
-        {/* Mobile Menu */}
         {mobileMenuOpen && (
           <div className="border-t bg-white">
             <div className="px-2 py-2 space-y-0.5">
@@ -110,7 +110,6 @@ export default function DashboardNav() {
                 );
               })}
 
-              {/* Admin Section - Mobile */}
               {isAdmin && (
                 <div className="pt-2 mt-2 border-t">
                   <button
@@ -165,13 +164,11 @@ export default function DashboardNav() {
 
       {/* Sidebar - Desktop */}
       <div className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 bg-white border-r">
-        {/* Logo */}
         <div className="flex items-center justify-between h-14 px-6 border-b">
           <h1 className="text-lg font-semibold text-gray-900">Nisab Wallet</h1>
           <NotificationBell />
         </div>
 
-        {/* User Info */}
         <div className="px-4 py-4 border-b">
           <div className="flex items-center space-x-3">
             <div className="w-9 h-9 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
@@ -193,7 +190,6 @@ export default function DashboardNav() {
           </div>
         </div>
 
-        {/* Navigation */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
           <div className="space-y-0.5">
             {navigation.map((item) => {
@@ -214,7 +210,6 @@ export default function DashboardNav() {
               );
             })}
 
-            {/* Admin Section - Desktop */}
             {isAdmin && (
               <div className="pt-2 mt-2 border-t">
                 <button
@@ -258,7 +253,6 @@ export default function DashboardNav() {
           </div>
         </nav>
 
-        {/* Logout Button */}
         <div className="px-3 py-4 border-t">
           <button
             onClick={handleLogout}
