@@ -1,7 +1,11 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
+<<<<<<< HEAD
 import { useRouter, useParams } from 'next/navigation';
+=======
+import { useRouter } from 'next/navigation';
+>>>>>>> 5258fc9dd22257008ece38083d896c76f350a438
 import {
   collection,
   doc,
@@ -19,12 +23,17 @@ import {
   DollarSign,
   TrendingDown,
   Edit2,
+<<<<<<< HEAD
+=======
+  Trash2,
+>>>>>>> 5258fc9dd22257008ece38083d896c76f350a438
   Download,
   HandCoins,
   Building2,
   Percent,
   Clock,
   CheckCircle2,
+<<<<<<< HEAD
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
 
@@ -33,6 +42,15 @@ export default function LoanDetailsPage() {
   const router = useRouter();
   const params = useParams();
   
+=======
+  ArrowDownCircle,
+} from 'lucide-react';
+import { showToast } from '@/components/Toast';
+
+export default function LoanDetailsPage({ params }) {
+  const { user } = useAuth();
+  const router = useRouter();
+>>>>>>> 5258fc9dd22257008ece38083d896c76f350a438
   const [loan, setLoan] = useState(null);
   const [payments, setPayments] = useState([]);
   const [accounts, setAccounts] = useState([]);
@@ -40,10 +58,17 @@ export default function LoanDetailsPage() {
   const [showAmortization, setShowAmortization] = useState(false);
 
   useEffect(() => {
+<<<<<<< HEAD
     if (user && params?.id) {
       loadLoanDetails();
     }
   }, [user, params?.id]);
+=======
+    if (user && params.id) {
+      loadLoanDetails();
+    }
+  }, [user, params.id]);
+>>>>>>> 5258fc9dd22257008ece38083d896c76f350a438
 
   const loadLoanDetails = async () => {
     setLoading(true);
@@ -132,6 +157,7 @@ export default function LoanDetailsPage() {
       if (balance <= 0) break;
     }
 
+<<<<<<< HEAD
     // Calculate original schedule
     let originalBalance = loan.remainingBalance;
     let originalMonths = 0;
@@ -154,6 +180,19 @@ export default function LoanDetailsPage() {
     };
   };
 
+=======
+    return {
+      monthsRemaining: months,
+      totalInterest,
+      savedInterest: loan.totalInterest - (loan.totalPaid - loan.principalAmount + loan.remainingBalance) - totalInterest,
+    };
+  };
+
+  const exportToPDF = () => {
+    showToast('PDF export feature coming soon!', 'info');
+  };
+
+>>>>>>> 5258fc9dd22257008ece38083d896c76f350a438
   const exportToCSV = () => {
     if (payments.length === 0) {
       return showToast('No payment history to export', 'error');
@@ -200,13 +239,17 @@ export default function LoanDetailsPage() {
       <div className="max-w-7xl mx-auto p-6">
         <div className="text-center py-20">
           <div className="animate-spin h-12 w-12 border-4 border-gray-300 border-t-gray-900 rounded-full mx-auto"></div>
+<<<<<<< HEAD
           <p className="mt-4 text-gray-600">Loading loan details...</p>
+=======
+>>>>>>> 5258fc9dd22257008ece38083d896c76f350a438
         </div>
       </div>
     );
   }
 
   if (!loan) {
+<<<<<<< HEAD
     return (
       <div className="max-w-7xl mx-auto p-6">
         <div className="text-center py-20">
@@ -214,6 +257,9 @@ export default function LoanDetailsPage() {
         </div>
       </div>
     );
+=======
+    return null;
+>>>>>>> 5258fc9dd22257008ece38083d896c76f350a438
   }
 
   const isQardHasan = loan.loanType === 'qard-hasan';
@@ -541,4 +587,8 @@ export default function LoanDetailsPage() {
       </div>
     </div>
   );
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 5258fc9dd22257008ece38083d896c76f350a438
