@@ -1,4 +1,4 @@
-//sec/app/dashboard/loans/[id]/page.js
+//src/app/dashboard/loans/[id]/page.js
 
 'use client';
 import { useState, useEffect } from 'react';
