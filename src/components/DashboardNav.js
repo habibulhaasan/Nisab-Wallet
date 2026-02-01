@@ -4,12 +4,12 @@
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import Image from 'next/image';
 import { 
   LayoutDashboard, CreditCard, Receipt, FolderOpen, Star, BarChart3, 
   LogOut, Menu, X, ArrowRightLeft, Settings, MessageSquare, 
   Shield, Users, Package, DollarSign, ChevronDown, ChevronRight,
-  // → New icons added
-  HandCoins, MessageCircleQuestion   // or use MessageSquare if you prefer
+  HandCoins, MessageCircleQuestion
 } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
 import { checkIsAdmin } from '@/lib/adminUtils';
@@ -49,12 +49,10 @@ export default function DashboardNav() {
     { name: 'Accounts',     href: '/dashboard/accounts',      icon: CreditCard },
     { name: 'Transactions', href: '/dashboard/transactions',  icon: Receipt },
     { name: 'Transfer',     href: '/dashboard/transfer',      icon: ArrowRightLeft },
-    // → Added here
     { name: 'Loans',        href: '/dashboard/loans',         icon: HandCoins },
     { name: 'Categories',   href: '/dashboard/categories',    icon: FolderOpen },
     { name: 'Zakat',        href: '/dashboard/zakat',         icon: Star },
     { name: 'Analytics',    href: '/dashboard/analytics',     icon: BarChart3 },
-    // → Added here (you can move it higher if preferred)
     { name: 'Feedback',     href: '/dashboard/feedback',      icon: MessageCircleQuestion },
     { name: 'Settings',     href: '/dashboard/settings',      icon: Settings },
   ];
@@ -74,9 +72,23 @@ export default function DashboardNav() {
       {/* Top Header - Mobile */}
       <div className="lg:hidden bg-white border-b sticky top-0 z-50">
         <div className="flex items-center justify-between px-4 h-14">
-          <h1 className="text-lg font-semibold text-gray-900">Nisab Wallet</h1>
-          <div className="flex items-center space-x-2">
-            <NotificationBell />
+          {/* Logo */}
+          <div className="flex items-center gap-2">
+            <Image 
+              src="/nisab-logo.png" 
+              alt="Nisab Wallet Logo" 
+              width={32} 
+              height={32}
+              className="object-contain"
+            />
+            <h1 className="text-lg font-semibold text-gray-900">Nisab Wallet</h1>
+          </div>
+          
+          {/* Right Side - Notification and Menu */}
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <NotificationBell />
+            </div>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2 text-gray-600 hover:text-gray-900"
@@ -86,6 +98,7 @@ export default function DashboardNav() {
           </div>
         </div>
 
+        {/* Mobile Menu Dropdown */}
         {mobileMenuOpen && (
           <div className="border-t bg-white">
             <div className="px-2 py-2 space-y-0.5">
@@ -164,11 +177,24 @@ export default function DashboardNav() {
 
       {/* Sidebar - Desktop */}
       <div className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 bg-white border-r">
+        {/* Logo and Notification Header */}
         <div className="flex items-center justify-between h-14 px-6 border-b">
-          <h1 className="text-lg font-semibold text-gray-900">Nisab Wallet</h1>
-          <NotificationBell />
+          <div className="flex items-center gap-2">
+            <Image 
+              src="/nisab-logo.png" 
+              alt="Nisab Wallet Logo" 
+              width={28} 
+              height={28}
+              className="object-contain"
+            />
+            <h1 className="text-lg font-semibold text-gray-900">Nisab Wallet</h1>
+          </div>
+          <div className="relative">
+            <NotificationBell />
+          </div>
         </div>
 
+        {/* User Profile Section */}
         <div className="px-4 py-4 border-b">
           <div className="flex items-center space-x-3">
             <div className="w-9 h-9 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
@@ -190,6 +216,7 @@ export default function DashboardNav() {
           </div>
         </div>
 
+        {/* Navigation Menu */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
           <div className="space-y-0.5">
             {navigation.map((item) => {
@@ -253,6 +280,7 @@ export default function DashboardNav() {
           </div>
         </nav>
 
+        {/* Logout Button */}
         <div className="px-3 py-4 border-t">
           <button
             onClick={handleLogout}
