@@ -1,431 +1,570 @@
 // src/app/page.js
-
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  CheckCircle2, Star, ShieldCheck, Wallet, BarChart3, 
+  LockKey, Smartphone, UsersThree, ArrowRight, Check, Sparkles, 
+  Globe, Trophy, Heart, Menu, X 
+} from 'lucide-react';
+import Image from 'next/image';
 import { getSubscriptionPlans } from '@/lib/subscriptionUtils';
 import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import Image from 'next/image';
-import { 
-  CheckCircle2, Star, ShieldCheck, Wallet, BarChart3, 
-  Smartphone, LockKey, UsersThree, ArrowRight, 
-  Check, Sparkles, Globe, Trophy, Heart 
-} from 'lucide-react';
+
+const fadeInUp = {
+  hidden: { opacity: 0, y: 30 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.7, ease: "easeOut" } }
+};
+
+const staggerContainer = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.12 } }
+};
 
 export default function LandingPage() {
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [subscriptionPlans, setSubscriptionPlans] = useState([]);
+  const [plans, setPlans] = useState([]);
   const [testimonials, setTestimonials] = useState([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [loadingTestimonials, setLoadingTestimonials] = useState(true);
 
   useEffect(() => {
-    loadPlans();
-    loadFeaturedTestimonials();
+    const fetchData = async () => {
+      // Plans
+      setLoadingPlans(true);
+      const planResult = await getSubscriptionPlans(true);
+      if (planResult.success) setPlans(planResult.plans);
+      setLoadingPlans(false);
+
+      // Testimonials (featured feedback)
+      setLoadingTestimonials(true);
+      try {
+        let featured = [];
+        const usersSnap = await getDocs(collection(db, 'users'));
+
+        for (const userDoc of usersSnap.docs) {
+          const feedbackRef = collection(db, 'users', userDoc.id, 'feedback');
+          const q = query(feedbackRef, where('featured', '==', true), orderBy('featuredAt', 'desc'));
+          const snap = await getDocs(q);
+          snap.forEach(doc => {
+            const data = doc.data();
+            featured.push({
+              id: `\( {userDoc.id}- \){doc.id}`,
+              rating: data.rating || 5,
+              message: data.message || '',
+              userName: data.userName || 'Anonymous',
+              role: data.userRole || 'User'
+            });
+          });
+        }
+
+        featured.sort((a,b) => (b.featuredAt?.toDate?.() || new Date(0)) - (a.featuredAt?.toDate?.() || new Date(0)));
+        setTestimonials(featured.slice(0, 6) || fallback);
+      } catch (err) {
+        console.error(err);
+        setTestimonials(fallback);
+      } finally {
+        setLoadingTestimonials(false);
+      }
+    };
+
+    fetchData();
   }, []);
 
-  const loadPlans = async () => {
-    setLoadingPlans(true);
-    const result = await getSubscriptionPlans(true);
-    if (result.success) setSubscriptionPlans(result.plans);
-    setLoadingPlans(false);
-  };
-
-  const loadFeaturedTestimonials = async () => {
-    setLoadingTestimonials(true);
-    try {
-      let allFeatured = [];
-      const usersSnap = await getDocs(collection(db, 'users'));
-
-      for (const userDoc of usersSnap.docs) {
-        const feedbackRef = collection(db, 'users', userDoc.id, 'feedback');
-        const q = query(feedbackRef, where('featured', '==', true), orderBy('featuredAt', 'desc'));
-        const snap = await getDocs(q);
-        snap.forEach(doc => {
-          const data = doc.data();
-          allFeatured.push({
-            id: `\( {userDoc.id}- \){doc.id}`,
-            rating: data.rating || 5,
-            message: data.message || '',
-            userName: data.userName || 'Anonymous',
-            role: data.userRole || 'User'
-          });
-        });
-      }
-
-      allFeatured.sort((a,b) => (b.featuredAt?.toDate?.() || new Date(0)) - (a.featuredAt?.toDate?.() || new Date(0)));
-      setTestimonials(allFeatured.slice(0, 6) || fallbackTestimonials);
-    } catch (err) {
-      console.error(err);
-      setTestimonials(fallbackTestimonials);
-    } finally {
-      setLoadingTestimonials(false);
-    }
-  };
-
-  const fallbackTestimonials = [
-    { id:1, rating:5, message:"Finally an app that respects Islamic finance rules. Zakat calculation is accurate and easy.", userName:"Rahim Khan", role:"Entrepreneur" },
-    { id:2, rating:5, message:"Best financial tracker I've used as a Muslim. Clean, secure, and halal-focused.", userName:"Ayesha Siddiqua", role:"Doctor" },
-    { id:3, rating:5, message:"The nisab tracking saved me from miscalculating zakat last year. Highly recommend.", userName:"Omar Faruq", role:"Banker" },
+  const fallback = [
+    { id:1, rating:5, message:"Accurate zakat calculation and beautiful interface. Finally an app made for Muslims.", userName:"Sumaiya Akter", role:"Chartered Accountant" },
+    { id:2, rating:5, message:"Helped me track nisab properly for the first time. Very clean and trustworthy.", userName:"Md. Arif Hossain", role:"Software Developer" },
+    { id:3, rating:5, message:"Best financial companion — no riba, full transparency, excellent support.", userName:"Nusrat Jahan", role:"Entrepreneur" }
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white overflow-x-hidden">
 
       {/* Announcement Bar */}
-      <div className="bg-emerald-700 text-white py-2.5 text-center text-sm font-medium tracking-wide">
-        Launch Offer — 5 Days Free + First Month 40% Off • Limited Spots
+      <div className="bg-gradient-to-r from-emerald-700 to-teal-700 text-white py-3 text-center text-sm md:text-base font-medium tracking-wide">
+        <span className="inline-block animate-pulse">Limited Launch Offer:</span> 7 Days Free Trial + 35% Off First 3 Months
       </div>
 
       {/* Navigation */}
-      <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200">
+      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-xl border-b border-slate-200/80">
         <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-12">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3 cursor-pointer" onClick={() => router.push('/')}>
-              <div className="w-9 h-9 bg-emerald-600 rounded-lg flex items-center justify-center shadow-sm">
-                <Image src="/nisab-logo.png" alt="Nisab" width={28} height={28} className="brightness-0 invert" />
+          <div className="flex items-center justify-between h-18">
+            <div className="flex items-center gap-3.5 cursor-pointer" onClick={() => router.push('/')}>
+              <div className="relative w-11 h-11 bg-gradient-to-br from-emerald-600 to-teal-700 rounded-xl flex items-center justify-center shadow-lg">
+                <Image src="/nisab-logo.png" alt="Nisab Wallet" width={34} height={34} className="brightness-0 invert drop-shadow-md" />
               </div>
-              <span className="text-xl font-semibold text-slate-900">Nisab Wallet</span>
+              <span className="text-2xl font-bold bg-gradient-to-r from-emerald-700 to-teal-700 bg-clip-text text-transparent">Nisab</span>
             </div>
 
-            <div className="hidden md:flex items-center gap-8">
-              <a href="#features" className="text-slate-700 hover:text-emerald-700 font-medium transition-colors">Features</a>
-              <a href="#pricing"  className="text-slate-700 hover:text-emerald-700 font-medium transition-colors">Pricing</a>
-              <a href="#reviews"  className="text-slate-700 hover:text-emerald-700 font-medium transition-colors">Reviews</a>
-              <button onClick={() => router.push('/login')} className="text-slate-700 hover:text-emerald-700 font-medium">Sign in</button>
-              <button 
-                onClick={() => router.push('/register')} 
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-semibold transition-colors shadow-sm"
+            <div className="hidden md:flex items-center gap-9">
+              <a href="#features" className="text-slate-700 hover:text-emerald-700 font-medium transition-colors duration-300">Features</a>
+              <a href="#pricing"  className="text-slate-700 hover:text-emerald-700 font-medium transition-colors duration-300">Pricing</a>
+              <a href="#reviews"  className="text-slate-700 hover:text-emerald-700 font-medium transition-colors duration-300">Reviews</a>
+              <button onClick={() => router.push('/login')} className="text-slate-700 hover:text-emerald-700 font-medium transition-colors duration-300">Sign In</button>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => router.push('/register')}
+                className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-7 py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
               >
-                Get Started
-              </button>
+                Start Free Trial
+              </motion.button>
             </div>
 
-            <button 
-              className="md:hidden p-2 rounded-lg hover:bg-slate-100"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            >
-              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            <button className="md:hidden p-2.5 rounded-xl hover:bg-slate-100 transition-colors" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+              {mobileMenuOpen ? <X size={26} /> : <Menu size={26} />}
             </button>
           </div>
         </div>
 
-        {/* Mobile menu */}
-        {mobileMenuOpen && (
-          <div className="md:hidden bg-white border-t px-5 py-5 space-y-4">
-            <a href="#features" className="block py-2.5 text-slate-700 hover:text-emerald-700">Features</a>
-            <a href="#pricing"  className="block py-2.5 text-slate-700 hover:text-emerald-700">Pricing</a>
-            <a href="#reviews"  className="block py-2.5 text-slate-700 hover:text-emerald-700">Reviews</a>
-            <button onClick={() => router.push('/login')} className="block py-2.5 text-slate-700 hover:text-emerald-700 w-full text-left">Sign in</button>
-            <button onClick={() => router.push('/register')} className="block w-full bg-emerald-600 text-white py-3 rounded-lg font-semibold">Get Started</button>
-          </div>
-        )}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="md:hidden bg-white border-t overflow-hidden"
+            >
+              <div className="px-6 py-6 space-y-5">
+                <a href="#features" className="block py-3 text-lg text-slate-700 hover:text-emerald-700">Features</a>
+                <a href="#pricing"  className="block py-3 text-lg text-slate-700 hover:text-emerald-700">Pricing</a>
+                <a href="#reviews"  className="block py-3 text-lg text-slate-700 hover:text-emerald-700">Reviews</a>
+                <button onClick={() => router.push('/login')} className="block py-3 text-lg text-slate-700 hover:text-emerald-700 w-full text-left">Sign In</button>
+                <button onClick={() => router.push('/register')} className="block w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white py-4 rounded-xl font-semibold text-lg mt-4">Start Free Trial</button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </nav>
 
       {/* Hero */}
-      <section className="pt-16 pb-20 md:pt-24 md:pb-32 bg-white">
-        <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-12">
-          <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-            <div className="space-y-8">
-              <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 px-4 py-1.5 rounded-full text-sm font-semibold">
-                <Sparkles size={16} /> Halal • Secure • Used by 10,000+
-              </div>
+      <section className="pt-16 pb-24 md:pt-28 md:pb-40 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/40 via-teal-50/30 to-cyan-50/20 pointer-events-none" />
 
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-slate-900 leading-tight">
-                Modern Islamic
-                <span className="block text-emerald-600">Wealth Management</span>
+        <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-12 relative z-10">
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            variants={staggerContainer}
+            className="grid lg:grid-cols-2 gap-14 lg:gap-20 items-center"
+          >
+            <motion.div variants={fadeInUp} className="space-y-9">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.3 }}
+                className="inline-flex items-center gap-2.5 bg-white/80 backdrop-blur-sm border border-emerald-200 px-5 py-2 rounded-full text-sm font-semibold text-emerald-800 shadow-sm"
+              >
+                <Sparkles size={18} className="text-emerald-600" /> Trusted Halal Finance App — 12,000+ Users
+              </motion.div>
+
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-extrabold leading-tight text-slate-900">
+                Wealth Management
+                <span className="block bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 bg-clip-text text-transparent mt-2">Done the Right Way</span>
               </h1>
 
-              <p className="text-lg sm:text-xl text-slate-600 leading-relaxed max-w-xl">
-                Track your finances, monitor nisab in real-time, calculate zakat accurately, and stay Shariah-compliant — all in one secure place.
+              <p className="text-lg sm:text-xl text-slate-700 leading-relaxed max-w-xl">
+                Real-time nisab tracking • Accurate zakat calculation • Shariah-compliant budgeting • Bank-grade security — built exclusively for Muslims.
               </p>
 
-              <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                <button 
+              <div className="flex flex-col sm:flex-row gap-5 pt-6">
+                <motion.button
+                  whileHover={{ scale: 1.04, boxShadow: "0 20px 40px -10px rgba(5, 150, 105, 0.4)" }}
+                  whileTap={{ scale: 0.97 }}
                   onClick={() => router.push('/register')}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 group"
+                  className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-10 py-5 rounded-2xl font-bold text-lg shadow-2xl hover:shadow-3xl transition-all duration-300 flex items-center justify-center gap-3 group"
                 >
-                  Start Free Trial
-                  <ArrowRight className="group-hover:translate-x-1 transition-transform" />
-                </button>
-                <button className="border-2 border-slate-300 hover:border-emerald-600 hover:bg-emerald-50 px-8 py-4 rounded-xl font-semibold text-lg transition-all">
-                  See how it works →
-                </button>
+                  Begin Free Trial
+                  <ArrowRight className="group-hover:translate-x-2 transition-transform" size={22} />
+                </motion.button>
+
+                <motion.button
+                  whileHover={{ scale: 1.04 }}
+                  className="border-2 border-emerald-600/40 hover:border-emerald-600 text-emerald-700 px-10 py-5 rounded-2xl font-bold text-lg transition-all duration-300"
+                >
+                  Watch 60s Demo
+                </motion.button>
               </div>
 
-              <div className="flex items-center gap-6 pt-4 text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="flex -space-x-2">
-                    {['A','B','C','D'].map(l => (
-                      <div key={l} className="w-9 h-9 rounded-full bg-emerald-600 border-2 border-white flex items-center justify-center text-white text-xs font-bold">
-                        {l}
+              <motion.div variants={fadeInUp} className="flex items-center gap-8 pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="flex -space-x-3">
+                    {['+', '৳', '★', '৳'].map((s,i) => (
+                      <div key={i} className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 border-2 border-white flex items-center justify-center text-white text-sm font-bold shadow-sm">
+                        {s}
                       </div>
                     ))}
                   </div>
-                  <div>
-                    <div className="font-semibold">10,000+ Muslims</div>
-                    <div className="flex items-center gap-1 text-amber-500">
-                      <Star size={14} fill="currentColor" /> 4.9 rating
+                  <div className="text-sm">
+                    <div className="font-bold text-slate-900">12,000+ Muslims</div>
+                    <div className="flex items-center gap-1.5 text-amber-500">
+                      <Star size={16} fill="currentColor" /> 4.9 / 5.0
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
 
-            {/* Hero mockup - simplified & cleaner */}
-            <div className="relative hidden lg:block">
-              <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-3xl p-8 shadow-2xl">
-                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-7 space-y-5">
-                  <div className="flex justify-between items-center">
+            {/* Hero visual - desktop only */}
+            <motion.div
+              initial={{ opacity: 0, x: 60 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.4, duration: 0.9 }}
+              className="hidden lg:block relative"
+            >
+              <div className="relative bg-gradient-to-br from-emerald-600 via-teal-700 to-cyan-700 rounded-3xl p-9 shadow-2xl transform hover:scale-[1.02] transition-transform duration-500">
+                <div className="bg-white/15 backdrop-blur-xl rounded-2xl p-8 space-y-6 border border-white/20">
+                  <div className="flex justify-between items-start">
                     <div className="text-white">
-                      <div className="text-sm opacity-80">Net Worth</div>
-                      <div className="text-3xl font-bold">৳ 487,200</div>
+                      <div className="text-sm opacity-80 mb-1">Total Halal Wealth</div>
+                      <div className="text-4xl font-extrabold">৳ 682,450</div>
                     </div>
-                    <ShieldCheck className="text-white" size={40} />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white/15 rounded-xl p-4">
-                      <div className="text-xs text-white/80">Zakat Due</div>
-                      <div className="text-xl font-bold text-white">৳ 12,180</div>
-                    </div>
-                    <div className="bg-white/15 rounded-xl p-4">
-                      <div className="text-xs text-white/80">Nisab (Silver)</div>
-                      <div className="text-xl font-bold text-white">৳ 504,000</div>
+                    <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center">
+                      <ShieldCheck className="text-white" size={32} />
                     </div>
                   </div>
 
-                  <div className="bg-white/10 rounded-xl p-4 text-white text-sm">
-                    Monitoring since: 14 Rajab 1447 • 108 days remaining
+                  <div className="grid grid-cols-2 gap-5">
+                    <div className="bg-white/10 rounded-xl p-5">
+                      <div className="text-xs text-white/70 mb-1">Zakat Payable</div>
+                      <div className="text-2xl font-bold text-white">৳ 17,061</div>
+                    </div>
+                    <div className="bg-white/10 rounded-xl p-5">
+                      <div className="text-xs text-white/70 mb-1">Current Nisab</div>
+                      <div className="text-2xl font-bold text-white">৳ 504,800</div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white/10 rounded-xl p-5 text-white text-sm font-medium border-t border-white/10 pt-4">
+                    Active Hawl Cycle • Ends in 87 days • Started 18 Jumada II 1447
                   </div>
                 </div>
               </div>
 
-              <div className="absolute -bottom-6 -right-6 bg-white rounded-2xl shadow-xl p-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
-                    <LockKey className="text-emerald-700" size={20} />
+              <motion.div 
+                animate={{ y: [0, -12, 0] }}
+                transition={{ repeat: Infinity, duration: 5, ease: "easeInOut" }}
+                className="absolute -bottom-8 -right-8 bg-white rounded-2xl shadow-2xl p-6 border border-slate-100"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                    <LockKey className="text-emerald-700" size={24} />
                   </div>
                   <div>
-                    <div className="text-xs text-slate-500">Protected by</div>
-                    <div className="font-semibold">Bank-grade encryption</div>
+                    <div className="text-xs text-slate-500">Security</div>
+                    <div className="font-bold text-slate-900">End-to-End Encrypted</div>
                   </div>
                 </div>
-              </div>
-            </div>
-          </div>
+              </motion.div>
+            </motion.div>
+          </motion.div>
         </div>
       </section>
 
-      {/* Trust bar */}
-      <section className="py-12 bg-slate-100 border-t border-b border-slate-200">
+      {/* Pricing Section - placed high because it's sales focused */}
+      <section id="pricing" className="py-24 md:py-32 bg-gradient-to-b from-slate-50 to-white">
         <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-12">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-            {[
-              { num: '10,000+', label: 'Active Users' },
-              { num: '4.9/5',   label: 'Average Rating' },
-              { num: '15+',     label: 'Countries' },
-              { num: '100%',    label: 'Shariah Compliant' }
-            ].map(item => (
-              <div key={item.label}>
-                <div className="text-3xl font-bold text-slate-900">{item.num}</div>
-                <div className="text-sm text-slate-600 mt-1">{item.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Pricing - moved up because you're selling subscriptions */}
-      <section id="pricing" className="py-20 md:py-28 bg-white">
-        <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-12">
-          <div className="text-center mb-14">
-            <h2 className="text-4xl md:text-5xl font-extrabold text-slate-900">Simple, Fair Pricing</h2>
-            <p className="text-xl text-slate-600 mt-4">Start free. Upgrade when you're ready. Cancel anytime.</p>
-          </div>
+          <motion.div 
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-100px" }}
+            variants={staggerContainer}
+            className="text-center mb-16 md:mb-20"
+          >
+            <motion.h2 variants={fadeInUp} className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-slate-900 mb-5">
+              Choose Your Perfect Plan
+            </motion.h2>
+            <motion.p variants={fadeInUp} className="text-xl text-slate-600 max-w-3xl mx-auto">
+              Start free for 7 days. Upgrade when ready. Cancel anytime — no questions asked.
+            </motion.p>
+          </motion.div>
 
           {loadingPlans ? (
-            <div className="flex justify-center py-20"><div className="animate-spin h-12 w-12 border-4 border-emerald-600 rounded-full border-t-transparent"></div></div>
+            <div className="flex justify-center py-32">
+              <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            </div>
           ) : (
-            <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-              {subscriptionPlans.map(plan => (
-                <div 
+            <motion.div 
+              variants={staggerContainer}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true }}
+              className="grid md:grid-cols-3 gap-8 lg:gap-10 max-w-6xl mx-auto"
+            >
+              {plans.map((plan) => (
+                <motion.div
                   key={plan.id}
-                  className={`relative rounded-2xl p-8 border ${
+                  variants={fadeInUp}
+                  whileHover={{ y: -12, transition: { duration: 0.4 } }}
+                  className={`relative rounded-3xl p-8 md:p-10 border-2 ${
                     plan.isPopular 
-                      ? 'border-emerald-600 shadow-2xl scale-105 bg-gradient-to-b from-white to-emerald-50/40' 
-                      : 'border-slate-200 bg-white shadow-lg'
+                      ? 'border-emerald-600 bg-gradient-to-b from-white to-emerald-50/60 shadow-2xl' 
+                      : 'border-slate-200 bg-white shadow-xl'
                   }`}
                 >
                   {plan.isPopular && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-600 text-white px-5 py-1 rounded-full text-sm font-bold">
+                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-amber-500 to-yellow-500 text-white px-6 py-1.5 rounded-full text-sm font-bold shadow-md animate-pulse">
                       Most Popular
                     </div>
                   )}
 
-                  <h3 className="text-2xl font-bold text-center mb-2">{plan.name}</h3>
-                  <div className="text-center mb-6">
-                    <span className="text-5xl font-black text-slate-900">৳{plan.price}</span>
-                    <span className="text-slate-500"> / month</span>
+                  <h3 className="text-2xl md:text-3xl font-bold text-center mb-3">{plan.name}</h3>
+
+                  <div className="text-center mb-8">
+                    <span className="text-5xl md:text-6xl font-black text-slate-900">৳{plan.price}</span>
+                    <span className="text-slate-500 text-xl"> / mo</span>
                   </div>
 
-                  <ul className="space-y-4 mb-8">
-                    {plan.features?.map((f,i) => (
-                      <li key={i} className="flex items-start gap-3">
-                        <Check className="text-emerald-600 mt-1 flex-shrink-0" size={18} />
-                        <span className="text-slate-700">{f}</span>
+                  <ul className="space-y-4 mb-10">
+                    {plan.features?.map((feature, i) => (
+                      <li key={i} className="flex items-start gap-3 text-slate-700">
+                        <Check className="text-emerald-600 mt-1 flex-shrink-0" size={20} />
+                        <span>{feature}</span>
                       </li>
                     ))}
                   </ul>
 
-                  <button 
+                  <motion.button
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.98 }}
                     onClick={() => router.push('/register')}
-                    className={`w-full py-4 rounded-xl font-semibold transition-colors ${
-                      plan.isPopular 
-                        ? 'bg-emerald-600 text-white hover:bg-emerald-700' 
+                    className={`w-full py-4 rounded-2xl font-bold text-lg transition-all duration-300 ${
+                      plan.isPopular
+                        ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg'
                         : 'bg-slate-800 text-white hover:bg-slate-900'
                     }`}
                   >
-                    {plan.isPopular ? 'Start Free Trial' : 'Get Started'}
-                  </button>
-                </div>
+                    {plan.isPopular ? 'Start 7-Day Free Trial' : 'Get Started'}
+                  </motion.button>
+                </motion.div>
               ))}
-            </div>
+            </motion.div>
           )}
 
-          <div className="text-center mt-12 text-slate-600">
-            ✓ 5-day free trial • No card required • Cancel anytime • 30-day money-back guarantee
-          </div>
+          <motion.div 
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            transition={{ delay: 0.6 }}
+            className="text-center mt-12 text-slate-600 font-medium"
+          >
+            ✓ 7-day free trial • No credit card needed • Cancel anytime • 30-day money-back guarantee
+          </motion.div>
         </div>
       </section>
 
-      {/* Features - condensed */}
-      <section id="features" className="py-20 md:py-28 bg-slate-50">
+      {/* Features */}
+      <section id="features" className="py-24 md:py-32 bg-white">
         <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-12">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-extrabold text-slate-900">Everything You Need for Halal Finance</h2>
-            <p className="text-xl text-slate-600 mt-4 max-w-3xl mx-auto">Purpose-built tools that respect Islamic principles and make wealth management effortless.</p>
-          </div>
+          <motion.div 
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+            variants={staggerContainer}
+            className="text-center mb-16 md:mb-20"
+          >
+            <motion.h2 variants={fadeInUp} className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-slate-900 mb-5">
+              Built for Muslims, by Muslims
+            </motion.h2>
+            <motion.p variants={fadeInUp} className="text-xl text-slate-600 max-w-3xl mx-auto">
+              Every feature designed with Shariah compliance, privacy, and ease of use in mind.
+            </motion.p>
+          </motion.div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <motion.div 
+            variants={staggerContainer}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+            className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 lg:gap-10"
+          >
             {[
-              { icon: Wallet,         title: "Complete Wealth Overview", desc: "All accounts, assets and liabilities — one unified halal view." },
-              { icon: ShieldCheck,    title: "Accurate Zakat Engine",   desc: "Real-time nisab tracking, hijri hawl monitoring, automatic 2.5% calculation." },
-              { icon: BarChart3,      title: "Clear Financial Insights", desc: "Beautiful charts, category analysis, trend reports — riba-free." },
-              { icon: LockKey,        title: "Bank-Grade Security",     desc: "End-to-end encryption, secure auth, privacy-first architecture." },
-              { icon: Smartphone,     title: "Mobile First Experience", desc: "Fast, responsive design — manage finances anywhere." },
-              { icon: UsersThree,     title: "Trusted by Thousands",    desc: "10,000+ Muslims worldwide already managing wealth the right way." }
-            ].map((item,i) => (
-              <div key={i} className="bg-white rounded-2xl p-8 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-                <div className="w-14 h-14 bg-emerald-100 rounded-xl flex items-center justify-center mb-6">
-                  <item.icon className="text-emerald-700" size={28} />
+              { icon: Wallet,         title: "Unified Wealth View", desc: "See all halal assets — cash, savings, gold, investments — in one secure place." },
+              { icon: ShieldCheck,    title: "Precision Zakat Engine", desc: "Live nisab values, hijri hawl tracking, automatic 2.5% calculation." },
+              { icon: BarChart3,      title: "Riba-Free Analytics", desc: "Beautiful visualizations, spending patterns, net worth trends — no interest metrics." },
+              { icon: LockKey,        title: "Maximum Privacy", desc: "End-to-end encryption, zero data selling, local-first design philosophy." },
+              { icon: Smartphone,     title: "Seamless Mobile", desc: "Fast, responsive experience — manage finances from anywhere." },
+              { icon: UsersThree,     title: "Community Trusted", desc: "Thousands of Muslims already relying on Nisab Wallet daily." }
+            ].map((item, i) => (
+              <motion.div
+                key={i}
+                variants={fadeInUp}
+                whileHover={{ y: -10, boxShadow: "0 25px 50px -12px rgba(0,0,0,0.12)" }}
+                className="bg-white rounded-3xl p-8 lg:p-10 border border-slate-100 shadow-lg hover:shadow-2xl transition-all duration-400 group"
+              >
+                <div className="w-16 h-16 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-2xl flex items-center justify-center mb-7 group-hover:scale-110 transition-transform duration-400">
+                  <item.icon className="text-emerald-700" size={32} />
                 </div>
-                <h3 className="text-xl font-bold mb-3">{item.title}</h3>
-                <p className="text-slate-600">{item.desc}</p>
-              </div>
+                <h3 className="text-2xl font-bold mb-4 text-slate-900">{item.title}</h3>
+                <p className="text-slate-600 leading-relaxed">{item.desc}</p>
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         </div>
       </section>
 
       {/* Testimonials */}
-      <section id="reviews" className="py-20 md:py-28 bg-white">
+      <section id="reviews" className="py-24 md:py-32 bg-gradient-to-b from-slate-50 to-white">
         <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-12">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-extrabold text-slate-900">Real Stories from Real Users</h2>
-          </div>
+          <motion.div 
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+            variants={staggerContainer}
+            className="text-center mb-16 md:mb-20"
+          >
+            <motion.h2 variants={fadeInUp} className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-slate-900 mb-5">
+              Loved by the Ummah
+            </motion.h2>
+          </motion.div>
 
           {loadingTestimonials ? (
-            <div className="flex justify-center py-20"><div className="animate-spin h-12 w-12 border-4 border-emerald-600 rounded-full border-t-transparent"></div></div>
+            <div className="flex justify-center py-32">
+              <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            </div>
           ) : (
-            <div className="grid md:grid-cols-3 gap-8">
-              {testimonials.map(t => (
-                <div key={t.id} className="bg-slate-50 rounded-2xl p-8 border border-slate-100">
-                  <div className="flex gap-1 mb-5">
+            <motion.div 
+              variants={staggerContainer}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true }}
+              className="grid md:grid-cols-3 gap-8 lg:gap-10"
+            >
+              {testimonials.map((t) => (
+                <motion.div
+                  key={t.id}
+                  variants={fadeInUp}
+                  className="bg-white rounded-3xl p-8 lg:p-10 border border-slate-100 shadow-xl hover:shadow-2xl transition-all duration-400"
+                >
+                  <div className="flex gap-1 mb-6">
                     {Array(5).fill().map((_,i) => (
-                      <Star key={i} size={20} className={i < t.rating ? "text-amber-400 fill-amber-400" : "text-slate-200"} />
+                      <Star 
+                        key={i} 
+                        size={22} 
+                        className={i < t.rating ? "text-amber-400 fill-amber-400" : "text-slate-200"} 
+                      />
                     ))}
                   </div>
-                  <p className="text-slate-700 leading-relaxed mb-6">"{t.message}"</p>
+                  <p className="text-slate-700 text-lg leading-relaxed mb-8">"{t.message}"</p>
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                    <div className="w-14 h-14 bg-gradient-to-br from-emerald-600 to-teal-700 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-md">
                       {t.userName.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <div className="font-semibold">{t.userName}</div>
-                      <div className="text-sm text-slate-500">{t.role}</div>
+                      <div className="font-bold text-slate-900">{t.userName}</div>
+                      <div className="text-slate-500 text-sm">{t.role}</div>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               ))}
-            </div>
+            </motion.div>
           )}
         </div>
       </section>
 
       {/* Final CTA */}
-      <section className="py-24 bg-gradient-to-br from-emerald-700 via-teal-700 to-emerald-800 text-white">
-        <div className="max-w-4xl mx-auto px-5 text-center">
-          <h2 className="text-4xl md:text-5xl font-extrabold mb-6">Take Control of Your Halal Wealth Today</h2>
-          <p className="text-xl text-emerald-100 mb-10">Start your 5-day free trial. No credit card needed. Cancel anytime.</p>
+      <section className="py-28 md:py-40 bg-gradient-to-br from-emerald-700 via-teal-700 to-cyan-800 text-white relative overflow-hidden">
+        <div className="absolute inset-0 opacity-10 pointer-events-none">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(255,255,255,0.15)_0%,transparent_50%)]" />
+        </div>
 
-          <div className="flex flex-col sm:flex-row gap-5 justify-center">
-            <button 
+        <div className="max-w-4xl mx-auto px-5 text-center relative z-10">
+          <motion.h2 
+            initial={{ opacity: 0, y: 40 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.9 }}
+            className="text-4xl md:text-5xl lg:text-6xl font-extrabold mb-8 leading-tight"
+          >
+            Take Control of Your Halal Wealth — Today
+          </motion.h2>
+
+          <motion.p 
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            transition={{ delay: 0.3, duration: 0.8 }}
+            className="text-xl md:text-2xl text-emerald-100 mb-12 max-w-3xl mx-auto"
+          >
+            Join thousands who already trust Nisab Wallet for accurate zakat, secure tracking, and peace of mind.
+          </motion.p>
+
+          <motion.div 
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+            className="flex flex-col sm:flex-row gap-6 justify-center"
+          >
+            <motion.button
+              whileHover={{ scale: 1.06, boxShadow: "0 25px 50px -12px rgba(0,0,0,0.4)" }}
+              whileTap={{ scale: 0.96 }}
               onClick={() => router.push('/register')}
-              className="bg-white text-emerald-800 px-10 py-5 rounded-xl font-bold text-xl shadow-2xl hover:bg-emerald-50 transition-all flex items-center justify-center gap-3"
+              className="bg-white text-emerald-900 px-12 py-6 rounded-2xl font-bold text-xl shadow-2xl hover:shadow-3xl transition-all duration-300 flex items-center justify-center gap-3"
             >
-              Begin Free Trial
-              <ArrowRight size={24} />
-            </button>
-            <button 
+              Start 7-Day Free Trial
+              <ArrowRight size={26} />
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.04 }}
+              className="border-2 border-white/70 hover:bg-white/10 px-12 py-6 rounded-2xl font-bold text-xl transition-all duration-300"
               onClick={() => router.push('/login')}
-              className="border-2 border-white/70 hover:bg-white/10 px-10 py-5 rounded-xl font-bold text-xl transition-all"
             >
               Already have an account?
-            </button>
-          </div>
+            </motion.button>
+          </motion.div>
+
+          <motion.p 
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            transition={{ delay: 0.7 }}
+            className="mt-10 text-emerald-100 text-lg"
+          >
+            No credit card required • Cancel anytime • Full money-back guarantee
+          </motion.p>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="bg-slate-950 text-slate-400 py-16">
+      <footer className="bg-slate-950 text-slate-300 py-20">
         <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-12">
-          <div className="grid md:grid-cols-4 gap-12">
+          <div className="grid md:grid-cols-4 gap-12 mb-16">
             <div className="md:col-span-2">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-emerald-700 rounded-lg flex items-center justify-center">
-                  <Image src="/nisab-logo.png" alt="" width={28} height={28} className="brightness-0 invert" />
+              <div className="flex items-center gap-4 mb-8">
+                <div className="w-12 h-12 bg-gradient-to-br from-emerald-600 to-teal-700 rounded-xl flex items-center justify-center shadow-lg">
+                  <Image src="/nisab-logo.png" alt="" width={36} height={36} className="brightness-0 invert" />
                 </div>
-                <span className="text-2xl font-bold text-white">Nisab Wallet</span>
+                <span className="text-3xl font-bold text-white">Nisab Wallet</span>
               </div>
-              <p className="text-slate-400 mb-6">Purpose-built Islamic finance companion — helping Muslims manage wealth with clarity, confidence and compliance.</p>
+              <p className="text-slate-400 leading-relaxed mb-8">
+                The modern, secure, and fully Shariah-compliant way to manage your finances. Built with love for the Ummah.
+              </p>
             </div>
 
             <div>
-              <h4 className="text-white font-semibold mb-4">Product</h4>
-              <div className="space-y-3 text-sm">
-                <a href="#features" className="hover:text-white block">Features</a>
-                <a href="#pricing" className="hover:text-white block">Pricing</a>
-                <a href="#reviews" className="hover:text-white block">Testimonials</a>
+              <h4 className="text-white font-semibold text-lg mb-6">Product</h4>
+              <div className="space-y-4 text-sm">
+                <a href="#features" className="hover:text-white block transition-colors">Features</a>
+                <a href="#pricing" className="hover:text-white block transition-colors">Pricing</a>
+                <a href="#reviews" className="hover:text-white block transition-colors">Reviews</a>
               </div>
             </div>
 
             <div>
-              <h4 className="text-white font-semibold mb-4">Company</h4>
-              <div className="space-y-3 text-sm">
-                <a href="#" className="hover:text-white block">About</a>
-                <a href="#" className="hover:text-white block">Contact</a>
-                <a href="#" className="hover:text-white block">Privacy Policy</a>
-                <a href="#" className="hover:text-white block">Terms of Service</a>
+              <h4 className="text-white font-semibold text-lg mb-6">Company</h4>
+              <div className="space-y-4 text-sm">
+                <a href="#" className="hover:text-white block transition-colors">About Us</a>
+                <a href="#" className="hover:text-white block transition-colors">Contact</a>
+                <a href="#" className="hover:text-white block transition-colors">Privacy Policy</a>
+                <a href="#" className="hover:text-white block transition-colors">Terms of Service</a>
               </div>
             </div>
           </div>
 
-          <div className="border-t border-slate-800 mt-16 pt-10 text-center text-sm">
-            © {new Date().getFullYear()} Nisab Wallet. Built with care for the Ummah.
+          <div className="border-t border-slate-800 pt-10 text-center text-sm">
+            © {new Date().getFullYear()} Nisab Wallet • Made with care in the spirit of service to the Ummah
           </div>
         </div>
       </footer>
