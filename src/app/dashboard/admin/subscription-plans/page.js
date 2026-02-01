@@ -11,7 +11,7 @@ import {
   deleteSubscriptionPlan 
 } from '@/lib/subscriptionUtils';
 import { checkIsAdmin } from '@/lib/adminUtils';
-import { Plus, Edit2, Trash2, Save, X, DollarSign, Calendar, Package } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, DollarSign, Calendar, Package, Star, ArrowUp, ArrowDown } from 'lucide-react';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
 export default function SubscriptionPlansPage() {
@@ -30,7 +30,9 @@ export default function SubscriptionPlansPage() {
     price: '',
     currency: 'BDT',
     features: '',
-    isActive: true
+    isActive: true,
+    isMostPopular: false,
+    displayOrder: 0
   });
 
   useEffect(() => {
@@ -53,7 +55,9 @@ export default function SubscriptionPlansPage() {
     setLoading(true);
     const result = await getSubscriptionPlans(false); // Get all plans including inactive
     if (result.success) {
-      setPlans(result.plans);
+      // Sort by displayOrder
+      const sortedPlans = result.plans.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+      setPlans(sortedPlans);
     }
     setLoading(false);
   };
@@ -81,8 +85,20 @@ export default function SubscriptionPlansPage() {
       price: parseFloat(formData.price),
       currency: formData.currency,
       features: formData.features.split(',').map(f => f.trim()).filter(f => f),
-      isActive: formData.isActive
+      isActive: formData.isActive,
+      isMostPopular: formData.isMostPopular,
+      displayOrder: parseInt(formData.displayOrder) || 0
     };
+
+    // If setting as most popular, remove it from other plans
+    if (planData.isMostPopular) {
+      // This will be handled on the backend or we can do it here
+      plans.forEach(async (plan) => {
+        if (plan.id !== editingPlan?.id && plan.isMostPopular) {
+          await updateSubscriptionPlan(plan.id, { isMostPopular: false });
+        }
+      });
+    }
 
     let result;
     if (editingPlan) {
@@ -110,7 +126,9 @@ export default function SubscriptionPlansPage() {
       price: plan.price.toString(),
       currency: plan.currency,
       features: plan.features?.join(', ') || '',
-      isActive: plan.isActive
+      isActive: plan.isActive,
+      isMostPopular: plan.isMostPopular || false,
+      displayOrder: plan.displayOrder || 0
     });
     setShowModal(true);
   };
@@ -134,6 +152,30 @@ export default function SubscriptionPlansPage() {
     });
   };
 
+  const moveUp = async (index) => {
+    if (index === 0) return;
+    
+    const newPlans = [...plans];
+    const temp = newPlans[index - 1].displayOrder;
+    
+    await updateSubscriptionPlan(newPlans[index].id, { displayOrder: temp });
+    await updateSubscriptionPlan(newPlans[index - 1].id, { displayOrder: newPlans[index].displayOrder });
+    
+    loadPlans();
+  };
+
+  const moveDown = async (index) => {
+    if (index === plans.length - 1) return;
+    
+    const newPlans = [...plans];
+    const temp = newPlans[index + 1].displayOrder;
+    
+    await updateSubscriptionPlan(newPlans[index].id, { displayOrder: temp });
+    await updateSubscriptionPlan(newPlans[index + 1].id, { displayOrder: newPlans[index].displayOrder });
+    
+    loadPlans();
+  };
+
   const resetForm = () => {
     setFormData({
       name: '',
@@ -142,7 +184,9 @@ export default function SubscriptionPlansPage() {
       price: '',
       currency: 'BDT',
       features: '',
-      isActive: true
+      isActive: true,
+      isMostPopular: false,
+      displayOrder: plans.length
     });
   };
 
@@ -170,7 +214,7 @@ export default function SubscriptionPlansPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Subscription Plans</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage subscription plans for users</p>
+          <p className="text-sm text-gray-500 mt-1">Manage subscription plans, pricing, and features</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
@@ -183,11 +227,39 @@ export default function SubscriptionPlansPage() {
 
       {/* Plans Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {plans.map((plan) => (
-          <div key={plan.id} className="bg-white border border-gray-200 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <Package className="text-blue-600" size={24} />
+        {plans.map((plan, index) => (
+          <div key={plan.id} className={`bg-white border-2 rounded-lg p-6 relative ${
+            plan.isMostPopular ? 'border-blue-500 shadow-lg' : 'border-gray-200'
+          }`}>
+            {/* Most Popular Badge */}
+            {plan.isMostPopular && (
+              <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                <div className="bg-blue-600 text-white px-4 py-1 rounded-full text-xs font-semibold flex items-center gap-1">
+                  <Star size={12} className="fill-white" />
+                  Most Popular
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between mb-4 mt-2">
+              <Package className={plan.isMostPopular ? "text-blue-600" : "text-gray-600"} size={24} />
               <div className="flex space-x-2">
+                <button
+                  onClick={() => moveUp(index)}
+                  disabled={index === 0}
+                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-30"
+                  title="Move up"
+                >
+                  <ArrowUp size={16} />
+                </button>
+                <button
+                  onClick={() => moveDown(index)}
+                  disabled={index === plans.length - 1}
+                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-30"
+                  title="Move down"
+                >
+                  <ArrowDown size={16} />
+                </button>
                 <button
                   onClick={() => handleEdit(plan)}
                   className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
@@ -223,6 +295,9 @@ export default function SubscriptionPlansPage() {
                 }`}>
                   {plan.isActive ? 'Active' : 'Inactive'}
                 </span>
+              </div>
+              <div className="text-xs text-gray-500">
+                Display Order: {plan.displayOrder || 0}
               </div>
             </div>
 
@@ -352,6 +427,21 @@ export default function SubscriptionPlansPage() {
                 </div>
               </div>
 
+              {/* Display Order */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Display Order (lower numbers appear first)
+                </label>
+                <input
+                  type="number"
+                  value={formData.displayOrder}
+                  onChange={(e) => setFormData({ ...formData, displayOrder: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  min="0"
+                  placeholder="0"
+                />
+              </div>
+
               {/* Features */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -366,19 +456,44 @@ export default function SubscriptionPlansPage() {
                 />
               </div>
 
-              {/* Is Active */}
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="isActive"
-                  checked={formData.isActive}
-                  onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <label htmlFor="isActive" className="ml-2 text-sm text-gray-700">
-                  Active (visible to users)
-                </label>
+              <div className="flex items-center space-x-6">
+                {/* Is Active */}
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="isActive"
+                    checked={formData.isActive}
+                    onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label htmlFor="isActive" className="ml-2 text-sm text-gray-700">
+                    Active (visible to users)
+                  </label>
+                </div>
+
+                {/* Is Most Popular */}
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="isMostPopular"
+                    checked={formData.isMostPopular}
+                    onChange={(e) => setFormData({ ...formData, isMostPopular: e.target.checked })}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label htmlFor="isMostPopular" className="ml-2 text-sm text-gray-700 flex items-center gap-1">
+                    <Star size={14} className="text-blue-600" />
+                    Mark as Most Popular
+                  </label>
+                </div>
               </div>
+
+              {formData.isMostPopular && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-xs text-blue-900">
+                    ⓘ Only one plan can be "Most Popular" at a time. Setting this will remove the badge from other plans.
+                  </p>
+                </div>
+              )}
 
               {/* Buttons */}
               <div className="flex space-x-3 pt-4">

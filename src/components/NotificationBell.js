@@ -169,12 +169,14 @@ export default function NotificationBell() {
       {showDropdown && (
         <div
           ref={dropdownRef}
-          className="fixed right-4 lg:right-auto lg:left-auto mt-2 w-80 sm:w-96 bg-white rounded-lg shadow-xl border border-gray-200 z-[9999] max-h-[calc(100vh-100px)] overflow-hidden flex flex-col"
+          className="fixed right-4 lg:right-auto lg:left-auto mt-2 w-80 sm:w-96 bg-white rounded-lg shadow-xl border border-gray-200 max-h-[calc(100vh-100px)] overflow-hidden flex flex-col"
           style={{
             top: buttonRef.current ? buttonRef.current.getBoundingClientRect().bottom + 8 : '60px',
             left: window.innerWidth >= 1024 && buttonRef.current 
               ? buttonRef.current.getBoundingClientRect().left 
-              : 'auto'
+              : 'auto',
+            zIndex: 999999,
+            position: 'fixed'
           }}
         >
           {/* Header */}

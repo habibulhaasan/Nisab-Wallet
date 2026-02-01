@@ -8,7 +8,7 @@ import Image from 'next/image';
 import { 
   LayoutDashboard, CreditCard, Receipt, FolderOpen, Star, BarChart3, 
   LogOut, Menu, X, ArrowRightLeft, Settings, MessageSquare, 
-  Shield, Users, Package, DollarSign, ChevronDown, ChevronRight,
+  Shield, Users, Package, DollarSign, ChevronDown, ChevronRight, Globe,
   HandCoins, MessageCircleQuestion
 } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
@@ -63,6 +63,7 @@ export default function DashboardNav() {
     { name: 'Subscription Plans',   href: '/dashboard/admin/subscription-plans', icon: Package },
     { name: 'Payment Methods',      href: '/dashboard/admin/payment-methods',    icon: CreditCard },
     { name: 'Finance Dashboard',    href: '/dashboard/admin/finance',            icon: DollarSign },
+    { name: 'Landing Page',         href: '/dashboard/admin/landing-manager',       icon: Globe },
   ];
 
   const isActive = (href) => pathname === href;

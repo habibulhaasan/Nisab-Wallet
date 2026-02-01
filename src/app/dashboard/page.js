@@ -17,7 +17,23 @@ import {
   formatHijriDate,
   ZAKAT_STATUS 
 } from '@/lib/zakatUtils';
-import { Wallet, CreditCard, TrendingUp, TrendingDown, Star, Plus, ArrowRightLeft, FileText, Receipt, Clock, CheckCircle2, Calendar } from 'lucide-react';
+import { 
+  Wallet, 
+  CreditCard, 
+  TrendingUp, 
+  TrendingDown, 
+  Star, 
+  Plus, 
+  ArrowRightLeft, 
+  FileText, 
+  Receipt, 
+  Clock, 
+  CheckCircle2, 
+  Calendar,
+  HandCoins,
+  AlertCircle,
+  Banknote
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function DashboardPage() {
@@ -25,27 +41,53 @@ export default function DashboardPage() {
   const router = useRouter();
   const settings = useSettings();
   const [accounts, setAccounts] = useState([]);
+  const [loans, setLoans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [nisabThreshold, setNisabThreshold] = useState(0);
   const [activeCycle, setActiveCycle] = useState(null);
+  const [thisMonthIncome, setThisMonthIncome] = useState(0);
+  const [thisMonthExpense, setThisMonthExpense] = useState(0);
+  const [recentTransactions, setRecentTransactions] = useState([]);
 
   const t = (key) => translate(key, settings.language);
 
   useEffect(() => {
     if (user) {
-      loadAccounts();
-      loadNisabSettings();
-      loadActiveCycle();
+      loadDashboardData();
     }
   }, [user]);
 
-  const loadAccounts = async () => {
+  const loadDashboardData = async () => {
     setLoading(true);
+    await Promise.all([
+      loadAccounts(),
+      loadLoans(),
+      loadNisabSettings(),
+      loadActiveCycle(),
+      loadTransactions(),
+    ]);
+    setLoading(false);
+  };
+
+  const loadAccounts = async () => {
     const result = await getAccounts(user.uid);
     if (result.success) {
       setAccounts(result.accounts);
     }
-    setLoading(false);
+  };
+
+  const loadLoans = async () => {
+    try {
+      const loansRef = collection(db, 'users', user.uid, 'loans');
+      const snapshot = await getDocs(loansRef);
+      const loansData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setLoans(loansData);
+    } catch (error) {
+      console.error('Error loading loans:', error);
+    }
   };
 
   const loadNisabSettings = async () => {
@@ -66,8 +108,6 @@ export default function DashboardPage() {
     }
   };
 
-  
-
   const loadActiveCycle = async () => {
     try {
       const cyclesRef = collection(db, 'users', user.uid, 'zakatCycles');
@@ -84,10 +124,107 @@ export default function DashboardPage() {
     }
   };
 
+  const loadTransactions = async () => {
+    try {
+      // Get current month date range
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      
+      // First day of current month
+      const firstDay = new Date(year, month, 1, 12, 0, 0);
+      const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+      
+      // Last day of current month
+      const lastDay = new Date(year, month + 1, 0);
+      const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
+
+      // Load transactions
+      const transactionsRef = collection(db, 'users', user.uid, 'transactions');
+      const snapshot = await getDocs(transactionsRef);
+      
+      let income = 0;
+      let expense = 0;
+      const allTransactions = [];
+
+      snapshot.docs.forEach((doc) => {
+        const data = doc.data();
+        const transactionDate = data.date;
+        
+        // Store all transactions for recent list
+        allTransactions.push({
+          id: doc.id,
+          ...data,
+        });
+
+        // Calculate this month's income and expenses
+        if (transactionDate >= startDate && transactionDate <= endDate) {
+          if (data.type === 'Income') {
+            income += Number(data.amount || 0);
+          } else if (data.type === 'Expense') {
+            expense += Number(data.amount || 0);
+          }
+        }
+      });
+
+      // Load transfers for this month
+      const transfersRef = collection(db, 'users', user.uid, 'transfers');
+      const transfersSnapshot = await getDocs(transfersRef);
+      
+      transfersSnapshot.docs.forEach((doc) => {
+        const data = doc.data();
+        const transferDate = data.date;
+        
+        if (transferDate >= startDate && transferDate <= endDate) {
+          allTransactions.push({
+            id: doc.id,
+            ...data,
+            isTransfer: true,
+          });
+        }
+      });
+
+      setThisMonthIncome(income);
+      setThisMonthExpense(expense);
+      
+      // Sort by date and get recent 5
+      const sorted = allTransactions
+        .sort((a, b) => {
+          const dateCompare = (b.date || '').localeCompare(a.date || '');
+          if (dateCompare !== 0) return dateCompare;
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        })
+        .slice(0, 5);
+      
+      setRecentTransactions(sorted);
+    } catch (error) {
+      console.error('Error loading transactions:', error);
+    }
+  };
+
   const totalBalance = accounts.reduce((sum, account) => sum + account.balance, 0);
   const accountsCount = accounts.length;
-  const thisMonthIncome = 0;
-  const thisMonthExpense = 0;
+
+  // Loan calculations
+  const activeLoans = loans.filter((l) => l.status === 'active');
+  const totalDebt = activeLoans.reduce((sum, l) => sum + (l.remainingBalance || 0), 0);
+  const totalMonthlyPayment = activeLoans.reduce((sum, l) => sum + (l.monthlyPayment || 0), 0);
+  
+  // Get next payment due
+  const upcomingPayments = activeLoans
+    .filter((l) => l.nextPaymentDue)
+    .map((l) => {
+      const today = new Date();
+      const due = new Date(l.nextPaymentDue);
+      const diffTime = due.getTime() - today.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return { ...l, daysUntilDue: diffDays };
+    })
+    .sort((a, b) => a.daysUntilDue - b.daysUntilDue);
+
+  const nextPaymentDue = upcomingPayments.length > 0 ? upcomingPayments[0] : null;
   
   // Zakat calculations
   let zakatStatus = ZAKAT_STATUS.NOT_MANDATORY;
@@ -101,36 +238,38 @@ export default function DashboardPage() {
     zakatAmount = calculateZakat(totalBalance);
     
     if (activeCycle && activeCycle.status === 'active') {
-      // Check if year has completed
       if (hasOneHijriYearPassed(activeCycle.startDate)) {
-        // Year completed - check wealth status
         zakatStatus = totalBalance >= nisabThreshold ? ZAKAT_STATUS.DUE : ZAKAT_STATUS.EXEMPT;
       } else {
-        // Still monitoring - wealth can fluctuate
         zakatStatus = ZAKAT_STATUS.MONITORING;
         daysRemaining = daysUntilHijriAnniversary(activeCycle.startDate);
         yearEndDate = addOneHijriYear(activeCycle.startDate);
       }
     } else if (totalBalance >= nisabThreshold) {
-      // Wealth above Nisab but no cycle
       zakatStatus = 'Ready to Monitor';
     }
   }
-  
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    const d = new Date(dateStr);
+    return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1)
+      .toString()
+      .padStart(2, '0')}/${d.getFullYear()}`;
+  };
+
+  const getAccountName = (id) => accounts.find((a) => a.id === id)?.name || 'Unknown';
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       {/* Welcome Header */}
-
       <div>
-      <SubscriptionBanner />
-      {/* Rest of content */}
-    </div>
+        <SubscriptionBanner />
+      </div>
 
-    
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">
-          {user?.displayName || 'User'}
+          Welcome back, {user?.displayName || 'User'}!
         </h1>
         <p className="text-sm text-gray-500 mt-1">Overview of your finances</p>
       </div>
@@ -143,6 +282,7 @@ export default function DashboardPage() {
             <Wallet className="w-4 h-4 text-gray-400" />
           </div>
           <p className="text-2xl font-semibold text-gray-900">{formatAmount(totalBalance, settings.currency)}</p>
+          <p className="text-xs text-gray-400 mt-1">{t('allAccounts')}</p>
         </div>
 
         <div className="bg-white rounded-lg p-5 border border-gray-200 hover:border-gray-300 transition-colors">
@@ -151,26 +291,94 @@ export default function DashboardPage() {
             <CreditCard className="w-4 h-4 text-gray-400" />
           </div>
           <p className="text-2xl font-semibold text-gray-900">{accountsCount}</p>
+          <p className="text-xs text-gray-400 mt-1">Active accounts</p>
         </div>
 
-        <div className="bg-white rounded-lg p-5 border border-gray-200 hover:border-gray-300 transition-colors">
+        <button
+          onClick={() => router.push('/dashboard/transactions')}
+          className="bg-white rounded-lg p-5 border border-gray-200 hover:border-green-300 transition-colors text-left group"
+        >
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t('income')}</p>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide group-hover:text-green-600 transition-colors">{t('income')}</p>
             <TrendingUp className="w-4 h-4 text-green-500" />
           </div>
           <p className="text-2xl font-semibold text-green-600">{formatAmount(thisMonthIncome, settings.currency)}</p>
           <p className="text-xs text-gray-400 mt-1">{t('thisMonth')}</p>
-        </div>
+        </button>
 
-        <div className="bg-white rounded-lg p-5 border border-gray-200 hover:border-gray-300 transition-colors">
+        <button
+          onClick={() => router.push('/dashboard/transactions')}
+          className="bg-white rounded-lg p-5 border border-gray-200 hover:border-red-300 transition-colors text-left group"
+        >
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t('expenses')}</p>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide group-hover:text-red-600 transition-colors">{t('expenses')}</p>
             <TrendingDown className="w-4 h-4 text-red-500" />
           </div>
           <p className="text-2xl font-semibold text-red-600">{formatAmount(thisMonthExpense, settings.currency)}</p>
           <p className="text-xs text-gray-400 mt-1">{t('thisMonth')}</p>
-        </div>
+        </button>
       </div>
+
+      {/* Loan Summary Cards */}
+      {activeLoans.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <button
+            onClick={() => router.push('/dashboard/loans')}
+            className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-lg p-5 border border-amber-200 hover:border-amber-300 transition-colors text-left group"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-medium text-amber-700 uppercase tracking-wide">Active Loans</p>
+              <HandCoins className="w-4 h-4 text-amber-600" />
+            </div>
+            <p className="text-2xl font-semibold text-gray-900">{activeLoans.length}</p>
+            <p className="text-xs text-amber-600 mt-1">Click to manage</p>
+          </button>
+
+          <button
+            onClick={() => router.push('/dashboard/loans')}
+            className="bg-gradient-to-br from-red-50 to-pink-50 rounded-lg p-5 border border-red-200 hover:border-red-300 transition-colors text-left group"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-medium text-red-700 uppercase tracking-wide">Total Debt</p>
+              <AlertCircle className="w-4 h-4 text-red-600" />
+            </div>
+            <p className="text-2xl font-semibold text-red-600">{formatAmount(totalDebt, settings.currency)}</p>
+            <p className="text-xs text-red-600 mt-1">Remaining balance</p>
+          </button>
+
+          <button
+            onClick={() => router.push('/dashboard/loans')}
+            className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-5 border border-blue-200 hover:border-blue-300 transition-colors text-left group"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-medium text-blue-700 uppercase tracking-wide">
+                {nextPaymentDue ? 'Next Payment Due' : 'Monthly Payment'}
+              </p>
+              <Banknote className="w-4 h-4 text-blue-600" />
+            </div>
+            {nextPaymentDue ? (
+              <>
+                <p className="text-2xl font-semibold text-blue-600">
+                  {formatAmount(nextPaymentDue.monthlyPayment || 0, settings.currency)}
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  {nextPaymentDue.daysUntilDue === 0 ? 'Due today!' :
+                   nextPaymentDue.daysUntilDue === 1 ? 'Due tomorrow' :
+                   nextPaymentDue.daysUntilDue < 0 ? 'Overdue!' :
+                   `Due in ${nextPaymentDue.daysUntilDue} days`}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-2xl font-semibold text-blue-600">
+                  {formatAmount(totalMonthlyPayment, settings.currency)}
+                </p>
+                <p className="text-xs text-blue-600 mt-1">Total per month</p>
+              </>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Zakat Status Card */}
       <div className="relative bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 rounded-xl border border-emerald-200 overflow-hidden">
@@ -206,7 +414,7 @@ export default function DashboardPage() {
                 <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wide">Total Wealth</p>
                 <Wallet className="w-4 h-4 text-emerald-600" />
               </div>
-              <p className="text-3xl font-bold text-gray-900 mb-1">৳{totalBalance.toLocaleString()}</p>
+              <p className="text-3xl font-bold text-gray-900 mb-1">{formatAmount(totalBalance, settings.currency)}</p>
               <p className="text-xs text-gray-500">All accounts combined</p>
             </div>
 
@@ -215,7 +423,7 @@ export default function DashboardPage() {
                 <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wide">Nisab Threshold</p>
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
               </div>
-              <p className="text-3xl font-bold text-gray-900 mb-1">৳{nisabThreshold.toLocaleString()}</p>
+              <p className="text-3xl font-bold text-gray-900 mb-1">{formatAmount(nisabThreshold, settings.currency)}</p>
               <p className="text-xs text-gray-500">52.5 Tola Silver equivalent</p>
             </div>
           </div>
@@ -306,7 +514,7 @@ export default function DashboardPage() {
                   </p>
                   <div className="bg-red-50 rounded-lg p-4 mb-3">
                     <p className="text-xs text-red-600 font-medium mb-1">Zakat Amount (2.5%)</p>
-                    <p className="text-2xl font-bold text-gray-900">৳{zakatAmount.toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-gray-900">{formatAmount(zakatAmount, settings.currency)}</p>
                   </div>
                   <button
                     onClick={() => router.push('/dashboard/zakat')}
@@ -387,20 +595,63 @@ export default function DashboardPage() {
             View all
           </button>
         </div>
-        <div className="text-center py-16">
-          <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
-            <Receipt className="w-5 h-5 text-gray-400" />
+        
+        {recentTransactions.length === 0 ? (
+          <div className="text-center py-16">
+            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+              <Receipt className="w-5 h-5 text-gray-400" />
+            </div>
+            <p className="text-sm text-gray-600 mb-1">No transactions yet</p>
+            <p className="text-xs text-gray-400 mb-4">Add income or expenses to start tracking</p>
+            <button
+              onClick={() => router.push('/dashboard/transactions')}
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Transaction</span>
+            </button>
           </div>
-          <p className="text-sm text-gray-600 mb-1">No transactions yet</p>
-          <p className="text-xs text-gray-400 mb-4">Add income or expenses to start tracking</p>
-          <button
-            onClick={() => router.push('/dashboard/transactions')}
-            className="inline-flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Transaction</span>
-          </button>
-        </div>
+        ) : (
+          <div className="space-y-2">
+            {recentTransactions.map((transaction) => (
+              <div
+                key={transaction.id}
+                className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg border border-gray-100"
+              >
+                <div className="flex items-center gap-3 flex-1">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                    transaction.isTransfer ? 'bg-blue-50' :
+                    transaction.type === 'Income' ? 'bg-green-50' : 'bg-red-50'
+                  }`}>
+                    {transaction.isTransfer ? (
+                      <ArrowRightLeft size={16} className="text-blue-600" />
+                    ) : transaction.type === 'Income' ? (
+                      <TrendingUp size={16} className="text-green-600" />
+                    ) : (
+                      <TrendingDown size={16} className="text-red-600" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {transaction.isTransfer 
+                        ? `Transfer: ${transaction.fromAccountName} → ${transaction.toAccountName}`
+                        : transaction.description || 'No description'}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {formatDate(transaction.date)} • {getAccountName(transaction.accountId || transaction.fromAccountId)}
+                    </p>
+                  </div>
+                </div>
+                <p className={`text-sm font-semibold ${
+                  transaction.type === 'Income' ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {transaction.type === 'Income' ? '+' : '-'}
+                  {formatAmount(transaction.amount || 0, settings.currency)}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

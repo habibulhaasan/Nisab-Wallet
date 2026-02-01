@@ -21,7 +21,7 @@ const DEFAULT_EXPENSE_CATEGORIES = [
   { name: 'Shopping', type: 'Expense', color: '#8B5CF6', isDefault: true },
   { name: 'Foods', type: 'Expense', color: '#EC4899', isDefault: true },
   { name: 'Healthcare', type: 'Expense', color: '#06B6D4', isDefault: true },
-  { name: 'Loan Repay', type: 'Expense', color: '#F97316', isDefault: true }
+  { name: 'Loan Payment', type: 'Expense', color: '#F97316', isDefault: true }
 ];
 
 export default function CategoriesPage() {
