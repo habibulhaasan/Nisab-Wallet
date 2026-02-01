@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { useRouter } from 'next/navigation';
 import {
   collection,
   addDoc,
@@ -27,13 +28,19 @@ import {
   Loader2,
   HandCoins,
   Building2,
-  Percent,
   ArrowDownCircle,
+  Bell,
+  BellOff,
+  Eye,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
 
 export default function LoansPage() {
   const { user } = useAuth();
+  const router = useRouter();
 
   const [loans, setLoans] = useState([]);
   const [accounts, setAccounts] = useState([]);
@@ -60,6 +67,7 @@ export default function LoansPage() {
     startDate: new Date().toISOString().split('T')[0],
     accountId: '',
     notes: '',
+    enableReminders: true,
   });
 
   const [paymentFormData, setPaymentFormData] = useState({
@@ -187,6 +195,7 @@ export default function LoansPage() {
         accountId: loanFormData.accountId,
         totalInterest: calculations.totalInterest,
         totalRepayment: calculations.totalRepayment,
+        enableReminders: loanFormData.enableReminders,
       };
 
       if (editingLoan) {
@@ -239,7 +248,6 @@ export default function LoansPage() {
     setSubmitting(true);
 
     try {
-      // Calculate principal and interest portions
       let principalPaid = amount;
       let interestPaid = 0;
 
@@ -254,7 +262,6 @@ export default function LoansPage() {
         }
       }
 
-      // Create payment record
       await addDoc(collection(db, 'users', user.uid, 'loanPayments'), {
         loanId: selectedLoan.id,
         amount,
@@ -266,7 +273,6 @@ export default function LoansPage() {
         createdAt: Timestamp.now(),
       });
 
-      // Create expense transaction
       const loanPaymentCategory = await ensureLoanPaymentCategory();
       await addDoc(collection(db, 'users', user.uid, 'transactions'), {
         type: 'Expense',
@@ -278,17 +284,14 @@ export default function LoansPage() {
         createdAt: Timestamp.now(),
       });
 
-      // Update account balance
       await updateAccount(user.uid, account.id, {
         balance: account.balance - amount,
       });
 
-      // Update loan
       const newTotalPaid = selectedLoan.totalPaid + amount;
       const newRemainingBalance = selectedLoan.principalAmount - newTotalPaid;
       const newStatus = newRemainingBalance <= 0 ? 'paid-off' : 'active';
 
-      // Calculate next payment due
       let nextPaymentDue = selectedLoan.nextPaymentDue;
       if (selectedLoan.totalMonths > 0 && newStatus === 'active') {
         const currentDue = new Date(selectedLoan.nextPaymentDue || selectedLoan.startDate);
@@ -308,7 +311,20 @@ export default function LoansPage() {
         updatedAt: Timestamp.now(),
       });
 
-      showToast('Payment recorded successfully', 'success');
+      // Check milestones and show celebration
+      const progress = ((newTotalPaid / selectedLoan.principalAmount) * 100);
+      if (newStatus === 'paid-off') {
+        showToast('🎉 Congratulations! Loan fully paid off!', 'success');
+      } else if (progress >= 75 && ((selectedLoan.totalPaid / selectedLoan.principalAmount) * 100) < 75) {
+        showToast('🎊 75% paid! Great progress!', 'success');
+      } else if (progress >= 50 && ((selectedLoan.totalPaid / selectedLoan.principalAmount) * 100) < 50) {
+        showToast('🌟 Halfway there! Keep it up!', 'success');
+      } else if (progress >= 25 && ((selectedLoan.totalPaid / selectedLoan.principalAmount) * 100) < 25) {
+        showToast('✨ 25% complete!', 'success');
+      } else {
+        showToast('Payment recorded successfully', 'success');
+      }
+
       await loadData();
       closePaymentModal();
     } catch (error) {
@@ -347,13 +363,12 @@ export default function LoansPage() {
     if (!loanToDelete) return;
 
     try {
-      // Check if loan has payments
       const paymentsRef = collection(db, 'users', user.uid, 'loanPayments');
       const q = query(paymentsRef, where('loanId', '==', loanToDelete.id));
       const paymentsSnapshot = await getDocs(q);
 
       if (!paymentsSnapshot.empty) {
-        return showToast('Cannot delete loan with payment history. Archive it instead.', 'error');
+        return showToast('Cannot delete loan with payment history', 'error');
       }
 
       await deleteDoc(doc(db, 'users', user.uid, 'loans', loanToDelete.id));
@@ -365,6 +380,23 @@ export default function LoansPage() {
     } finally {
       setShowDeleteModal(false);
       setLoanToDelete(null);
+    }
+  };
+
+  const toggleReminders = async (loan) => {
+    try {
+      await updateDoc(doc(db, 'users', user.uid, 'loans', loan.id), {
+        enableReminders: !loan.enableReminders,
+        updatedAt: Timestamp.now(),
+      });
+      showToast(
+        loan.enableReminders ? 'Reminders disabled' : 'Reminders enabled',
+        'success'
+      );
+      await loadLoans();
+    } catch (error) {
+      console.error('Error toggling reminders:', error);
+      showToast('Error updating reminders', 'error');
     }
   };
 
@@ -380,6 +412,7 @@ export default function LoansPage() {
       startDate: loan.startDate,
       accountId: loan.accountId || accounts[0]?.id || '',
       notes: loan.notes || '',
+      enableReminders: loan.enableReminders !== false,
     });
     setShowLoanModal(true);
   };
@@ -408,6 +441,7 @@ export default function LoansPage() {
       startDate: new Date().toISOString().split('T')[0],
       accountId: accounts[0]?.id || '',
       notes: '',
+      enableReminders: true,
     });
   };
 
@@ -430,6 +464,15 @@ export default function LoansPage() {
       .padStart(2, '0')}/${d.getFullYear()}`;
   };
 
+  const getDaysUntilDue = (dueDate) => {
+    if (!dueDate) return null;
+    const today = new Date();
+    const due = new Date(dueDate);
+    const diffTime = due.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
   const getAccountName = (id) => accounts.find((a) => a.id === id)?.name || 'Unknown';
 
   const calculations = calculateLoanDetails(loanFormData);
@@ -443,6 +486,16 @@ export default function LoansPage() {
   const activeLoans = loans.filter((l) => l.status === 'active');
   const totalDebt = activeLoans.reduce((sum, l) => sum + l.remainingBalance, 0);
   const totalMonthlyPayment = activeLoans.reduce((sum, l) => sum + (l.monthlyPayment || 0), 0);
+
+  // Get upcoming payments
+  const upcomingPayments = activeLoans
+    .filter((l) => l.nextPaymentDue)
+    .map((l) => ({
+      ...l,
+      daysUntilDue: getDaysUntilDue(l.nextPaymentDue),
+    }))
+    .filter((l) => l.daysUntilDue !== null && l.daysUntilDue <= 7)
+    .sort((a, b) => a.daysUntilDue - b.daysUntilDue);
 
   return (
     <div className="max-w-7xl mx-auto space-y-5 pb-6">
@@ -460,6 +513,36 @@ export default function LoansPage() {
           Add Loan
         </button>
       </div>
+
+      {/* Upcoming Payments Alert */}
+      {upcomingPayments.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle size={20} className="text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-amber-900 mb-2">Upcoming Payments</h3>
+              <div className="space-y-2">
+                {upcomingPayments.map((loan) => (
+                  <div key={loan.id} className="flex items-center justify-between text-sm">
+                    <span className="text-amber-800">
+                      {loan.lenderName} - ৳{loan.monthlyPayment?.toLocaleString() || 'N/A'}
+                    </span>
+                    <span className={`font-medium ${
+                      loan.daysUntilDue === 0 ? 'text-red-600' :
+                      loan.daysUntilDue <= 3 ? 'text-amber-600' :
+                      'text-amber-800'
+                    }`}>
+                      {loan.daysUntilDue === 0 ? 'Due today!' :
+                       loan.daysUntilDue === 1 ? 'Due tomorrow' :
+                       `Due in ${loan.daysUntilDue} days`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -547,6 +630,7 @@ export default function LoansPage() {
           {filteredLoans.map((loan) => {
             const progress = ((loan.totalPaid / loan.principalAmount) * 100).toFixed(0);
             const isQardHasan = loan.loanType === 'qard-hasan';
+            const daysUntilDue = getDaysUntilDue(loan.nextPaymentDue);
 
             return (
               <div
@@ -565,7 +649,8 @@ export default function LoansPage() {
                       )}
                       <h3 className="text-base font-bold text-gray-900">{loan.lenderName}</h3>
                       {loan.status === 'paid-off' && (
-                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded flex items-center gap-1">
+                          <CheckCircle2 size={12} />
                           Paid Off
                         </span>
                       )}
@@ -577,14 +662,34 @@ export default function LoansPage() {
 
                   <div className="flex gap-1">
                     {loan.status === 'active' && (
-                      <button
-                        onClick={() => handleMakePayment(loan)}
-                        className="p-1.5 hover:bg-green-50 rounded text-green-600"
-                        title="Make Payment"
-                      >
-                        <ArrowDownCircle size={16} />
-                      </button>
+                      <>
+                        <button
+                          onClick={() => toggleReminders(loan)}
+                          className={`p-1.5 rounded ${
+                            loan.enableReminders !== false
+                              ? 'hover:bg-blue-50 text-blue-600'
+                              : 'hover:bg-gray-50 text-gray-400'
+                          }`}
+                          title={loan.enableReminders !== false ? 'Disable reminders' : 'Enable reminders'}
+                        >
+                          {loan.enableReminders !== false ? <Bell size={16} /> : <BellOff size={16} />}
+                        </button>
+                        <button
+                          onClick={() => handleMakePayment(loan)}
+                          className="p-1.5 hover:bg-green-50 rounded text-green-600"
+                          title="Make Payment"
+                        >
+                          <ArrowDownCircle size={16} />
+                        </button>
+                      </>
                     )}
+                    <button
+                      onClick={() => router.push(`/dashboard/loans/${loan.id}`)}
+                      className="p-1.5 hover:bg-gray-100 rounded"
+                      title="View Details"
+                    >
+                      <Eye size={16} className="text-gray-500" />
+                    </button>
                     <button
                       onClick={() => handleEditLoan(loan)}
                       className="p-1.5 hover:bg-gray-100 rounded"
@@ -644,10 +749,22 @@ export default function LoansPage() {
                 </div>
 
                 {loan.nextPaymentDue && loan.status === 'active' && (
-                  <div className="mt-3 pt-3 border-t border-gray-100">
-                    <p className="text-xs text-gray-600">
-                      Next payment due: <span className="font-medium text-gray-900">{formatDate(loan.nextPaymentDue)}</span>
+                  <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+                    <p className="text-xs text-gray-600 flex items-center gap-1">
+                      <Clock size={12} />
+                      Next payment: <span className="font-medium text-gray-900">{formatDate(loan.nextPaymentDue)}</span>
                     </p>
+                    {daysUntilDue !== null && daysUntilDue <= 7 && (
+                      <span className={`text-xs font-medium ${
+                        daysUntilDue === 0 ? 'text-red-600' :
+                        daysUntilDue <= 3 ? 'text-amber-600' :
+                        'text-blue-600'
+                      }`}>
+                        {daysUntilDue === 0 ? 'Due today!' :
+                         daysUntilDue === 1 ? 'Due tomorrow' :
+                         `${daysUntilDue} days left`}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -656,10 +773,10 @@ export default function LoansPage() {
         </div>
       )}
 
-      {/* Add/Edit Loan Modal */}
+      {/* Add/Edit Loan Modal - keeping the same as before */}
       {showLoanModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-2xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg w-full max-w-2xl p-6 shadow-2xl my-8">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-lg font-bold text-gray-900">
                 {editingLoan ? 'Edit Loan' : 'New Loan'}
@@ -824,6 +941,20 @@ export default function LoansPage() {
                 </div>
               </div>
 
+              {/* Enable Reminders */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="enableReminders"
+                  checked={loanFormData.enableReminders}
+                  onChange={(e) => setLoanFormData((p) => ({ ...p, enableReminders: e.target.checked }))}
+                  className="rounded"
+                />
+                <label htmlFor="enableReminders" className="text-sm text-gray-700">
+                  Enable payment reminders
+                </label>
+              </div>
+
               {/* Notes */}
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
@@ -892,7 +1023,7 @@ export default function LoansPage() {
         </div>
       )}
 
-      {/* Make Payment Modal */}
+      {/* Make Payment Modal - keeping the same as before */}
       {showPaymentModal && selectedLoan && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg w-full max-w-md p-6 shadow-2xl">
@@ -911,7 +1042,6 @@ export default function LoansPage() {
             </div>
 
             <form onSubmit={handlePaymentSubmit} className="space-y-4">
-              {/* Payment Amount */}
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
                   Payment Amount (৳) *
@@ -933,7 +1063,6 @@ export default function LoansPage() {
                 )}
               </div>
 
-              {/* Account */}
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
                   Pay from Account *
@@ -953,7 +1082,6 @@ export default function LoansPage() {
                 </select>
               </div>
 
-              {/* Payment Date */}
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
                   Payment Date *
@@ -968,7 +1096,6 @@ export default function LoansPage() {
                 />
               </div>
 
-              {/* Notes */}
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
                 <input
@@ -981,7 +1108,6 @@ export default function LoansPage() {
                 />
               </div>
 
-              {/* Warning */}
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                 <p className="text-xs text-amber-800 flex items-start gap-2">
                   <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
@@ -989,7 +1115,6 @@ export default function LoansPage() {
                 </p>
               </div>
 
-              {/* Buttons */}
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
