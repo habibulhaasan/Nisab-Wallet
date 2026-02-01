@@ -360,7 +360,7 @@ export default function LoansPage() {
         showToast('🎊 75% paid! Great progress!', 'success');
       } else if (progress >= 50 && ((selectedLoan.totalPaid / selectedLoan.principalAmount) * 100) < 50) {
         showToast('🌟 Halfway there! Keep it up!', 'success');
-      } else if (progress >= 25 && ((selectedLoan.totalPaid / selectedLoan.principalAmount) * 100) < 25) {
+      } else if (progress >= 25 && ((selectedLoan.totalPaid / selectedLoan.principalAccount) * 100) < 25) {
         showToast('✨ 25% complete!', 'success');
       } else {
         showToast('Payment recorded successfully', 'success');
@@ -811,11 +811,12 @@ export default function LoansPage() {
         </div>
       )}
 
-      {/* Add/Edit Loan Modal - COMPACT VERSION WITHOUT SCROLLING */}
+      {/* Add/Edit Loan Modal - FULLY RESPONSIVE WITH SCROLLING */}
       {showLoanModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-3xl shadow-2xl">
-            <div className="bg-white border-b border-gray-200 px-6 py-3 rounded-t-lg">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-2 sm:p-4 z-50">
+          <div className="bg-white rounded-lg w-full max-w-3xl max-h-[95vh] sm:max-h-[90vh] flex flex-col shadow-2xl">
+            {/* Fixed Header */}
+            <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 rounded-t-lg flex-shrink-0">
               <div className="flex justify-between items-center">
                 <h2 className="text-base font-bold text-gray-900">
                   {editingLoan ? 'Edit Loan' : 'New Loan'}
@@ -826,230 +827,233 @@ export default function LoansPage() {
               </div>
             </div>
 
-            <form onSubmit={handleLoanSubmit} className="p-6 space-y-3">
-              {/* Loan Type */}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setLoanFormData((p) => ({ ...p, loanType: 'qard-hasan', interestRate: '0' }))}
-                  className={`p-2 rounded-lg border-2 transition ${
-                    loanFormData.loanType === 'qard-hasan'
-                      ? 'border-green-500 bg-green-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <HandCoins size={16} className={`mx-auto mb-1 ${loanFormData.loanType === 'qard-hasan' ? 'text-green-600' : 'text-gray-400'}`} />
-                  <p className="text-xs font-medium">Qard Hasan</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLoanFormData((p) => ({ ...p, loanType: 'interest', interestRate: '' }))}
-                  className={`p-2 rounded-lg border-2 transition ${
-                    loanFormData.loanType === 'interest'
-                      ? 'border-amber-500 bg-amber-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <Building2 size={16} className={`mx-auto mb-1 ${loanFormData.loanType === 'interest' ? 'text-amber-600' : 'text-gray-400'}`} />
-                  <p className="text-xs font-medium">Interest-based</p>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                {/* Row 1 */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Lender Name *</label>
-                  <input
-                    type="text"
-                    value={loanFormData.lenderName}
-                    onChange={(e) => setLoanFormData((p) => ({ ...p, lenderName: e.target.value }))}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
-                    placeholder="Bank XYZ"
-                    required
-                    disabled={submitting}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Principal Amount (৳) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={loanFormData.principalAmount}
-                    onChange={(e) => setLoanFormData((p) => ({ ...p, principalAmount: e.target.value }))}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
-                    placeholder="50000"
-                    required
-                    disabled={submitting}
-                  />
-                </div>
-
-                {/* Row 2 */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Interest Rate (%) {loanFormData.loanType === 'interest' && '*'}
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={loanFormData.interestRate}
-                    onChange={(e) => setLoanFormData((p) => ({ ...p, interestRate: e.target.value }))}
-                    className={`w-full px-2 py-1.5 border rounded text-sm transition ${
+            {/* Scrollable Form Content */}
+            <div className="overflow-y-auto flex-1 p-4 sm:p-6">
+              <form onSubmit={handleLoanSubmit} className="space-y-3">
+                {/* Loan Type */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLoanFormData((p) => ({ ...p, loanType: 'qard-hasan', interestRate: '0' }))}
+                    className={`p-2 rounded-lg border-2 transition ${
                       loanFormData.loanType === 'qard-hasan'
-                        ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
-                        : 'bg-white border-gray-300'
+                        ? 'border-green-500 bg-green-50'
+                        : 'border-gray-200 hover:border-gray-300'
                     }`}
-                    placeholder="12.5"
-                    required={loanFormData.loanType === 'interest'}
-                    disabled={submitting || loanFormData.loanType === 'qard-hasan'}
+                  >
+                    <HandCoins size={16} className={`mx-auto mb-1 ${loanFormData.loanType === 'qard-hasan' ? 'text-green-600' : 'text-gray-400'}`} />
+                    <p className="text-xs font-medium">Qard Hasan</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLoanFormData((p) => ({ ...p, loanType: 'interest', interestRate: '' }))}
+                    className={`p-2 rounded-lg border-2 transition ${
+                      loanFormData.loanType === 'interest'
+                        ? 'border-amber-500 bg-amber-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <Building2 size={16} className={`mx-auto mb-1 ${loanFormData.loanType === 'interest' ? 'text-amber-600' : 'text-gray-400'}`} />
+                    <p className="text-xs font-medium">Interest-based</p>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Row 1 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Lender Name *</label>
+                    <input
+                      type="text"
+                      value={loanFormData.lenderName}
+                      onChange={(e) => setLoanFormData((p) => ({ ...p, lenderName: e.target.value }))}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                      placeholder="Bank XYZ"
+                      required
+                      disabled={submitting}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Principal Amount (৳) *</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={loanFormData.principalAmount}
+                      onChange={(e) => setLoanFormData((p) => ({ ...p, principalAmount: e.target.value }))}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                      placeholder="50000"
+                      required
+                      disabled={submitting}
+                    />
+                  </div>
+
+                  {/* Row 2 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Interest Rate (%) {loanFormData.loanType === 'interest' && '*'}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={loanFormData.interestRate}
+                      onChange={(e) => setLoanFormData((p) => ({ ...p, interestRate: e.target.value }))}
+                      className={`w-full px-2 py-1.5 border rounded text-sm transition ${
+                        loanFormData.loanType === 'qard-hasan'
+                          ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                          : 'bg-white border-gray-300'
+                      }`}
+                      placeholder="12.5"
+                      required={loanFormData.loanType === 'interest'}
+                      disabled={submitting || loanFormData.loanType === 'qard-hasan'}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Start Date *</label>
+                    <input
+                      type="date"
+                      value={loanFormData.startDate}
+                      onChange={(e) => setLoanFormData((p) => ({ ...p, startDate: e.target.value }))}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                      required
+                      disabled={submitting}
+                    />
+                  </div>
+
+                  {/* Row 3 - Monthly Payment OR Duration */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Monthly Payment (৳)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={loanFormData.monthlyPayment}
+                      onChange={(e) => setLoanFormData((p) => ({ ...p, monthlyPayment: e.target.value, totalMonths: '' }))}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                      placeholder="Auto-calculated"
+                      disabled={submitting || loanFormData.totalMonths}
+                    />
+                    {calculations.monthlyPayment > 0 && !loanFormData.monthlyPayment && (
+                      <p className="text-xs text-green-600 mt-0.5">Auto: ৳{calculations.monthlyPayment.toFixed(2)}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Duration (months)
+                    </label>
+                    <input
+                      type="number"
+                      value={loanFormData.totalMonths}
+                      onChange={(e) => setLoanFormData((p) => ({ ...p, totalMonths: e.target.value, monthlyPayment: '' }))}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                      placeholder="24"
+                      disabled={submitting || loanFormData.monthlyPayment}
+                    />
+                    {calculations.totalMonths > 0 && !loanFormData.totalMonths && (
+                      <p className="text-xs text-green-600 mt-0.5">Auto: {calculations.totalMonths} months</p>
+                    )}
+                  </div>
+
+                  {/* Row 4 */}
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Pay from Account</label>
+                    <select
+                      value={loanFormData.accountId}
+                      onChange={(e) => setLoanFormData((p) => ({ ...p, accountId: e.target.value }))}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                      disabled={submitting}
+                    >
+                      {accounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name} (৳{a.balance.toLocaleString()})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Reminder & Notes */}
+                <div className="flex items-center gap-2 py-1">
+                  <input
+                    type="checkbox"
+                    id="enableReminders"
+                    checked={loanFormData.enableReminders}
+                    onChange={(e) => setLoanFormData((p) => ({ ...p, enableReminders: e.target.checked }))}
+                    className="rounded"
                   />
+                  <label htmlFor="enableReminders" className="text-xs text-gray-700">
+                    Enable payment reminders
+                  </label>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Start Date *</label>
-                  <input
-                    type="date"
-                    value={loanFormData.startDate}
-                    onChange={(e) => setLoanFormData((p) => ({ ...p, startDate: e.target.value }))}
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
+                  <textarea
+                    value={loanFormData.notes}
+                    onChange={(e) => setLoanFormData((p) => ({ ...p, notes: e.target.value }))}
                     className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
-                    required
+                    rows="2"
+                    placeholder="Additional details..."
                     disabled={submitting}
                   />
                 </div>
 
-                {/* Row 3 - Monthly Payment OR Duration */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Monthly Payment (৳)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={loanFormData.monthlyPayment}
-                    onChange={(e) => setLoanFormData((p) => ({ ...p, monthlyPayment: e.target.value, totalMonths: '' }))}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
-                    placeholder="Auto-calculated"
-                    disabled={submitting || loanFormData.totalMonths}
-                  />
-                  {calculations.monthlyPayment > 0 && !loanFormData.monthlyPayment && (
-                    <p className="text-xs text-green-600 mt-0.5">Auto: ৳{calculations.monthlyPayment.toFixed(2)}</p>
-                  )}
+                {/* Calculation Summary */}
+                <div className="bg-gray-50 rounded-lg p-3 space-y-1">
+                  <p className="text-xs font-medium text-gray-700 mb-1">Summary</p>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <p className="text-gray-500">Monthly</p>
+                      <p className="font-semibold text-gray-900">৳{calculations.monthlyPayment.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Interest</p>
+                      <p className="font-semibold text-amber-600">৳{calculations.totalInterest.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Total</p>
+                      <p className="font-semibold text-gray-900">৳{calculations.totalRepayment.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Duration (months)
-                  </label>
-                  <input
-                    type="number"
-                    value={loanFormData.totalMonths}
-                    onChange={(e) => setLoanFormData((p) => ({ ...p, totalMonths: e.target.value, monthlyPayment: '' }))}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
-                    placeholder="24"
-                    disabled={submitting || loanFormData.monthlyPayment}
-                  />
-                  {calculations.totalMonths > 0 && !loanFormData.totalMonths && (
-                    <p className="text-xs text-green-600 mt-0.5">Auto: {calculations.totalMonths} months</p>
-                  )}
-                </div>
-
-                {/* Row 4 */}
-                <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Pay from Account</label>
-                  <select
-                    value={loanFormData.accountId}
-                    onChange={(e) => setLoanFormData((p) => ({ ...p, accountId: e.target.value }))}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                {/* Buttons */}
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={closeLoanModal}
+                    className="flex-1 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
                     disabled={submitting}
                   >
-                    {accounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name} (৳{a.balance.toLocaleString()})
-                      </option>
-                    ))}
-                  </select>
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2 bg-gray-900 text-white rounded-lg text-sm hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2"
+                    disabled={submitting}
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 className="animate-spin" size={16} />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <span>{editingLoan ? 'Update Loan' : 'Create Loan'}</span>
+                    )}
+                  </button>
                 </div>
-              </div>
-
-              {/* Reminder & Notes */}
-              <div className="flex items-center gap-2 py-1">
-                <input
-                  type="checkbox"
-                  id="enableReminders"
-                  checked={loanFormData.enableReminders}
-                  onChange={(e) => setLoanFormData((p) => ({ ...p, enableReminders: e.target.checked }))}
-                  className="rounded"
-                />
-                <label htmlFor="enableReminders" className="text-xs text-gray-700">
-                  Enable payment reminders
-                </label>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
-                <textarea
-                  value={loanFormData.notes}
-                  onChange={(e) => setLoanFormData((p) => ({ ...p, notes: e.target.value }))}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
-                  rows="2"
-                  placeholder="Additional details..."
-                  disabled={submitting}
-                />
-              </div>
-
-              {/* Calculation Summary */}
-              <div className="bg-gray-50 rounded-lg p-3 space-y-1">
-                <p className="text-xs font-medium text-gray-700 mb-1">Summary</p>
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div>
-                    <p className="text-gray-500">Monthly</p>
-                    <p className="font-semibold text-gray-900">৳{calculations.monthlyPayment.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Interest</p>
-                    <p className="font-semibold text-amber-600">৳{calculations.totalInterest.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Total</p>
-                    <p className="font-semibold text-gray-900">৳{calculations.totalRepayment.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Buttons */}
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={closeLoanModal}
-                  className="flex-1 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
-                  disabled={submitting}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2 bg-gray-900 text-white rounded-lg text-sm hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2"
-                  disabled={submitting}
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="animate-spin" size={16} />
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    <span>{editingLoan ? 'Update Loan' : 'Create Loan'}</span>
-                  )}
-                </button>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Payment Modal - keeping the same */}
+      {/* Payment Modal */}
       {showPaymentModal && selectedLoan && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-md p-6 shadow-2xl">
+          <div className="bg-white rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto p-6 shadow-2xl">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-lg font-bold text-gray-900">Make Loan Payment</h2>
               <button onClick={closePaymentModal} className="text-gray-400 hover:text-gray-600">
