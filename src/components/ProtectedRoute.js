@@ -45,8 +45,15 @@ export default function ProtectedRoute({ children }) {
     return null;
   }
 
-  // Check access status and show appropriate screen
-  if (accessStatus && !accessStatus.hasAccess) {
+  // ✅ FIXED: Check if user has ANY active access (active, trial, or free)
+  const hasActiveAccess = 
+    accessStatus?.userData?.subscriptionStatus === 'free_lifetime' ||
+    accessStatus?.userData?.role === 'admin' ||
+    accessStatus?.subscription?.status === 'active' ||
+    accessStatus?.subscription?.status === 'trial';
+
+  // Only show no access screen if user has NO active access
+  if (accessStatus && !hasActiveAccess && !accessStatus.hasAccess) {
     return <NoAccessScreen reason={accessStatus.reason} userData={accessStatus.userData} subscription={accessStatus.subscription} />;
   }
 

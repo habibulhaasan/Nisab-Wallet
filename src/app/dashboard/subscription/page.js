@@ -69,17 +69,23 @@ export default function SubscriptionPage() {
       const today = new Date().toISOString().split('T')[0];
       const endDate = calculateTrialEndDate(today, selectedPlan.durationDays);
 
-      await createUserSubscription(user.uid, {
-        planId: selectedPlan.planId,
-        planName: selectedPlan.name,
-        status: 'pending_approval',
-        startDate: today,
-        endDate: endDate,
-        paymentMethod: paymentMethod,
-        transactionId: transactionId,
-        amount: selectedPlan.price,
-        isFirstSubscription: false
-      });
+      // Check if user has active subscription (extension)
+    const isExtension = currentSubscription && 
+      (currentSubscription.status === 'active' || currentSubscription.status === 'trial');
+
+    await createUserSubscription(user.uid, {
+      planId: selectedPlan.planId,
+      planName: selectedPlan.name,
+      status: 'pending_approval',
+      startDate: today,
+      endDate: endDate,
+      paymentMethod: paymentMethod,
+      transactionId: transactionId,
+      amount: selectedPlan.price,
+      isFirstSubscription: false,
+      isExtension: isExtension,  // ← ADD THIS
+      durationDays: selectedPlan.durationDays  // ← MAKE SURE THIS EXISTS
+    });
 
       router.push('/pending-approval');
     } catch (err) {

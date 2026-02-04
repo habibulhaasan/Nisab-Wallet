@@ -1,7 +1,6 @@
 // src/app/dashboard/layout.js
 import ProtectedRoute from '@/components/ProtectedRoute';
 import DashboardNav from '@/components/DashboardNav';
-import Breadcrumb from '@/components/Breadcrumb';
 
 export default function DashboardLayout({ children }) {
   return (
@@ -9,12 +8,8 @@ export default function DashboardLayout({ children }) {
       <div className="min-h-screen bg-gray-50">
         <DashboardNav />
         
-        {/* Main Content Area */}
-        <div className="lg:pl-56">
-          {/* Breadcrumb Navigation */}
-          <Breadcrumb />
-          
-          {/* Page Content */}
+        {/* Main Content */}
+        <div className="lg:pl-64">
           <main className="py-6 px-4 sm:px-6 lg:px-8">
             {children}
           </main>

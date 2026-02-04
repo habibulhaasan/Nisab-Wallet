@@ -129,6 +129,8 @@ export const createUserSubscription = async (userId, subscriptionData) => {
       transactionId: subscriptionData.transactionId || '',
       amount: parseFloat(subscriptionData.amount || 0),
       isFirstSubscription: subscriptionData.isFirstSubscription || false,
+      isExtension: subscriptionData.isExtension || false,
+      durationDays: subscriptionData.durationDays || 0,
       approvedBy: subscriptionData.approvedBy || null,
       approvedAt: subscriptionData.approvedAt || null,
       createdAt: serverTimestamp()
@@ -142,17 +144,27 @@ export const createUserSubscription = async (userId, subscriptionData) => {
 };
 
 /**
- * Get user's current subscription
+ * Get user's current subscription (ACTIVE or TRIAL only, not PENDING)
  */
 export const getCurrentSubscription = async (userId) => {
   try {
     const subsRef = collection(db, 'users', userId, 'subscriptions');
+    // Get all subscriptions sorted by creation date
     const q = query(subsRef, orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(q);
     
+    // Find the first active or trial subscription
+    for (const doc of querySnapshot.docs) {
+      const subData = doc.data();
+      if (subData.status === SUBSCRIPTION_STATUS.ACTIVE || subData.status === SUBSCRIPTION_STATUS.TRIAL) {
+        return { success: true, subscription: { id: doc.id, ...subData } };
+      }
+    }
+    
+    // If no active/trial found, return the most recent one (could be pending, expired, etc.)
     if (!querySnapshot.empty) {
-      const currentSub = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() };
-      return { success: true, subscription: currentSub };
+      const latestSub = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() };
+      return { success: true, subscription: latestSub };
     }
     
     return { success: true, subscription: null };
@@ -203,6 +215,7 @@ export const updateSubscriptionStatus = async (userId, subscriptionDocId, update
 
 /**
  * Check if user has valid access
+ * ✅ FIXED: Now checks for ANY active or trial subscription, not just the latest one
  */
 export const checkUserAccess = async (userId) => {
   try {
@@ -231,49 +244,63 @@ export const checkUserAccess = async (userId) => {
       return { hasAccess: true, reason: 'Admin access', userData };
     }
     
-    // Get current subscription
-    const { subscription } = await getCurrentSubscription(userId);
+    // ✅ FIX: Get ALL subscriptions and find ANY active or trial
+    const subsRef = collection(db, 'users', userId, 'subscriptions');
+    const q = query(subsRef, orderBy('createdAt', 'desc'));
+    const querySnapshot = await getDocs(q);
     
-    if (!subscription) {
+    if (querySnapshot.empty) {
       return { hasAccess: false, reason: 'No subscription found', userData };
     }
     
-    // Check trial status
-    if (subscription.status === SUBSCRIPTION_STATUS.TRIAL) {
-      const now = new Date();
-      const endDate = new Date(subscription.endDate);
+    const allSubscriptions = [];
+    querySnapshot.forEach((doc) => {
+      allSubscriptions.push({ id: doc.id, ...doc.data() });
+    });
+    
+    // Find the first active or trial subscription
+    const now = new Date();
+    
+    for (const subscription of allSubscriptions) {
+      // Check trial status
+      if (subscription.status === SUBSCRIPTION_STATUS.TRIAL) {
+        const endDate = new Date(subscription.endDate);
+        if (now <= endDate) {
+          return { hasAccess: true, reason: 'Trial period active', subscription, userData };
+        }
+      }
       
-      if (now <= endDate) {
-        return { hasAccess: true, reason: 'Trial period active', subscription, userData };
-      } else {
-        return { hasAccess: false, reason: 'Trial expired', subscription, userData };
+      // Check active subscription
+      if (subscription.status === SUBSCRIPTION_STATUS.ACTIVE) {
+        const endDate = new Date(subscription.endDate);
+        if (now <= endDate) {
+          return { hasAccess: true, reason: 'Active subscription', subscription, userData };
+        }
       }
     }
     
-    // Check active subscription
-    if (subscription.status === SUBSCRIPTION_STATUS.ACTIVE) {
-      const now = new Date();
-      const endDate = new Date(subscription.endDate);
-      
-      if (now <= endDate) {
-        return { hasAccess: true, reason: 'Active subscription', subscription, userData };
-      } else {
-        return { hasAccess: false, reason: 'Subscription expired', subscription, userData };
-      }
+    // If we get here, user has subscriptions but none are active/trial or all are expired
+    // Check what the latest subscription status is
+    const latestSubscription = allSubscriptions[0];
+    
+    if (latestSubscription.status === SUBSCRIPTION_STATUS.TRIAL) {
+      return { hasAccess: false, reason: 'Trial expired', subscription: latestSubscription, userData };
     }
     
-    // Check pending approval
-    if (subscription.status === SUBSCRIPTION_STATUS.PENDING) {
-      return { hasAccess: false, reason: 'Pending admin approval', subscription, userData };
+    if (latestSubscription.status === SUBSCRIPTION_STATUS.ACTIVE) {
+      return { hasAccess: false, reason: 'Subscription expired', subscription: latestSubscription, userData };
     }
     
-    // Check rejected
-    if (subscription.status === SUBSCRIPTION_STATUS.REJECTED) {
-      return { hasAccess: false, reason: 'Subscription rejected', subscription, userData };
+    if (latestSubscription.status === SUBSCRIPTION_STATUS.PENDING) {
+      return { hasAccess: false, reason: 'Pending admin approval', subscription: latestSubscription, userData };
+    }
+    
+    if (latestSubscription.status === SUBSCRIPTION_STATUS.REJECTED) {
+      return { hasAccess: false, reason: 'Subscription rejected', subscription: latestSubscription, userData };
     }
     
     // Default: no access
-    return { hasAccess: false, reason: 'Invalid subscription status', subscription, userData };
+    return { hasAccess: false, reason: 'Invalid subscription status', subscription: latestSubscription, userData };
     
   } catch (error) {
     console.error('Error checking user access:', error);

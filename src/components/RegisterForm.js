@@ -460,7 +460,7 @@ export default function RegisterForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-black-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed mt-6"
+            className="w-full bg-gray-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed mt-6"
           >
             {loading ? 'Creating account...' : registrationType === 'trial' ? 'Start Free Trial' : 'Complete Purchase'}
           </button>

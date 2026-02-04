@@ -4,13 +4,15 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { getRevenueStatistics, checkIsAdmin, getAllUsers } from '@/lib/adminUtils';
+import { getRevenueStatistics, checkIsAdmin, getAllUsers, approveSubscription, rejectSubscription } from '@/lib/adminUtils';
 import { getUserSubscriptionHistory } from '@/lib/subscriptionUtils';
 import { 
   DollarSign, TrendingUp, Users, Calendar, Download, 
-  CreditCard, Clock, CheckCircle 
+  CreditCard, Clock, CheckCircle, XCircle, AlertCircle
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { ToastContainer } from '@/components/ToastNotification';
+import { useToast } from '@/hooks/useToast';
 
 export default function FinanceDashboardPage() {
   const { user } = useAuth();
@@ -19,7 +21,18 @@ export default function FinanceDashboardPage() {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [dateRange, setDateRange] = useState('all'); // all, today, week, month, year
+  const [statusFilter, setStatusFilter] = useState('all'); // all, approved, pending, rejected
+  const { toasts, addToast, removeToast } = useToast();
+
+  // Format date as dd/mm/yyyy
+  const formatDate = (date) => {
+    if (!date) return 'N/A';
+    const d = date instanceof Date ? date : (date.toDate ? date.toDate() : new Date(date));
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
 
   useEffect(() => {
     if (user) {
@@ -55,7 +68,8 @@ export default function FinanceDashboardPage() {
         const subsResult = await getUserSubscriptionHistory(u.id);
         if (subsResult.success) {
           subsResult.subscriptions.forEach(sub => {
-            if (sub.amount > 0 && sub.status !== 'pending_approval') {
+            // Include all paid subscriptions (approved, pending, rejected)
+            if (sub.amount > 0) {
               allPayments.push({
                 ...sub,
                 userName: u.name,
@@ -80,11 +94,53 @@ export default function FinanceDashboardPage() {
     setLoading(false);
   };
 
+  const handleApprove = async (userId, subscriptionId, paymentData) => {
+    if (!confirm(`Approve payment of ৳${paymentData.amount} from ${paymentData.userName}?`)) {
+      return;
+    }
+
+    const result = await approveSubscription(userId, subscriptionId, user.uid);
+    
+    if (result.success) {
+      addToast('Payment approved successfully', 'success');
+      loadFinanceData();
+    } else {
+      addToast('Error: ' + result.error, 'error');
+    }
+  };
+
+  const handleReject = async (userId, subscriptionId, paymentData) => {
+    const reason = prompt('Please provide a reason for rejection:');
+    
+    if (!reason || !reason.trim()) {
+      addToast('Rejection reason is required', 'error');
+      return;
+    }
+
+    const result = await rejectSubscription(userId, subscriptionId, user.uid, reason);
+    
+    if (result.success) {
+      addToast('Payment rejected', 'success');
+      loadFinanceData();
+    } else {
+      addToast('Error: ' + result.error, 'error');
+    }
+  };
+
   const exportToCSV = () => {
+    const filteredPayments = statusFilter === 'all' 
+      ? payments 
+      : payments.filter(p => {
+          if (statusFilter === 'approved') return p.status === 'active';
+          if (statusFilter === 'pending') return p.status === 'pending_approval';
+          if (statusFilter === 'rejected') return p.status === 'rejected';
+          return true;
+        });
+
     const csvContent = [
       ['Date', 'User', 'Email', 'Plan', 'Amount', 'Payment Method', 'Transaction ID', 'Status'],
-      ...payments.map(p => [
-        p.createdAt?.toDate?.()?.toLocaleDateString() || 'N/A',
+      ...filteredPayments.map(p => [
+        formatDate(p.createdAt),
         p.userName || 'Unknown',
         p.userEmail || 'N/A',
         p.planName || 'N/A',
@@ -103,6 +159,18 @@ export default function FinanceDashboardPage() {
     a.click();
   };
 
+  // Calculate statistics
+  const approvedRevenue = payments
+    .filter(p => p.status === 'active')
+    .reduce((sum, p) => sum + (p.amount || 0), 0);
+
+  const pendingRevenue = payments
+    .filter(p => p.status === 'pending_approval')
+    .reduce((sum, p) => sum + (p.amount || 0), 0);
+
+  const approvedCount = payments.filter(p => p.status === 'active').length;
+  const pendingCount = payments.filter(p => p.status === 'pending_approval').length;
+
   // Prepare chart data
   const getRevenueChartData = () => {
     if (!stats?.revenueByDate) return [];
@@ -117,7 +185,7 @@ export default function FinanceDashboardPage() {
 
   const getPaymentMethodData = () => {
     const methodCounts = {};
-    payments.forEach(p => {
+    payments.filter(p => p.status === 'active').forEach(p => {
       const method = p.paymentMethod || 'Unknown';
       methodCounts[method] = (methodCounts[method] || 0) + p.amount;
     });
@@ -126,6 +194,16 @@ export default function FinanceDashboardPage() {
   };
 
   const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
+
+  // Filter payments
+  const filteredPayments = statusFilter === 'all' 
+    ? payments 
+    : payments.filter(p => {
+        if (statusFilter === 'approved') return p.status === 'active';
+        if (statusFilter === 'pending') return p.status === 'pending_approval';
+        if (statusFilter === 'rejected') return p.status === 'rejected';
+        return true;
+      });
 
   if (loading) {
     return (
@@ -162,16 +240,27 @@ export default function FinanceDashboardPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
         <div className="bg-white border border-gray-200 rounded-lg p-6">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-gray-500">Total Revenue</p>
-            <DollarSign className="text-green-600" size={20} />
+            <p className="text-sm text-gray-500">Approved Revenue</p>
+            <CheckCircle className="text-green-600" size={20} />
           </div>
           <p className="text-3xl font-bold text-gray-900">
-            ৳{stats?.totalRevenue?.toLocaleString() || 0}
+            ৳{approvedRevenue?.toLocaleString() || 0}
           </p>
-          <p className="text-xs text-gray-500 mt-1">All time</p>
+          <p className="text-xs text-gray-500 mt-1">{approvedCount} payments</p>
+        </div>
+
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm text-gray-500">Pending Revenue</p>
+            <Clock className="text-yellow-600" size={20} />
+          </div>
+          <p className="text-3xl font-bold text-yellow-600">
+            ৳{pendingRevenue?.toLocaleString() || 0}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">{pendingCount} awaiting</p>
         </div>
 
         <div className="bg-white border border-gray-200 rounded-lg p-6">
@@ -253,7 +342,19 @@ export default function FinanceDashboardPage() {
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-900">Payment History</h3>
-          <span className="text-sm text-gray-500">{payments.length} total payments</span>
+          <div className="flex items-center gap-4">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All ({payments.length})</option>
+              <option value="approved">Approved ({approvedCount})</option>
+              <option value="pending">Pending ({pendingCount})</option>
+              <option value="rejected">Rejected ({payments.filter(p => p.status === 'rejected').length})</option>
+            </select>
+            <span className="text-sm text-gray-500">{filteredPayments.length} payments</span>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -267,13 +368,14 @@ export default function FinanceDashboardPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment Method</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Transaction ID</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {payments.map((payment, idx) => (
+              {filteredPayments.map((payment, idx) => (
                 <tr key={idx} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-sm text-gray-600">
-                    {payment.createdAt?.toDate?.()?.toLocaleDateString() || 'N/A'}
+                    {formatDate(payment.createdAt)}
                   </td>
                   <td className="px-4 py-3">
                     <div>
@@ -281,34 +383,75 @@ export default function FinanceDashboardPage() {
                       <p className="text-xs text-gray-500">{payment.userEmail}</p>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-900">{payment.planName}</td>
+                  <td className="px-4 py-3 text-sm text-gray-900">
+                    {payment.planName}
+                    {payment.isExtension && (
+                      <span className="ml-2 px-2 py-0.5 bg-purple-100 text-purple-800 text-xs rounded-full">
+                        Extension
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-sm font-semibold text-gray-900">
                     ৳{payment.amount?.toLocaleString()}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">{payment.paymentMethod}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{payment.transactionId}</td>
+                  <td className="px-4 py-3">
+                    <p className="text-sm text-gray-900 font-mono">{payment.transactionId}</p>
+                  </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 text-xs rounded-full ${
                       payment.status === 'active' ? 'bg-green-100 text-green-800' :
+                      payment.status === 'pending_approval' ? 'bg-yellow-100 text-yellow-800' :
                       payment.status === 'rejected' ? 'bg-red-100 text-red-800' :
                       'bg-gray-100 text-gray-800'
                     }`}>
-                      {payment.status}
+                      {payment.status === 'active' ? 'Approved' :
+                       payment.status === 'pending_approval' ? 'Pending' :
+                       payment.status === 'rejected' ? 'Rejected' :
+                       payment.status}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {payment.status === 'pending_approval' && (
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleApprove(payment.userId, payment.id, payment)}
+                          className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                          title="Approve"
+                        >
+                          <CheckCircle size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleReject(payment.userId, payment.id, payment)}
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                          title="Reject"
+                        >
+                          <XCircle size={18} />
+                        </button>
+                      </div>
+                    )}
+                    {payment.status === 'rejected' && payment.rejectionReason && (
+                      <span className="text-xs text-red-600" title={payment.rejectionReason}>
+                        <AlertCircle size={16} className="inline" />
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
 
-          {payments.length === 0 && (
+          {filteredPayments.length === 0 && (
             <div className="text-center py-12">
               <CreditCard className="mx-auto text-gray-400 mb-4" size={48} />
-              <p className="text-gray-500">No payment history yet</p>
+              <p className="text-gray-500">No payments found</p>
             </div>
           )}
         </div>
       </div>
+
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} removeToast={removeToast} position="top" />
     </div>
   );
 }

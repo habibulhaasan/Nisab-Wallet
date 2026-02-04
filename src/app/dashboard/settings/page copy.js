@@ -42,43 +42,6 @@ export default function SettingsPage() {
     return `${day}/${month}/${year}`;
   };
 
-  // Calculate final end date including ALL pending extensions
-  const calculateFinalEndDate = (currentEndDate, subscriptionHistory) => {
-    if (!subscriptionHistory || subscriptionHistory.length === 0) {
-      return currentEndDate;
-    }
-    
-    // Get all pending extensions
-    const pendingExtensions = subscriptionHistory.filter(
-      sub => sub.status === 'pending_approval' && sub.isExtension === true
-    );
-    
-    if (pendingExtensions.length === 0) {
-      return currentEndDate;
-    }
-    
-    // Calculate total extension days
-    let totalExtensionDays = 0;
-    pendingExtensions.forEach(ext => {
-      totalExtensionDays += parseInt(ext.durationDays || 0);
-    });
-    
-    // Add to current end date
-    const baseDate = new Date(currentEndDate);
-    const finalDate = new Date(baseDate);
-    finalDate.setDate(finalDate.getDate() + totalExtensionDays);
-    
-    return finalDate.toISOString().split('T')[0];
-  };
-
-  // Check if user has pending extensions
-  const hasPendingExtensions = (subscriptionHistory) => {
-    if (!subscriptionHistory || subscriptionHistory.length === 0) return false;
-    return subscriptionHistory.some(
-      sub => sub.status === 'pending_approval' && sub.isExtension === true
-    );
-  };
-
   useEffect(() => {
     if (user) {
       setDisplayName(user.displayName || '');
@@ -486,30 +449,18 @@ export default function SettingsPage() {
         {currentSubscription ? (
           <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-4 mb-4">
             <div className="flex items-start justify-between">
-              <div className="flex-1">
+              <div>
                 <p className="text-sm text-gray-600 mb-1">Current Plan</p>
                 <h3 className="text-xl font-bold text-gray-900 mb-2">
                   {currentSubscription.planName}
                 </h3>
                 <div className="space-y-1 text-sm">
-                  {/* Current subscription end date */}
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-gray-500" />
                     <span className="text-gray-600">
-                      Current expires: <strong>{formatDate(currentSubscription.endDate)}</strong>
+                      Valid until: <strong>{formatDate(currentSubscription.endDate)}</strong>
                     </span>
                   </div>
-                  
-                  {/* Final end date if there are pending extensions */}
-                  {hasPendingExtensions(subscriptionHistory) && (
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-purple-600" />
-                      <span className="text-purple-700 font-medium">
-                        Final expiry (with pending extensions): <strong>{formatDate(calculateFinalEndDate(currentSubscription.endDate, subscriptionHistory))}</strong>
-                      </span>
-                    </div>
-                  )}
-                  
                   <div className="flex items-center gap-2">
                     <DollarSign className="w-4 h-4 text-gray-500" />
                     <span className="text-gray-600">
@@ -518,22 +469,15 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </div>
-              <div className="flex flex-col items-end gap-2">
-                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                  currentSubscription.status === 'active' ? 'bg-green-100 text-green-800' :
-                  currentSubscription.status === 'trial' ? 'bg-blue-100 text-blue-800' :
-                  'bg-gray-100 text-gray-800'
-                }`}>
-                  {currentSubscription.status === 'active' ? 'Active' :
-                   currentSubscription.status === 'trial' ? 'Trial' :
-                   currentSubscription.status}
-                </span>
-                {hasPendingExtensions(subscriptionHistory) && (
-                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                    Extension Pending
-                  </span>
-                )}
-              </div>
+              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                currentSubscription.status === 'active' ? 'bg-green-100 text-green-800' :
+                currentSubscription.status === 'trial' ? 'bg-blue-100 text-blue-800' :
+                'bg-gray-100 text-gray-800'
+              }`}>
+                {currentSubscription.status === 'active' ? 'Active' :
+                 currentSubscription.status === 'trial' ? 'Trial' :
+                 currentSubscription.status}
+              </span>
             </div>
           </div>
         ) : (
@@ -727,7 +671,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Import/Export/App Info/Danger Zone sections remain the same */}
+      {/* Import/Export/Delete sections - keeping them as they were */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <div className="flex items-center space-x-3 mb-6">
           <Upload className="w-5 h-5 text-gray-700" />
@@ -738,9 +682,23 @@ export default function SettingsPage() {
           <label htmlFor="import-file" className="cursor-pointer">
             <Upload className="w-12 h-12 text-gray-400 mx-auto mb-3" />
             <p className="text-sm font-medium text-gray-900 mb-1">Click to upload backup file</p>
-            <p className="text-xs text-gray-500">JSON files only</p>
+            <p className="text-xs text-gray-500"> JSON files only. Your data will be added to existing data.</p>
           </label>
-        </div>
+        </div> <br></br>
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex items-start space-x-3">
+              <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-yellow-900 mb-1">Import Information</p>
+                <ul className="text-xs text-yellow-800 space-y-1">
+                  <li>• Only import files exported from H Wallet</li>
+                  <li>• Imported data will be added to your existing data</li>
+                  <li>• Duplicate entries may be created</li>
+                  <li>• We recommend backing up your current data first</li>
+                </ul>
+              </div>
+            </div>
+          </div>
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200 p-6">
@@ -754,7 +712,7 @@ export default function SettingsPage() {
               <Database className="w-5 h-5 text-gray-600" />
               <div className="text-left">
                 <p className="text-sm font-medium text-gray-900">Export All Data (JSON)</p>
-                <p className="text-xs text-gray-500">Complete backup</p>
+                <p className="text-xs text-gray-500">Complete backup of all your data</p>
               </div>
             </div>
             <Download className="w-4 h-4 text-gray-400" />
@@ -764,6 +722,7 @@ export default function SettingsPage() {
               <FileText className="w-5 h-5 text-gray-600" />
               <div className="text-left">
                 <p className="text-sm font-medium text-gray-900">Export Transactions (CSV)</p>
+                <p className="text-xs text-gray-500">Download transaction history as spreadsheet</p>
               </div>
             </div>
             <Download className="w-4 h-4 text-gray-400" />
@@ -773,6 +732,7 @@ export default function SettingsPage() {
               <FileText className="w-5 h-5 text-gray-600" />
               <div className="text-left">
                 <p className="text-sm font-medium text-gray-900">Export Accounts (CSV)</p>
+                <p className="text-xs text-gray-500">Download account list as spreadsheet</p>
               </div>
             </div>
             <Download className="w-4 h-4 text-gray-400" />
@@ -798,9 +758,28 @@ export default function SettingsPage() {
           <h2 className="text-lg font-semibold text-red-900">Danger Zone</h2>
         </div>
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-          <p className="text-sm text-red-800 mb-2"><strong>Warning:</strong> Deletes all wallet data</p>
-          <p className="text-xs text-red-700">Your login account remains active</p>
+          <p className="text-sm text-red-800 mb-3">
+              <strong>Warning:</strong> This will permanently delete all your wallet data including:
+            </p>
+            <ul className="text-xs text-red-700 space-y-1 mb-3 ml-4">
+              <li>• All accounts (Cash, Bank, Mobile Banking, Gold, Silver)</li>
+              <li>• All transactions (Income & Expenses)</li>
+              <li>• All categories</li>
+              <li>• All transfers</li>
+              <li>• All Zakat records and cycles</li>
+              <li>• All preferences and settings</li>
+            </ul>
+            <p className="text-xs text-red-700">
+              <strong>Note:</strong> Your login account (email & password) will remain active. You can start using H Wallet again without registering.
+            </p>
         </div>
+
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <p className="text-xs text-blue-800">
+              💡 <strong>Tip:</strong> Export your data before deletion if you want to keep a backup.
+            </p>
+          </div><br></br>
+
         <button onClick={() => setShowDeleteModal(true)} className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700">
           <Trash2 className="w-4 h-4" /><span>Delete All Wallet Data</span>
         </button>
@@ -818,6 +797,17 @@ export default function SettingsPage() {
             <div className="flex items-center space-x-3 mb-4">
               <AlertTriangle className="w-6 h-6 text-red-600" />
               <h2 className="text-xl font-semibold">Delete All Wallet Data</h2>
+              </div>
+              <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                This will permanently delete all your wallet data. Your login account will remain active so you can start fresh.
+              </p>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3"> 
+              <p className="text-xs text-yellow-800">
+                  ⚠️ This action cannot be undone. Make sure you've exported your data if needed.
+                </p>
+            </div>
             </div>
             <p className="text-sm text-gray-600 mb-4">Type <strong>DELETE</strong> to confirm</p>
             <input

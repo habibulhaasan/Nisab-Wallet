@@ -1,5 +1,5 @@
 // src/lib/adminUtils.js
-import { collection, getDocs, getDoc, doc, updateDoc, query, orderBy, where, serverTimestamp, addDoc, limit, deleteField } from 'firebase/firestore';
+import { collection, getDocs, getDoc, doc, updateDoc, query, orderBy, where, serverTimestamp, addDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { SUBSCRIPTION_STATUS } from './subscriptionUtils';
 
@@ -24,7 +24,7 @@ export const checkIsAdmin = async (userId) => {
 };
 
 /**
- * Get all users (Admin only) - with admin notes
+ * Get all users (Admin only)
  */
 export const getAllUsers = async () => {
   try {
@@ -33,30 +33,9 @@ export const getAllUsers = async () => {
     const querySnapshot = await getDocs(q);
     
     const users = [];
-    
-    // Fetch each user with their latest admin note
-    for (const userDoc of querySnapshot.docs) {
-      const userData = { id: userDoc.id, ...userDoc.data() };
-      
-      // Get the latest admin note for this user
-      try {
-        const notesRef = collection(db, 'users', userDoc.id, 'adminNotes');
-        const notesQuery = query(notesRef, orderBy('createdAt', 'desc'), limit(1));
-        const notesSnapshot = await getDocs(notesQuery);
-        
-        const notes = [];
-        notesSnapshot.forEach((noteDoc) => {
-          notes.push({ id: noteDoc.id, ...noteDoc.data() });
-        });
-        
-        userData.adminNotes = notes;
-      } catch (noteError) {
-        console.error(`Error fetching notes for user ${userDoc.id}:`, noteError);
-        userData.adminNotes = [];
-      }
-      
-      users.push(userData);
-    }
+    querySnapshot.forEach((doc) => {
+      users.push({ id: doc.id, ...doc.data() });
+    });
     
     return { success: true, users };
   } catch (error) {
@@ -114,6 +93,7 @@ export const getUserDetails = async (userId) => {
 
 /**
  * Update user subscription status (Admin only)
+ * ✅ FIXED: Now correctly calculates start date as current_end + 1 day
  */
 export const approveSubscription = async (userId, subscriptionId, adminId) => {
   try {
@@ -126,12 +106,64 @@ export const approveSubscription = async (userId, subscriptionId, adminId) => {
     
     const subData = subsSnap.data();
     
-    await updateDoc(subsRef, {
-      status: SUBSCRIPTION_STATUS.ACTIVE,
-      approvedBy: adminId,
-      approvedAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
+    // Check if this is an extension request
+    const isExtension = subData.isExtension === true;
+    
+    let finalStartDate = subData.startDate;
+    let finalEndDate = subData.endDate;
+    
+    if (isExtension) {
+      // Get all active subscriptions to find the current end date
+      const subsCollectionRef = collection(db, 'users', userId, 'subscriptions');
+      const activeSubsQuery = query(
+        subsCollectionRef, 
+        where('status', '==', SUBSCRIPTION_STATUS.ACTIVE),
+        orderBy('endDate', 'desc')
+      );
+      const activeSubsSnapshot = await getDocs(activeSubsQuery);
+      
+      let latestEndDate = new Date();
+      
+      activeSubsSnapshot.forEach((doc) => {
+        const data = doc.data();
+        if (doc.id !== subscriptionId) { // Exclude current extension request
+          const endDate = new Date(data.endDate);
+          if (endDate > latestEndDate) {
+            latestEndDate = endDate;
+          }
+        }
+      });
+      
+      // ✅ FIX: Calculate new START date: current end date + 1 DAY
+      const newStartDate = new Date(latestEndDate);
+      newStartDate.setDate(newStartDate.getDate() + 1); // ADD 1 DAY!
+      
+      // Calculate new end date: new start date + extension days
+      const extensionDays = parseInt(subData.durationDays || 0);
+      const newEndDate = new Date(newStartDate);
+      newEndDate.setDate(newEndDate.getDate() + extensionDays);
+      
+      finalStartDate = newStartDate.toISOString().split('T')[0];
+      finalEndDate = newEndDate.toISOString().split('T')[0];
+      
+      // Update subscription with correct dates
+      await updateDoc(subsRef, {
+        status: SUBSCRIPTION_STATUS.ACTIVE,
+        startDate: finalStartDate,
+        endDate: finalEndDate,
+        approvedBy: adminId,
+        approvedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    } else {
+      // Regular approval (not an extension)
+      await updateDoc(subsRef, {
+        status: SUBSCRIPTION_STATUS.ACTIVE,
+        approvedBy: adminId,
+        approvedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    }
     
     // Update user profile subscription status
     const userRef = doc(db, 'users', userId);
@@ -141,11 +173,15 @@ export const approveSubscription = async (userId, subscriptionId, adminId) => {
     });
     
     // Create notification
-    const { createNotification, NOTIFICATION_TYPES } = await import('./notificationUtils');
-    await createNotification(userId, NOTIFICATION_TYPES.PAYMENT_APPROVED, {
-      planName: subData.planName,
-      amount: subData.amount
-    });
+    try {
+      const { createNotification, NOTIFICATION_TYPES } = await import('./notificationUtils');
+      await createNotification(userId, NOTIFICATION_TYPES.PAYMENT_APPROVED, {
+        planName: subData.planName,
+        amount: subData.amount
+      });
+    } catch (notifError) {
+      console.log('Notification error (non-critical):', notifError);
+    }
     
     return { success: true };
   } catch (error) {
@@ -177,10 +213,14 @@ export const rejectSubscription = async (userId, subscriptionId, adminId, reason
     });
     
     // Create notification
-    const { createNotification, NOTIFICATION_TYPES } = await import('./notificationUtils');
-    await createNotification(userId, NOTIFICATION_TYPES.PAYMENT_REJECTED, {
-      reason: reason
-    });
+    try {
+      const { createNotification, NOTIFICATION_TYPES } = await import('./notificationUtils');
+      await createNotification(userId, NOTIFICATION_TYPES.PAYMENT_REJECTED, {
+        reason: reason
+      });
+    } catch (notifError) {
+      console.log('Notification error (non-critical):', notifError);
+    }
     
     return { success: true };
   } catch (error) {
@@ -196,25 +236,13 @@ export const toggleBlockUser = async (userId, isBlocked, adminId, reason = '') =
   try {
     const userRef = doc(db, 'users', userId);
     
-    if (isBlocked) {
-      // Blocking the user
-      await updateDoc(userRef, {
-        isBlocked: true,
-        blockedBy: adminId,
-        blockedAt: serverTimestamp(),
-        blockReason: reason,
-        updatedAt: serverTimestamp()
-      });
-    } else {
-      // Unblocking the user - use deleteField for proper cleanup
-      await updateDoc(userRef, {
-        isBlocked: false,
-        blockedBy: deleteField(),
-        blockedAt: deleteField(),
-        blockReason: deleteField(),
-        updatedAt: serverTimestamp()
-      });
-    }
+    await updateDoc(userRef, {
+      isBlocked,
+      blockedBy: isBlocked ? adminId : null,
+      blockedAt: isBlocked ? serverTimestamp() : null,
+      blockReason: reason,
+      updatedAt: serverTimestamp()
+    });
     
     return { success: true };
   } catch (error) {
@@ -295,16 +323,19 @@ export const grantFreeLifetimeAccess = async (userId, adminId, reason = '', days
       // Update user profile
       await updateDoc(userRef, {
         subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE,
-        grantReason: reason,
         updatedAt: serverTimestamp()
       });
       
       // Create notification
-      const { createNotification, NOTIFICATION_TYPES } = await import('./notificationUtils');
-      await createNotification(userId, NOTIFICATION_TYPES.PAYMENT_APPROVED, {
-        planName: `Free Access (${days} days)`,
-        amount: 0
-      });
+      try {
+        const { createNotification, NOTIFICATION_TYPES } = await import('./notificationUtils');
+        await createNotification(userId, NOTIFICATION_TYPES.PAYMENT_APPROVED, {
+          planName: `Free Access (${days} days)`,
+          amount: 0
+        });
+      } catch (notifError) {
+        console.log('Notification error (non-critical):', notifError);
+      }
     } else {
       // Grant lifetime free access
       await updateDoc(userRef, {
@@ -330,14 +361,12 @@ export const addAdminNote = async (userId, noteData) => {
   try {
     const notesRef = collection(db, 'users', userId, 'adminNotes');
     
-    const newNote = {
+    await addDoc(notesRef, {
       note: noteData.note,
       createdBy: noteData.adminId,
       createdByName: noteData.adminName,
       createdAt: serverTimestamp()
-    };
-    
-    await addDoc(notesRef, newNote);
+    });
     
     return { success: true };
   } catch (error) {

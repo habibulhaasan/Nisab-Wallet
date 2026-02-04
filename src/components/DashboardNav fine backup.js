@@ -65,7 +65,7 @@ export default function DashboardNav() {
     { name: 'Overview', href: '/dashboard/admin/', icon: Users },
     { name: 'Subscriptions', href: '/dashboard/admin/subscription-plans', icon: Package },
     { name: 'Payment Method', href: '/dashboard/admin/payment-methods', icon: CreditCard },
-    { name: 'Landing Page', href: '/dashboard/admin/landing-settings', icon: Globe },
+    { name: 'Landing Page', href: '/dashboard/admin/landing-manager', icon: Globe },
     { name: 'Finance', href: '/dashboard/admin/finance', icon: DollarSign },
     { name: 'Users Feedback', href: '/dashboard/admin/feedbacks', icon: MessageSquareMore },
   ];
@@ -314,20 +314,17 @@ export default function DashboardNav() {
       </div>
 
       {/* Desktop Sidebar - Minimal Style */}
-      <div className="hidden lg:flex lg:flex-col lg:w-56 lg:fixed lg:inset-y-0 bg-white border-r border-gray-200">
-        {/* Logo & Notification */}
-        <div className="flex items-center justify-between h-16 px-5 border-b border-gray-200">
-          <div className="flex items-center gap-3">
-            <Image 
-              src="/nisab-logo.png" 
-              alt="Nisab Wallet Logo" 
-              width={32} 
-              height={32}
-              className="object-contain flex-shrink-0"
-            />
-            <span className="text-lg font-bold text-gray-900">NisabWallet</span>
-          </div>
-          <NotificationBell />
+      <div className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 bg-white border-r border-gray-200">
+        {/* Logo */}
+        <div className="flex items-center gap-3 h-16 px-5 border-b border-gray-200">
+          <Image 
+            src="/nisab-logo.png" 
+            alt="Nisab Wallet Logo" 
+            width={32} 
+            height={32}
+            className="object-contain flex-shrink-0"
+          />
+          <span className="text-lg font-bold text-gray-900">NisabWallet</span>
         </div>
 
         {/* Navigation - Scrollable */}
