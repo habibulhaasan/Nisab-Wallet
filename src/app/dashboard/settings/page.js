@@ -1,7 +1,7 @@
 // src/app/dashboard/settings/page.js
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useRouter } from 'next/navigation';
@@ -42,33 +42,28 @@ export default function SettingsPage() {
     return `${day}/${month}/${year}`;
   };
 
-  // Calculate final end date including ALL pending extensions
-  const calculateFinalEndDate = (currentEndDate, subscriptionHistory) => {
+  // Calculate final end date including ALL approved and pending extensions
+  const calculateFinalEndDate = (subscriptionHistory) => {
     if (!subscriptionHistory || subscriptionHistory.length === 0) {
-      return currentEndDate;
+      return null;
     }
     
-    // Get all pending extensions
-    const pendingExtensions = subscriptionHistory.filter(
-      sub => sub.status === 'pending_approval' && sub.isExtension === true
+    // Get all active and pending subscriptions
+    const activeSubs = subscriptionHistory.filter(
+      sub => sub.status === 'active' || sub.status === 'pending_approval'
     );
     
-    if (pendingExtensions.length === 0) {
-      return currentEndDate;
-    }
+    if (activeSubs.length === 0) return null;
     
-    // Calculate total extension days
-    let totalExtensionDays = 0;
-    pendingExtensions.forEach(ext => {
-      totalExtensionDays += parseInt(ext.durationDays || 0);
+    // Sort by end date descending
+    activeSubs.sort((a, b) => {
+      const dateA = new Date(a.endDate);
+      const dateB = new Date(b.endDate);
+      return dateB - dateA;
     });
     
-    // Add to current end date
-    const baseDate = new Date(currentEndDate);
-    const finalDate = new Date(baseDate);
-    finalDate.setDate(finalDate.getDate() + totalExtensionDays);
-    
-    return finalDate.toISOString().split('T')[0];
+    // Return the latest end date
+    return activeSubs[0].endDate;
   };
 
   // Check if user has pending extensions
@@ -77,6 +72,14 @@ export default function SettingsPage() {
     return subscriptionHistory.some(
       sub => sub.status === 'pending_approval' && sub.isExtension === true
     );
+  };
+
+  // Get count of pending extensions
+  const getPendingExtensionsCount = (subscriptionHistory) => {
+    if (!subscriptionHistory) return 0;
+    return subscriptionHistory.filter(
+      sub => sub.status === 'pending_approval' && sub.isExtension === true
+    ).length;
   };
 
   useEffect(() => {
@@ -500,15 +503,25 @@ export default function SettingsPage() {
                     </span>
                   </div>
                   
-                  {/* Final end date if there are pending extensions */}
-                  {hasPendingExtensions(subscriptionHistory) && (
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-purple-600" />
-                      <span className="text-purple-700 font-medium">
-                        Final expiry (with pending extensions): <strong>{formatDate(calculateFinalEndDate(currentSubscription.endDate, subscriptionHistory))}</strong>
-                      </span>
-                    </div>
-                  )}
+                  {/* Final end date if different from current */}
+                  {(() => {
+                    const finalDate = calculateFinalEndDate(subscriptionHistory);
+                    const hasFuture = finalDate && finalDate !== currentSubscription.endDate;
+                    
+                    return hasFuture && (
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-purple-600" />
+                        <span className="text-purple-700 font-medium">
+                          Final expiry: <strong>{formatDate(finalDate)}</strong>
+                          {getPendingExtensionsCount(subscriptionHistory) > 0 && (
+                            <span className="text-xs ml-1">
+                              (includes {getPendingExtensionsCount(subscriptionHistory)} pending)
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    );
+                  })()}
                   
                   <div className="flex items-center gap-2">
                     <DollarSign className="w-4 h-4 text-gray-500" />
@@ -544,6 +557,7 @@ export default function SettingsPage() {
           </div>
         )}
 
+        {/* Subscription History as Table */}
         {subscriptionHistory.length > 0 && (
           <div className="border-t border-gray-200 pt-4">
             <button
@@ -557,53 +571,165 @@ export default function SettingsPage() {
             </button>
 
             {showSubHistory && (
-              <div className="mt-4 space-y-2">
-                {subscriptionHistory
-                  .filter(sub => sub.amount > 0 || sub.status === 'trial')
-                  .sort((a, b) => {
-                    const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt);
-                    const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt);
-                    return dateB - dateA;
-                  })
-                  .map((sub, idx) => (
-                    <div key={idx} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-sm text-gray-900">{sub.planName}</span>
-                          {sub.isExtension && (
-                            <span className="px-2 py-0.5 bg-purple-100 text-purple-800 text-xs rounded-full">
-                              Extension
-                            </span>
-                          )}
+              <div className="mt-4">
+                {/* Desktop Table View */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full border border-gray-200 rounded-lg">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase">Plan</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase">Status</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-600 uppercase">Amount</th>
+                        <th className="px-3 py-2 text-center text-xs font-medium text-gray-600 uppercase">Duration</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase">Payment</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase">Transaction ID</th>
+                        <th className="px-3 py-2 text-center text-xs font-medium text-gray-600 uppercase">Start Date</th>
+                        <th className="px-3 py-2 text-center text-xs font-medium text-gray-600 uppercase">End Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {subscriptionHistory
+                        .filter(sub => sub.amount > 0 || sub.status === 'trial')
+                        .sort((a, b) => {
+                          const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt);
+                          const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt);
+                          return dateB - dateA;
+                        })
+                        .map((sub, idx) => (
+                          <React.Fragment key={idx}>
+                            <tr className="hover:bg-gray-50">
+                              <td className="px-3 py-3 text-sm">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-gray-900">{sub.planName}</span>
+                                  {sub.isExtension && (
+                                    <span className="px-2 py-0.5 bg-purple-100 text-purple-800 text-xs rounded-full">
+                                      Extension
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-3 py-3">
+                                <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                                  sub.status === 'active' ? 'bg-green-100 text-green-800' :
+                                  sub.status === 'pending_approval' ? 'bg-yellow-100 text-yellow-800' :
+                                  sub.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                                  sub.status === 'trial' ? 'bg-blue-100 text-blue-800' :
+                                  sub.status === 'expired' ? 'bg-gray-100 text-gray-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {sub.status === 'active' ? 'Active' :
+                                   sub.status === 'pending_approval' ? 'Pending' :
+                                   sub.status === 'rejected' ? 'Rejected' :
+                                   sub.status === 'trial' ? 'Trial' :
+                                   sub.status === 'expired' ? 'Expired' :
+                                   sub.status}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3 text-sm text-right font-semibold text-gray-900">
+                                ৳{sub.amount?.toLocaleString() || 0}
+                              </td>
+                              <td className="px-3 py-3 text-sm text-center text-gray-600">
+                                {sub.durationDays || 0} days
+                              </td>
+                              <td className="px-3 py-3 text-sm text-gray-600">
+                                {sub.paymentMethod || 'N/A'}
+                              </td>
+                              <td className="px-3 py-3 text-xs font-mono text-gray-600">
+                                {sub.transactionId || 'N/A'}
+                              </td>
+                              <td className="px-3 py-3 text-sm text-center text-gray-600">
+                                {formatDate(sub.startDate)}
+                              </td>
+                              <td className="px-3 py-3 text-sm text-center text-gray-600">
+                                {formatDate(sub.endDate)}
+                              </td>
+                            </tr>
+                            {sub.rejectionReason && (
+                              <tr>
+                                <td colSpan="8" className="px-3 py-2 bg-red-50">
+                                  <div className="text-xs text-red-800">
+                                    <strong>Rejection Reason:</strong> {sub.rejectionReason}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Card View */}
+                <div className="md:hidden space-y-3">
+                  {subscriptionHistory
+                    .filter(sub => sub.amount > 0 || sub.status === 'trial')
+                    .sort((a, b) => {
+                      const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt);
+                      const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt);
+                      return dateB - dateA;
+                    })
+                    .map((sub, idx) => (
+                      <div key={idx} className="bg-white border border-gray-200 rounded-lg p-4">
+                        {/* Header */}
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-semibold text-gray-900">{sub.planName}</span>
+                              {sub.isExtension && (
+                                <span className="px-2 py-0.5 bg-purple-100 text-purple-800 text-xs rounded-full">
+                                  Ext
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-lg font-bold text-gray-900">৳{sub.amount?.toLocaleString() || 0}</div>
+                          </div>
+                          <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                            sub.status === 'active' ? 'bg-green-100 text-green-800' :
+                            sub.status === 'pending_approval' ? 'bg-yellow-100 text-yellow-800' :
+                            sub.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                            sub.status === 'trial' ? 'bg-blue-100 text-blue-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {sub.status === 'active' ? 'Active' :
+                             sub.status === 'pending_approval' ? 'Pending' :
+                             sub.status === 'trial' ? 'Trial' : sub.status}
+                          </span>
                         </div>
-                        <span className={`px-2 py-0.5 text-xs rounded-full ${
-                          sub.status === 'active' ? 'bg-green-100 text-green-800' :
-                          sub.status === 'pending_approval' ? 'bg-yellow-100 text-yellow-800' :
-                          sub.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                          sub.status === 'trial' ? 'bg-blue-100 text-blue-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {sub.status === 'active' ? 'Active' :
-                           sub.status === 'pending_approval' ? 'Pending' :
-                           sub.status === 'trial' ? 'Trial' :
-                           sub.status}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                        <div><span className="text-gray-500">Amount:</span> <strong>৳{sub.amount || 0}</strong></div>
-                        <div><span className="text-gray-500">Duration:</span> {sub.durationDays || 0} days</div>
-                        <div><span className="text-gray-500">Payment:</span> {sub.paymentMethod || 'N/A'}</div>
-                        <div><span className="text-gray-500">Tx ID:</span> <span className="font-mono text-[10px]">{sub.transactionId || 'N/A'}</span></div>
-                        <div><span className="text-gray-500">Start:</span> {formatDate(sub.startDate)}</div>
-                        <div><span className="text-gray-500">End:</span> {formatDate(sub.endDate)}</div>
-                      </div>
-                      {sub.rejectionReason && (
-                        <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs">
-                          <strong>Rejected:</strong> {sub.rejectionReason}
+
+                        {/* Details Grid */}
+                        <div className="grid grid-cols-2 gap-2 text-xs border-t border-gray-100 pt-3">
+                          <div>
+                            <span className="text-gray-500">Duration:</span>
+                            <div className="font-medium text-gray-900">{sub.durationDays || 0} days</div>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Payment:</span>
+                            <div className="font-medium text-gray-900">{sub.paymentMethod || 'N/A'}</div>
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-gray-500">Transaction ID:</span>
+                            <div className="font-mono text-[10px] text-gray-900 break-all">{sub.transactionId || 'N/A'}</div>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Start:</span>
+                            <div className="font-medium text-gray-900">{formatDate(sub.startDate)}</div>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">End:</span>
+                            <div className="font-medium text-gray-900">{formatDate(sub.endDate)}</div>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  ))}
+
+                        {/* Rejection Reason */}
+                        {sub.rejectionReason && (
+                          <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded text-xs">
+                            <strong className="text-red-900">Rejected:</strong>
+                            <div className="text-red-700 mt-1">{sub.rejectionReason}</div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                </div>
               </div>
             )}
           </div>
@@ -727,7 +853,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Import/Export/App Info/Danger Zone sections remain the same */}
+      {/* Import/Export/App Info/Danger Zone sections remain unchanged */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <div className="flex items-center space-x-3 mb-6">
           <Upload className="w-5 h-5 text-gray-700" />

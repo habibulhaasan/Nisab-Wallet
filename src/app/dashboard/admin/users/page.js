@@ -1,7 +1,7 @@
 // src/app/dashboard/admin/users/page.js
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { 
@@ -560,8 +560,8 @@ export default function AdminUsersPage() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredUsers.map((u) => (
-                <>
-                  <tr key={u.id} className="hover:bg-gray-50">
+                <React.Fragment key={u.id}> 
+                  <tr className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <div>
                         <p className="font-medium text-gray-900">{u.name}</p>
@@ -742,7 +742,7 @@ export default function AdminUsersPage() {
                     </td>
                   </tr>
 
-                  {/* Accordion row for subscription history */}
+                  {/* Accordion row for subscription history - RESPONSIVE TABLE/CARDS */}
                   {expandedUsers.has(u.id) && u.subscriptionHistory && (
                     <tr key={`${u.id}-accordion`}>
                       <td colSpan="5" className="px-4 py-0 bg-gray-50">
@@ -750,7 +750,115 @@ export default function AdminUsersPage() {
                           <h4 className="text-sm font-semibold text-gray-700 mb-3">
                             Subscription History
                           </h4>
-                          <div className="space-y-2">
+
+                          {/* Desktop Table View */}
+                          <div className="hidden md:block overflow-x-auto">
+                            <table className="w-full border border-gray-200 rounded-lg">
+                              <thead className="bg-white">
+                                <tr>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase">Plan</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase">Status</th>
+                                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-600 uppercase">Amount</th>
+                                  <th className="px-3 py-2 text-center text-xs font-medium text-gray-600 uppercase">Duration</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase">Payment</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase">Transaction ID</th>
+                                  <th className="px-3 py-2 text-center text-xs font-medium text-gray-600 uppercase">Start Date</th>
+                                  <th className="px-3 py-2 text-center text-xs font-medium text-gray-600 uppercase">End Date</th>
+                                  <th className="px-3 py-2 text-center text-xs font-medium text-gray-600 uppercase">Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-200 bg-white">
+                                {u.subscriptionHistory
+                                  .filter(sub => sub.amount > 0 || sub.status === 'trial')
+                                  .sort((a, b) => {
+                                    const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt);
+                                    const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt);
+                                    return dateB - dateA;
+                                  })
+                                  .map((sub, idx) => (
+                                    <React.Fragment key={idx}>
+                                      <tr className="hover:bg-gray-50">
+                                        <td className="px-3 py-3 text-sm">
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-medium text-gray-900">{sub.planName}</span>
+                                            {sub.isExtension && (
+                                              <span className="px-2 py-0.5 bg-purple-100 text-purple-800 text-xs rounded-full">
+                                                Ext
+                                              </span>
+                                            )}
+                                          </div>
+                                        </td>
+                                        <td className="px-3 py-3">
+                                          <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                                            sub.status === 'active' ? 'bg-green-100 text-green-800' :
+                                            sub.status === 'pending_approval' ? 'bg-yellow-100 text-yellow-800' :
+                                            sub.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                                            sub.status === 'trial' ? 'bg-blue-100 text-blue-800' :
+                                            'bg-gray-100 text-gray-800'
+                                          }`}>
+                                            {sub.status === 'active' ? 'Active' :
+                                             sub.status === 'pending_approval' ? 'Pending' :
+                                             sub.status === 'rejected' ? 'Rejected' :
+                                             sub.status === 'trial' ? 'Trial' :
+                                             sub.status}
+                                          </span>
+                                        </td>
+                                        <td className="px-3 py-3 text-sm text-right font-semibold text-gray-900">
+                                          ৳{sub.amount?.toLocaleString() || 0}
+                                        </td>
+                                        <td className="px-3 py-3 text-sm text-center text-gray-600">
+                                          {sub.durationDays || 0} days
+                                        </td>
+                                        <td className="px-3 py-3 text-sm text-gray-600">
+                                          {sub.paymentMethod || 'N/A'}
+                                        </td>
+                                        <td className="px-3 py-3 text-xs font-mono text-gray-600">
+                                          {sub.transactionId || 'N/A'}
+                                        </td>
+                                        <td className="px-3 py-3 text-sm text-center text-gray-600">
+                                          {formatDate(sub.startDate)}
+                                        </td>
+                                        <td className="px-3 py-3 text-sm text-center text-gray-600">
+                                          {formatDate(sub.endDate)}
+                                        </td>
+                                        <td className="px-3 py-3 text-center">
+                                          {sub.status === 'pending_approval' && (
+                                            <div className="flex items-center justify-center gap-2">
+                                              <button
+                                                onClick={() => handleApproveFromTable(u.id, sub.id)}
+                                                className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                                                title="Approve"
+                                              >
+                                                <CheckCircle size={18} />
+                                              </button>
+                                              <button
+                                                onClick={() => handleRejectFromTable(u.id, sub.id)}
+                                                className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                                                title="Reject"
+                                              >
+                                                <XCircle size={18} />
+                                              </button>
+                                            </div>
+                                          )}
+                                        </td>
+                                      </tr>
+                                      {sub.rejectionReason && (
+                                        <tr>
+                                          <td colSpan="9" className="px-3 py-2 bg-red-50">
+                                            <div className="text-xs text-red-800">
+                                              <strong>Rejection Reason:</strong> {sub.rejectionReason}
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </React.Fragment>
+                                  ))}
+                              </tbody>
+                            </table>
+                          </div>
+
+                          {/* Mobile Card View */}
+                          <div className="md:hidden space-y-3">
                             {u.subscriptionHistory
                               .filter(sub => sub.amount > 0 || sub.status === 'trial')
                               .sort((a, b) => {
@@ -759,90 +867,84 @@ export default function AdminUsersPage() {
                                 return dateB - dateA;
                               })
                               .map((sub, idx) => (
-                                <div
-                                  key={idx}
-                                  className="bg-white border border-gray-200 rounded-lg p-3"
-                                >
-                                  <div className="flex items-start justify-between">
+                                <div key={idx} className="bg-white border border-gray-200 rounded-lg p-4">
+                                  {/* Header */}
+                                  <div className="flex items-start justify-between mb-3">
                                     <div className="flex-1">
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <span className="font-medium text-gray-900">
-                                          {sub.planName}
-                                        </span>
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <span className="font-semibold text-gray-900">{sub.planName}</span>
                                         {sub.isExtension && (
                                           <span className="px-2 py-0.5 bg-purple-100 text-purple-800 text-xs rounded-full">
-                                            Extension
+                                            Ext
                                           </span>
                                         )}
-                                        <span className={`px-2 py-0.5 text-xs rounded-full ${
-                                          sub.status === 'active' ? 'bg-green-100 text-green-800' :
-                                          sub.status === 'pending_approval' ? 'bg-yellow-100 text-yellow-800' :
-                                          sub.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                                          sub.status === 'trial' ? 'bg-blue-100 text-blue-800' :
-                                          'bg-gray-100 text-gray-800'
-                                        }`}>
-                                          {sub.status === 'active' ? 'Active' :
-                                           sub.status === 'pending_approval' ? 'Pending' :
-                                           sub.status === 'rejected' ? 'Rejected' :
-                                           sub.status === 'trial' ? 'Trial' :
-                                           sub.status}
-                                        </span>
                                       </div>
-                                      
-                                      <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                                        <div>
-                                          <span className="text-gray-500">Amount:</span>
-                                          <span className="ml-1 font-semibold">৳{sub.amount || 0}</span>
-                                        </div>
-                                        <div>
-                                          <span className="text-gray-500">Payment:</span>
-                                          <span className="ml-1">{sub.paymentMethod || 'N/A'}</span>
-                                        </div>
-                                        <div>
-                                          <span className="text-gray-500">Transaction ID:</span>
-                                          <span className="ml-1 font-mono">{sub.transactionId || 'N/A'}</span>
-                                        </div>
-                                        <div>
-                                          <span className="text-gray-500">Duration:</span>
-                                          <span className="ml-1">{sub.durationDays || 0} days</span>
-                                        </div>
-                                        <div>
-                                          <span className="text-gray-500">Start:</span>
-                                          <span className="ml-1">{formatDate(sub.startDate)}</span>
-                                        </div>
-                                        <div>
-                                          <span className="text-gray-500">End:</span>
-                                          <span className="ml-1">{formatDate(sub.endDate)}</span>
-                                        </div>
-                                      </div>
-
-                                      {sub.rejectionReason && (
-                                        <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs">
-                                          <span className="font-medium text-red-900">Rejection Reason: </span>
-                                          <span className="text-red-700">{sub.rejectionReason}</span>
-                                        </div>
-                                      )}
+                                      <div className="text-lg font-bold text-gray-900">৳{sub.amount?.toLocaleString() || 0}</div>
                                     </div>
-
-                                    {sub.status === 'pending_approval' && (
-                                      <div className="flex items-center gap-2 ml-4">
-                                        <button
-                                          onClick={() => handleApproveFromTable(u.id, sub.id)}
-                                          className="p-1.5 text-green-600 hover:bg-green-50 rounded"
-                                          title="Approve"
-                                        >
-                                          <CheckCircle size={18} />
-                                        </button>
-                                        <button
-                                          onClick={() => handleRejectFromTable(u.id, sub.id)}
-                                          className="p-1.5 text-red-600 hover:bg-red-50 rounded"
-                                          title="Reject"
-                                        >
-                                          <XCircle size={18} />
-                                        </button>
-                                      </div>
-                                    )}
+                                    <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                                      sub.status === 'active' ? 'bg-green-100 text-green-800' :
+                                      sub.status === 'pending_approval' ? 'bg-yellow-100 text-yellow-800' :
+                                      sub.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                                      sub.status === 'trial' ? 'bg-blue-100 text-blue-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {sub.status === 'active' ? 'Active' :
+                                       sub.status === 'pending_approval' ? 'Pending' :
+                                       sub.status === 'trial' ? 'Trial' : sub.status}
+                                    </span>
                                   </div>
+
+                                  {/* Details Grid */}
+                                  <div className="grid grid-cols-2 gap-2 text-xs border-t border-gray-100 pt-3">
+                                    <div>
+                                      <span className="text-gray-500">Duration:</span>
+                                      <div className="font-medium text-gray-900">{sub.durationDays || 0} days</div>
+                                    </div>
+                                    <div>
+                                      <span className="text-gray-500">Payment:</span>
+                                      <div className="font-medium text-gray-900">{sub.paymentMethod || 'N/A'}</div>
+                                    </div>
+                                    <div className="col-span-2">
+                                      <span className="text-gray-500">Transaction ID:</span>
+                                      <div className="font-mono text-[10px] text-gray-900 break-all">{sub.transactionId || 'N/A'}</div>
+                                    </div>
+                                    <div>
+                                      <span className="text-gray-500">Start:</span>
+                                      <div className="font-medium text-gray-900">{formatDate(sub.startDate)}</div>
+                                    </div>
+                                    <div>
+                                      <span className="text-gray-500">End:</span>
+                                      <div className="font-medium text-gray-900">{formatDate(sub.endDate)}</div>
+                                    </div>
+                                  </div>
+
+                                  {/* Rejection Reason */}
+                                  {sub.rejectionReason && (
+                                    <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded text-xs">
+                                      <strong className="text-red-900">Rejected:</strong>
+                                      <div className="text-red-700 mt-1">{sub.rejectionReason}</div>
+                                    </div>
+                                  )}
+
+                                  {/* Actions for pending subscriptions */}
+                                  {sub.status === 'pending_approval' && (
+                                    <div className="mt-3 flex items-center gap-2 pt-3 border-t border-gray-100">
+                                      <button
+                                        onClick={() => handleApproveFromTable(u.id, sub.id)}
+                                        className="flex-1 px-3 py-2 bg-green-600 text-white rounded text-sm font-medium hover:bg-green-700 flex items-center justify-center gap-1"
+                                      >
+                                        <CheckCircle size={16} />
+                                        Approve
+                                      </button>
+                                      <button
+                                        onClick={() => handleRejectFromTable(u.id, sub.id)}
+                                        className="flex-1 px-3 py-2 bg-red-600 text-white rounded text-sm font-medium hover:bg-red-700 flex items-center justify-center gap-1"
+                                      >
+                                        <XCircle size={16} />
+                                        Reject
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                           </div>
@@ -850,7 +952,7 @@ export default function AdminUsersPage() {
                       </td>
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               ))}
             </tbody>
           </table>

@@ -1,3 +1,4 @@
+// src/app/dashboard/lendings/[id]/page.js
 'use client';
 
 import { useState, useEffect } from 'react';

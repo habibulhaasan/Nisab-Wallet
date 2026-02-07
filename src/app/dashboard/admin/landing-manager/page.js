@@ -1,3 +1,4 @@
+// src/app/dashboard/admin/landing-manager/page.js
 'use client';
 
 import { useState, useEffect } from 'react';

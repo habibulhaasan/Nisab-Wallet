@@ -1,3 +1,4 @@
+// src/app/dashboard/loans/page.js
 'use client';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';

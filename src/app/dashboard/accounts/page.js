@@ -9,6 +9,7 @@ import { showToast } from '@/components/Toast';
 import { collection, addDoc, getDocs, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { generateId } from '@/lib/firestoreCollections';
+import { getAccountsWithAllocations } from '@/lib/goalUtils';
 
 // Default accounts data
 const DEFAULT_ACCOUNTS = [
@@ -49,7 +50,8 @@ export default function AccountsPage() {
     setLoading(true);
     const result = await getAccounts(user.uid);
     if (result.success) {
-      setAccounts(result.accounts);
+      const accountsWithInfo = await getAccountsWithAllocations(user.uid, result.accounts);
+      setAccounts(accountsWithInfo);
     }
     setLoading(false);
   };
@@ -297,6 +299,38 @@ export default function AccountsPage() {
                 <div>
                   <p className="text-2xl font-bold text-gray-900">৳{account.balance.toLocaleString()}</p>
                 </div>
+
+                {account.allocated > 0 && (
+                <div className="mt-3 pt-3 border-t border-gray-200">
+
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-green-600 font-medium">Available to Spend</span>
+                    <span className="font-bold">৳{account.available.toLocaleString()}</span>
+                  </div>
+
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-orange-600 font-medium">Allocated to Goals</span>
+                    <span className="font-bold">৳{account.allocated.toLocaleString()}</span>
+                  </div>
+                  
+                  {/* Goal breakdown */}
+                  <div className="mt-2 space-y-1">
+                    {account.allocatedGoals.map(goal => (
+                      <div key={goal.id} className="flex justify-between text-xs text-gray-600">
+                        <span>• {goal.goalName}</span>
+                        <span className="font-medium">৳{goal.currentAmount.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Warning if overspent */}
+                  {account.available < 0 && (
+                    <div className="mt-2 p-2 bg-red-50 rounded text-xs text-red-600">
+                      ⚠️ You've spent ৳{Math.abs(account.available).toLocaleString()} of your goal money!
+                    </div>
+                  )}
+                </div>
+              )}
               </div>
             );
           })}

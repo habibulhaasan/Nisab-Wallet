@@ -9,7 +9,9 @@ import {
   LayoutDashboard, CreditCard, Receipt, FolderOpen, Star, BarChart3, 
   LogOut, Menu, X, ArrowRightLeft, Settings, 
   Users, Package, DollarSign, Globe,
-  HandCoins, MessageCircleQuestion, Goal, Blend, MessageSquareMore
+  HandCoins, MessageCircleQuestion, Goal, Blend, MessageSquareMore,
+  Home,
+  ShoppingBag
 } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
 import { checkIsAdmin } from '@/lib/adminUtils';
@@ -49,6 +51,7 @@ export default function DashboardNav() {
       { name: 'Categories', href: '/dashboard/categories', icon: FolderOpen },
     ],
     features: [
+      { name: 'Shopping List', href: '/dashboard/shopping', icon: ShoppingBag },
       { name: 'Loans', href: '/dashboard/loans', icon: HandCoins },
       { name: 'Lend', href: '/dashboard/lendings', icon: Blend },
       { name: 'Goals', href: '/dashboard/goals', icon: Goal },
@@ -62,7 +65,8 @@ export default function DashboardNav() {
   };
 
   const adminNavigation = [
-    { name: 'Overview', href: '/dashboard/admin/', icon: Users },
+    { name: 'Overview', href: '/dashboard/admin/', icon: Home },
+    { name: 'Users', href: '/dashboard/admin/users', icon: Users },
     { name: 'Subscriptions', href: '/dashboard/admin/subscription-plans', icon: Package },
     { name: 'Payment Method', href: '/dashboard/admin/payment-methods', icon: CreditCard },
     { name: 'Landing Page', href: '/dashboard/admin/landing-settings', icon: Globe },

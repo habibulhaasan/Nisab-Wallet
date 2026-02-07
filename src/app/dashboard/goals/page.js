@@ -1,8 +1,10 @@
+// src/app/dashboard/goals/page.js
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
+import { getGoalAllocations, getAvailableBalance } from '@/lib/goalUtils';
 import {
   collection,
   addDoc,
@@ -14,7 +16,6 @@ import {
   orderBy,
   Timestamp,
   where,
-  getDoc,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getAccounts } from '@/lib/firestoreCollections';
@@ -34,15 +35,11 @@ import {
   DollarSign,
   Flag,
   Loader2,
-  Award,
-  Heart,
-  Home,
-  Car,
-  GraduationCap,
-  Building2,
-  Package,
   PiggyBank,
   Clock,
+  Calendar,
+  Award,
+  TrendingDown,
 } from 'lucide-react';
 
 export default function FinancialGoalsPage() {
@@ -51,21 +48,17 @@ export default function FinancialGoalsPage() {
 
   const [goals, setGoals] = useState([]);
   const [accounts, setAccounts] = useState([]);
-  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  const [sharedSavingsAccountId, setSharedSavingsAccountId] = useState(null);
-
   const [showGoalModal, setShowGoalModal] = useState(false);
-  const [showDepositModal, setShowDepositModal] = useState(false);
-  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [showAllocateModal, setShowAllocateModal] = useState(false);
+  const [showDeallocateModal, setShowDeallocateModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const [editingGoal, setEditingGoal] = useState(null);
   const [selectedGoal, setSelectedGoal] = useState(null);
   const [goalToDelete, setGoalToDelete] = useState(null);
-  const [deleteImpact, setDeleteImpact] = useState(null);
 
   const [filterStatus, setFilterStatus] = useState('all');
 
@@ -95,8 +88,7 @@ export default function FinancialGoalsPage() {
 
   const loadData = async () => {
     setLoading(true);
-    await Promise.all([loadGoals(), loadAccounts(), loadCategories()]);
-    await ensureSharedSavingsAccount();
+    await Promise.all([loadGoals(), loadAccounts()]);
     setLoading(false);
   };
 
@@ -121,85 +113,20 @@ export default function FinancialGoalsPage() {
     if (result.success) {
       setAccounts(result.accounts);
       
-      // Find shared savings account
-      const sharedSavings = result.accounts.find(a => a.name === 'Goals Savings' && a.isSharedGoalAccount);
-      if (sharedSavings) {
-        setSharedSavingsAccountId(sharedSavings.id);
-      }
-      
       if (result.accounts.length > 0 && !goalFormData.linkedAccountId) {
-        const regularAccounts = result.accounts.filter(a => !a.isSharedGoalAccount && !a.isGoalAccount);
-        setGoalFormData((prev) => ({ ...prev, linkedAccountId: regularAccounts[0]?.id || '' }));
-        setTransactionFormData((prev) => ({ ...prev, accountId: regularAccounts[0]?.id || '' }));
+        setGoalFormData((prev) => ({ ...prev, linkedAccountId: result.accounts[0].id }));
+        setTransactionFormData((prev) => ({ ...prev, accountId: result.accounts[0].id }));
       }
     }
   };
 
-  const loadCategories = async () => {
-    try {
-      const categoriesRef = collection(db, 'users', user.uid, 'categories');
-      const snapshot = await getDocs(categoriesRef);
-      const categoriesData = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setCategories(categoriesData);
-    } catch (error) {
-      console.error('Error loading categories:', error);
-    }
-  };
-
-  // Ensure shared savings account exists
-  const ensureSharedSavingsAccount = async () => {
-    try {
-      // Check if shared savings account already exists
-      const accountsRef = collection(db, 'users', user.uid, 'accounts');
-      const q = query(accountsRef, where('isSharedGoalAccount', '==', true));
-      const snapshot = await getDocs(q);
-
-      if (!snapshot.empty) {
-        setSharedSavingsAccountId(snapshot.docs[0].id);
-        return snapshot.docs[0].id;
-      }
-
-      // Create shared savings account
-      const newAccount = {
-        name: 'Goals Savings',
-        type: 'Savings',
-        balance: 0,
-        currency: 'BDT',
-        isSharedGoalAccount: true,
-        description: 'Shared savings account for all financial goals',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      };
-
-      const docRef = await addDoc(collection(db, 'users', user.uid, 'accounts'), newAccount);
-      setSharedSavingsAccountId(docRef.id);
-      await loadAccounts();
-      return docRef.id;
-    } catch (error) {
-      console.error('Error ensuring shared savings account:', error);
-      return null;
-    }
-  };
-
-  // Auto-create category if it doesn't exist
-  const ensureCategory = async (name, type) => {
-    let category = categories.find((c) => c.name === name && c.type === type);
-    if (!category) {
-      const newCategory = {
-        name,
-        type,
-        icon: name === 'Savings' ? '💰' : name === 'Redemption' ? '🎁' : '📦',
-        color: name === 'Savings' ? '#10B981' : name === 'Redemption' ? '#3B82F6' : '#6B7280',
-        createdAt: Timestamp.now(),
-      };
-      const docRef = await addDoc(collection(db, 'users', user.uid, 'categories'), newCategory);
-      category = { id: docRef.id, ...newCategory };
-      setCategories((prev) => [...prev, category]);
-    }
-    return category.id;
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
   };
 
   const calculateGoalMetrics = (goal) => {
@@ -215,16 +142,19 @@ export default function FinancialGoalsPage() {
     const daysElapsed = Math.ceil((today - startDate) / (1000 * 60 * 60 * 24));
     const daysRemaining = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
 
+    // FIXED: Calculate months remaining properly
+    const monthsRemaining = Math.max(1, daysRemaining / 30);
+    const monthlyRequired = daysRemaining > 0 ? (targetAmount - currentAmount) / monthsRemaining : 0;
+
     const expectedProgress = totalDays > 0 ? (daysElapsed / totalDays) * 100 : 0;
     const onTrack = percentageComplete >= expectedProgress;
-
-    const monthlyRequired = daysRemaining > 0 ? (targetAmount - currentAmount) / (daysRemaining / 30) : 0;
 
     return {
       percentageComplete: percentageComplete.toFixed(1),
       daysRemaining: Math.max(0, daysRemaining),
+      monthsRemaining: Math.max(1, Math.ceil(monthsRemaining)),
       onTrack,
-      monthlyRequired: monthlyRequired.toFixed(0),
+      monthlyRequired: Math.max(0, monthlyRequired).toFixed(0),
     };
   };
 
@@ -241,9 +171,6 @@ export default function FinancialGoalsPage() {
     try {
       const targetAmount = parseFloat(goalFormData.targetAmount);
       const currentAmount = parseFloat(goalFormData.currentAmount) || 0;
-
-      // Ensure shared savings account exists
-      const savingsAccId = await ensureSharedSavingsAccount();
 
       if (editingGoal) {
         // Update existing goal
@@ -275,57 +202,13 @@ export default function FinancialGoalsPage() {
           description: goalFormData.description || '',
           status: 'active',
           enableNotifications: goalFormData.enableNotifications,
-          totalDeposited: currentAmount,
-          totalWithdrawn: 0,
+          totalAllocated: currentAmount,
+          totalDeallocated: 0,
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
         };
 
         await addDoc(collection(db, 'users', user.uid, 'financialGoals'), goalData);
-
-        // If there's initial amount, create initial deposit
-        if (currentAmount > 0) {
-          const savingsCategoryId = await ensureCategory('Savings', 'Expense');
-          const linkedAccount = accounts.find((a) => a.id === goalFormData.linkedAccountId);
-          const savingsAccount = accounts.find((a) => a.id === savingsAccId);
-
-          if (linkedAccount && linkedAccount.balance >= currentAmount) {
-            // Deduct from linked account
-            await updateDoc(doc(db, 'users', user.uid, 'accounts', goalFormData.linkedAccountId), {
-              balance: linkedAccount.balance - currentAmount,
-              updatedAt: Timestamp.now(),
-            });
-
-            // Add to shared savings account
-            await updateDoc(doc(db, 'users', user.uid, 'accounts', savingsAccId), {
-              balance: (savingsAccount?.balance || 0) + currentAmount,
-              updatedAt: Timestamp.now(),
-            });
-
-            // Create expense transaction
-            await addDoc(collection(db, 'users', user.uid, 'transactions'), {
-              type: 'Expense',
-              amount: currentAmount,
-              accountId: goalFormData.linkedAccountId,
-              categoryId: savingsCategoryId,
-              description: `Savings: ${goalFormData.goalName}`,
-              date: new Date().toISOString().split('T')[0],
-              createdAt: Timestamp.now(),
-            });
-
-            // Create income transaction to savings account
-            await addDoc(collection(db, 'users', user.uid, 'transactions'), {
-              type: 'Income',
-              amount: currentAmount,
-              accountId: savingsAccId,
-              categoryId: savingsCategoryId,
-              description: `Savings: ${goalFormData.goalName}`,
-              date: new Date().toISOString().split('T')[0],
-              createdAt: Timestamp.now(),
-            });
-          }
-        }
-
         showToast('Goal created successfully! 🎯', 'success');
       }
 
@@ -339,7 +222,7 @@ export default function FinancialGoalsPage() {
     }
   };
 
-  const handleDeposit = async (e) => {
+  const handleAllocate = async (e) => {
     e.preventDefault();
     if (submitting || !selectedGoal) return;
 
@@ -348,73 +231,30 @@ export default function FinancialGoalsPage() {
       return showToast('Please enter a valid amount', 'error');
     }
 
-    const linkedAccount = accounts.find((a) => a.id === transactionFormData.accountId);
-    if (!linkedAccount || linkedAccount.balance < amount) {
-      return showToast('Insufficient account balance', 'error');
-    }
-
     setSubmitting(true);
 
     try {
-      const savingsAccId = await ensureSharedSavingsAccount();
-      const savingsCategoryId = await ensureCategory('Savings', 'Expense');
-      const savingsAccount = accounts.find((a) => a.id === savingsAccId);
-
-      // 1. Deduct from linked account
-      await updateDoc(doc(db, 'users', user.uid, 'accounts', transactionFormData.accountId), {
-        balance: linkedAccount.balance - amount,
-        updatedAt: Timestamp.now(),
-      });
-
-      // 2. Add to shared savings account
-      await updateDoc(doc(db, 'users', user.uid, 'accounts', savingsAccId), {
-        balance: (savingsAccount?.balance || 0) + amount,
-        updatedAt: Timestamp.now(),
-      });
-
-      // 3. Update goal
+      // Update goal (virtual allocation - no actual money movement)
       const newCurrentAmount = selectedGoal.currentAmount + amount;
       const newStatus = newCurrentAmount >= selectedGoal.targetAmount ? 'completed' : 'active';
       const newPercentage = (newCurrentAmount / selectedGoal.targetAmount) * 100;
 
       await updateDoc(doc(db, 'users', user.uid, 'financialGoals', selectedGoal.id), {
         currentAmount: newCurrentAmount,
-        totalDeposited: (selectedGoal.totalDeposited || 0) + amount,
+        totalAllocated: (selectedGoal.totalAllocated || 0) + amount,
         status: newStatus,
-        lastContributionDate: transactionFormData.date,
+        lastAllocationDate: transactionFormData.date,
         updatedAt: Timestamp.now(),
       });
 
-      // 4. Create expense transaction (from linked account)
-      await addDoc(collection(db, 'users', user.uid, 'transactions'), {
-        type: 'Expense',
-        amount,
-        accountId: transactionFormData.accountId,
-        categoryId: savingsCategoryId,
-        description: transactionFormData.description || `Savings: ${selectedGoal.goalName}`,
-        date: transactionFormData.date,
-        createdAt: Timestamp.now(),
-      });
-
-      // 5. Create income transaction (to savings account)
-      await addDoc(collection(db, 'users', user.uid, 'transactions'), {
-        type: 'Income',
-        amount,
-        accountId: savingsAccId,
-        categoryId: savingsCategoryId,
-        description: transactionFormData.description || `Savings: ${selectedGoal.goalName}`,
-        date: transactionFormData.date,
-        createdAt: Timestamp.now(),
-      });
-
-      // 6. Record goal transaction
+      // Record allocation history
       await addDoc(collection(db, 'users', user.uid, 'goalTransactions'), {
         goalId: selectedGoal.id,
-        type: 'deposit',
+        type: 'allocate',
         amount,
         date: transactionFormData.date,
         accountId: transactionFormData.accountId,
-        description: transactionFormData.description || 'Deposit',
+        description: transactionFormData.description || `Allocated to ${selectedGoal.goalName}`,
         createdAt: Timestamp.now(),
       });
 
@@ -429,20 +269,20 @@ export default function FinancialGoalsPage() {
       } else if (newPercentage >= 25 && oldPercentage < 25) {
         showToast('✨ 25% complete! Great start!', 'success');
       } else {
-        showToast('Deposit recorded successfully', 'success');
+        showToast('Amount allocated successfully', 'success');
       }
 
       await loadData();
-      closeDepositModal();
+      closeAllocateModal();
     } catch (error) {
-      console.error('Error processing deposit:', error);
-      showToast('Error processing deposit', 'error');
+      console.error('Error allocating:', error);
+      showToast('Error allocating amount', 'error');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleWithdraw = async (e) => {
+  const handleDeallocate = async (e) => {
     e.preventDefault();
     if (submitting || !selectedGoal) return;
 
@@ -452,105 +292,40 @@ export default function FinancialGoalsPage() {
     }
 
     if (amount > selectedGoal.currentAmount) {
-      return showToast('Amount exceeds current goal balance', 'error');
+      return showToast('Amount exceeds current allocation', 'error');
     }
 
     setSubmitting(true);
 
     try {
-      const savingsAccId = await ensureSharedSavingsAccount();
-      const redemptionCategoryId = await ensureCategory('Redemption', 'Income');
-      const savingsAccount = accounts.find((a) => a.id === savingsAccId);
-
-      // 1. Deduct from shared savings account
-      await updateDoc(doc(db, 'users', user.uid, 'accounts', savingsAccId), {
-        balance: (savingsAccount?.balance || 0) - amount,
-        updatedAt: Timestamp.now(),
-      });
-
-      // 2. Add to linked account
-      const linkedAccount = accounts.find((a) => a.id === transactionFormData.accountId);
-      await updateDoc(doc(db, 'users', user.uid, 'accounts', transactionFormData.accountId), {
-        balance: linkedAccount.balance + amount,
-        updatedAt: Timestamp.now(),
-      });
-
-      // 3. Update goal
+      // Update goal (virtual deallocation)
       const newCurrentAmount = selectedGoal.currentAmount - amount;
 
       await updateDoc(doc(db, 'users', user.uid, 'financialGoals', selectedGoal.id), {
         currentAmount: newCurrentAmount,
-        totalWithdrawn: (selectedGoal.totalWithdrawn || 0) + amount,
+        totalDeallocated: (selectedGoal.totalDeallocated || 0) + amount,
         updatedAt: Timestamp.now(),
       });
 
-      // 4. Create expense transaction (from savings account)
-      await addDoc(collection(db, 'users', user.uid, 'transactions'), {
-        type: 'Expense',
-        amount,
-        accountId: savingsAccId,
-        categoryId: redemptionCategoryId,
-        description: transactionFormData.description || `Redemption: ${selectedGoal.goalName}`,
-        date: transactionFormData.date,
-        createdAt: Timestamp.now(),
-      });
-
-      // 5. Create income transaction (to linked account)
-      await addDoc(collection(db, 'users', user.uid, 'transactions'), {
-        type: 'Income',
-        amount,
-        accountId: transactionFormData.accountId,
-        categoryId: redemptionCategoryId,
-        description: transactionFormData.description || `Redemption: ${selectedGoal.goalName}`,
-        date: transactionFormData.date,
-        createdAt: Timestamp.now(),
-      });
-
-      // 6. Record goal transaction
+      // Record deallocation history
       await addDoc(collection(db, 'users', user.uid, 'goalTransactions'), {
         goalId: selectedGoal.id,
-        type: 'withdrawal',
+        type: 'deallocate',
         amount,
         date: transactionFormData.date,
         accountId: transactionFormData.accountId,
-        description: transactionFormData.description || 'Withdrawal',
+        description: transactionFormData.description || `Deallocated from ${selectedGoal.goalName}`,
         createdAt: Timestamp.now(),
       });
 
-      showToast('Withdrawal recorded successfully', 'success');
+      showToast('Amount deallocated successfully', 'success');
       await loadData();
-      closeWithdrawModal();
+      closeDeallocateModal();
     } catch (error) {
-      console.error('Error processing withdrawal:', error);
-      showToast('Error processing withdrawal', 'error');
+      console.error('Error deallocating:', error);
+      showToast('Error deallocating amount', 'error');
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const calculateDeleteImpact = async (goal) => {
-    try {
-      const transRef = collection(db, 'users', user.uid, 'goalTransactions');
-      const q = query(transRef, where('goalId', '==', goal.id));
-      const snapshot = await getDocs(q);
-      
-      const deposits = snapshot.docs.filter(d => d.data().type === 'deposit');
-      const withdrawals = snapshot.docs.filter(d => d.data().type === 'withdrawal');
-      
-      const totalDeposits = deposits.reduce((sum, d) => sum + d.data().amount, 0);
-      const totalWithdrawals = withdrawals.reduce((sum, d) => sum + d.data().amount, 0);
-
-      return {
-        transactionCount: snapshot.docs.length,
-        deposits: deposits.length,
-        withdrawals: withdrawals.length,
-        totalDeposits,
-        totalWithdrawals,
-        netAmount: goal.currentAmount,
-      };
-    } catch (error) {
-      console.error('Error calculating impact:', error);
-      return null;
     }
   };
 
@@ -558,73 +333,20 @@ export default function FinancialGoalsPage() {
     if (!goalToDelete) return;
 
     try {
-      const savingsAccId = await ensureSharedSavingsAccount();
-      
       // Get all goal transactions
       const transRef = collection(db, 'users', user.uid, 'goalTransactions');
       const q = query(transRef, where('goalId', '==', goalToDelete.id));
       const snapshot = await getDocs(q);
 
-      // Reverse all transactions
+      // Delete all transactions
       for (const transDoc of snapshot.docs) {
-        const trans = transDoc.data();
-        
-        if (trans.type === 'deposit') {
-          // Return money from savings account to linked account
-          const linkedAccount = accounts.find(a => a.id === trans.accountId);
-          const savingsAccount = accounts.find(a => a.id === savingsAccId);
-
-          if (linkedAccount) {
-            await updateDoc(doc(db, 'users', user.uid, 'accounts', trans.accountId), {
-              balance: linkedAccount.balance + trans.amount,
-              updatedAt: Timestamp.now(),
-            });
-          }
-
-          if (savingsAccount) {
-            await updateDoc(doc(db, 'users', user.uid, 'accounts', savingsAccId), {
-              balance: Math.max(0, (savingsAccount?.balance || 0) - trans.amount),
-              updatedAt: Timestamp.now(),
-            });
-          }
-        } else if (trans.type === 'withdrawal') {
-          // Return money to savings account from linked account
-          const linkedAccount = accounts.find(a => a.id === trans.accountId);
-          const savingsAccount = accounts.find(a => a.id === savingsAccId);
-
-          if (linkedAccount) {
-            await updateDoc(doc(db, 'users', user.uid, 'accounts', trans.accountId), {
-              balance: Math.max(0, linkedAccount.balance - trans.amount),
-              updatedAt: Timestamp.now(),
-            });
-          }
-
-          if (savingsAccount) {
-            await updateDoc(doc(db, 'users', user.uid, 'accounts', savingsAccId), {
-              balance: (savingsAccount?.balance || 0) + trans.amount,
-              updatedAt: Timestamp.now(),
-            });
-          }
-        }
-
-        // Delete transaction
         await deleteDoc(transDoc.ref);
-      }
-
-      // Delete associated main transactions
-      const mainTransRef = collection(db, 'users', user.uid, 'transactions');
-      const mainTransSnapshot = await getDocs(mainTransRef);
-      for (const doc of mainTransSnapshot.docs) {
-        const trans = doc.data();
-        if (trans.description && trans.description.includes(goalToDelete.goalName)) {
-          await deleteDoc(doc.ref);
-        }
       }
 
       // Delete goal
       await deleteDoc(doc(db, 'users', user.uid, 'financialGoals', goalToDelete.id));
 
-      showToast('Goal deleted and all transactions reversed', 'success');
+      showToast('Goal deleted successfully', 'success');
       await loadData();
     } catch (error) {
       console.error('Error deleting goal:', error);
@@ -632,7 +354,6 @@ export default function FinancialGoalsPage() {
     } finally {
       setShowDeleteModal(false);
       setGoalToDelete(null);
-      setDeleteImpact(null);
     }
   };
 
@@ -646,7 +367,7 @@ export default function FinancialGoalsPage() {
         currentAmount: goal.currentAmount.toString(),
         targetDate: goal.targetDate,
         monthlyContribution: goal.monthlyContribution?.toString() || '',
-        linkedAccountId: goal.linkedAccountId || goal.accountId || accounts.filter(a => !a.isSharedGoalAccount && !a.isGoalAccount)[0]?.id || '',
+        linkedAccountId: goal.linkedAccountId || accounts[0]?.id || '',
         priority: goal.priority,
         description: goal.description || '',
         enableNotifications: goal.enableNotifications !== false,
@@ -660,7 +381,7 @@ export default function FinancialGoalsPage() {
         currentAmount: '0',
         targetDate: '',
         monthlyContribution: '',
-        linkedAccountId: accounts.filter(a => !a.isSharedGoalAccount && !a.isGoalAccount)[0]?.id || '',
+        linkedAccountId: accounts[0]?.id || '',
         priority: 'medium',
         description: '',
         enableNotifications: true,
@@ -674,43 +395,36 @@ export default function FinancialGoalsPage() {
     setEditingGoal(null);
   };
 
-  const openDepositModal = (goal) => {
+  const openAllocateModal = (goal) => {
     setSelectedGoal(goal);
     setTransactionFormData({
       amount: goal.monthlyContribution?.toString() || '',
-      accountId: goal.linkedAccountId || goal.accountId || accounts.filter(a => !a.isSharedGoalAccount && !a.isGoalAccount)[0]?.id || '',
+      accountId: goal.linkedAccountId || accounts[0]?.id || '',
       date: new Date().toISOString().split('T')[0],
       description: '',
     });
-    setShowDepositModal(true);
+    setShowAllocateModal(true);
   };
 
-  const closeDepositModal = () => {
-    setShowDepositModal(false);
+  const closeAllocateModal = () => {
+    setShowAllocateModal(false);
     setSelectedGoal(null);
   };
 
-  const openWithdrawModal = (goal) => {
+  const openDeallocateModal = (goal) => {
     setSelectedGoal(goal);
     setTransactionFormData({
       amount: '',
-      accountId: goal.linkedAccountId || goal.accountId || accounts.filter(a => !a.isSharedGoalAccount && !a.isGoalAccount)[0]?.id || '',
+      accountId: goal.linkedAccountId || accounts[0]?.id || '',
       date: new Date().toISOString().split('T')[0],
       description: '',
     });
-    setShowWithdrawModal(true);
+    setShowDeallocateModal(true);
   };
 
-  const closeWithdrawModal = () => {
-    setShowWithdrawModal(false);
+  const closeDeallocateModal = () => {
+    setShowDeallocateModal(false);
     setSelectedGoal(null);
-  };
-
-  const openDeleteModal = async (goal) => {
-    setGoalToDelete(goal);
-    const impact = await calculateDeleteImpact(goal);
-    setDeleteImpact(impact);
-    setShowDeleteModal(true);
   };
 
   const categoryIcons = {
@@ -752,12 +466,31 @@ export default function FinancialGoalsPage() {
     return goal.status === filterStatus;
   });
 
-  const totalSaved = goals.reduce((sum, g) => sum + (g.currentAmount || 0), 0);
+  const totalAllocated = goals.reduce((sum, g) => sum + (g.currentAmount || 0), 0);
   const totalTarget = goals.reduce((sum, g) => sum + (g.targetAmount || 0), 0);
   const activeGoals = goals.filter((g) => g.status === 'active').length;
   const completedGoals = goals.filter((g) => g.status === 'completed').length;
 
-  const regularAccounts = accounts.filter(a => !a.isSharedGoalAccount && !a.isGoalAccount);
+  // Calculate total available in linked accounts
+  const getAccountAllocations = (accountId) => {
+  const accountGoals = goals.filter(
+    (g) => g.linkedAccountId === accountId && g.status === 'active'
+  );
+  const totalAllocated = accountGoals.reduce((sum, g) => sum + (g.currentAmount || 0), 0);
+  return {
+    allocated: totalAllocated,
+    goals: accountGoals,
+  };
+};
+
+const getAvailableBalance = (accountId) => {
+  const account = accounts.find((a) => a.id === accountId);
+  if (!account) return 0;
+  const { allocated } = getAccountAllocations(accountId);
+  return Math.max(0, account.balance - allocated);
+};
+
+  const accountAllocations = getAccountAllocations();
 
   return (
     <div className="max-w-7xl mx-auto space-y-5 pb-6">
@@ -765,7 +498,7 @@ export default function FinancialGoalsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Financial Goals</h1>
-          <p className="text-sm text-gray-500 mt-1">Save for what matters most</p>
+          <p className="text-sm text-gray-500 mt-1">Virtual allocation for your savings goals</p>
         </div>
         <button
           onClick={() => openGoalModal()}
@@ -780,11 +513,11 @@ export default function FinancialGoalsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-medium text-gray-500 uppercase">Total Saved</p>
+            <p className="text-xs font-medium text-gray-500 uppercase">Total Allocated</p>
             <PiggyBank size={14} className="text-green-600" />
           </div>
-          <p className="text-xl font-bold text-green-600">৳{totalSaved.toLocaleString()}</p>
-          <p className="text-xs text-gray-500 mt-1">In Goals Savings</p>
+          <p className="text-xl font-bold text-green-600">৳{totalAllocated.toLocaleString()}</p>
+          <p className="text-xs text-gray-500 mt-1">Across all goals</p>
         </div>
 
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
@@ -793,7 +526,7 @@ export default function FinancialGoalsPage() {
             <Target size={14} className="text-blue-600" />
           </div>
           <p className="text-xl font-bold text-blue-600">৳{totalTarget.toLocaleString()}</p>
-          <p className="text-xs text-gray-500 mt-1">{((totalSaved/totalTarget)*100).toFixed(1)}% achieved</p>
+          <p className="text-xs text-gray-500 mt-1">{((totalAllocated/totalTarget)*100 || 0).toFixed(1)}% achieved</p>
         </div>
 
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
@@ -813,45 +546,84 @@ export default function FinancialGoalsPage() {
         </div>
       </div>
 
-      {/* Shared Savings Account Info */}
-      {sharedSavingsAccountId && (
-        <div className="bg-gradient-to-r from-emerald-50 to-green-50 border-2 border-emerald-200 rounded-lg p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-emerald-600 rounded-full flex items-center justify-center">
-              <PiggyBank size={24} className="text-white" />
-            </div>
-            <div className="flex-1">
-              <p className="font-bold text-emerald-900">Goals Savings Account</p>
-              <p className="text-sm text-emerald-700">
-                All goals save to this shared account
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-2xl font-bold text-emerald-600">
-                ৳{(accounts.find(a => a.id === sharedSavingsAccountId)?.balance || 0).toLocaleString()}
-              </p>
-              <p className="text-xs text-emerald-600">{goals.length} goals</p>
-            </div>
-          </div>
-          
-          {/* Goals Breakdown */}
-          {goals.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-emerald-200">
-              <p className="text-xs font-medium text-emerald-800 mb-2">Breakdown:</p>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                {goals.slice(0, 6).map(goal => (
-                  <div key={goal.id} className="flex items-center gap-2 text-xs">
-                    <span className="text-base">{categoryIcons[goal.category]}</span>
-                    <span className="text-emerald-700 truncate flex-1">{goal.goalName}</span>
-                    <span className="font-medium text-emerald-900">৳{goal.currentAmount.toLocaleString()}</span>
+      {/* Account Allocations */}
+      {Object.keys(accountAllocations).length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide">Account Allocations</h2>
+          {Object.entries(accountAllocations).map(([accountId, data]) => {
+            if (!data.account) return null;
+            
+            const available = data.account.balance - data.totalAllocated;
+            const allocationPercentage = (data.totalAllocated / data.account.balance) * 100;
+
+            return (
+              <div key={accountId} className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center">
+                      <PiggyBank size={24} className="text-white" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-blue-900">{data.account.name}</p>
+                      <p className="text-sm text-blue-700">
+                        {data.goals.length} goal{data.goals.length !== 1 ? 's' : ''} using this account
+                      </p>
+                    </div>
                   </div>
-                ))}
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-blue-600">
+                      ৳{data.account.balance.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-blue-600">Total Balance</p>
+                  </div>
+                </div>
+
+                {/* Allocation Bar */}
+                <div className="mb-3">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-blue-700">Allocated: ৳{data.totalAllocated.toLocaleString()}</span>
+                    <span className="text-green-700">Available: ৳{available.toLocaleString()}</span>
+                  </div>
+                  <div className="w-full bg-blue-200 rounded-full h-3">
+                    <div
+                      className="h-3 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600"
+                      style={{ width: `${Math.min(allocationPercentage, 100)}%` }}
+                    ></div>
+                  </div>
+                </div>
+
+                {/* Goals Breakdown */}
+                <div className="bg-white/70 rounded-lg p-3 space-y-2">
+                  <p className="text-xs font-bold text-blue-900 mb-2">Goal Allocations:</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {data.goals.map(goal => {
+                      const goalPercent = (goal.currentAmount / goal.targetAmount) * 100;
+                      return (
+                        <div key={goal.id} className="bg-white rounded-lg p-2 border border-blue-100">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-lg">{categoryIcons[goal.category]}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-gray-900 truncate">{goal.goalName}</p>
+                              <p className="text-xs text-gray-600">
+                                ৳{goal.currentAmount.toLocaleString()} / ৳{goal.targetAmount.toLocaleString()}
+                              </p>
+                            </div>
+                            <span className="text-xs font-bold text-blue-600">{goalPercent.toFixed(0)}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-1.5">
+                            <div
+                              className={`h-1.5 rounded-full bg-gradient-to-r ${categoryColors[goal.category]}`}
+                              style={{ width: `${Math.min(goalPercent, 100)}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
-              {goals.length > 6 && (
-                <p className="text-xs text-emerald-600 mt-2">+ {goals.length - 6} more goals</p>
-              )}
-            </div>
-          )}
+            );
+          })}
         </div>
       )}
 
@@ -920,7 +692,7 @@ export default function FinancialGoalsPage() {
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-gray-600">{goal.description || `Target by ${new Date(goal.targetDate).toLocaleDateString()}`}</p>
+                      <p className="text-sm text-gray-600">{goal.description || `Target by ${formatDate(goal.targetDate)}`}</p>
                     </div>
                   </div>
 
@@ -928,16 +700,16 @@ export default function FinancialGoalsPage() {
                     {goal.status === 'active' && (
                       <>
                         <button
-                          onClick={() => openDepositModal(goal)}
+                          onClick={() => openAllocateModal(goal)}
                           className="p-2 hover:bg-green-50 rounded-lg"
-                          title="Deposit"
+                          title="Allocate"
                         >
                           <ArrowUpCircle size={18} className="text-green-600" />
                         </button>
                         <button
-                          onClick={() => openWithdrawModal(goal)}
+                          onClick={() => openDeallocateModal(goal)}
                           className="p-2 hover:bg-red-50 rounded-lg"
-                          title="Withdraw"
+                          title="Deallocate"
                         >
                           <ArrowDownCircle size={18} className="text-red-600" />
                         </button>
@@ -958,7 +730,10 @@ export default function FinancialGoalsPage() {
                       <Edit2 size={18} className="text-gray-600" />
                     </button>
                     <button
-                      onClick={() => openDeleteModal(goal)}
+                      onClick={() => {
+                        setGoalToDelete(goal);
+                        setShowDeleteModal(true);
+                      }}
                       className="p-2 hover:bg-red-50 rounded-lg"
                       title="Delete"
                     >
@@ -986,14 +761,21 @@ export default function FinancialGoalsPage() {
                 {/* Stats */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                   <div>
-                    <p className="text-xs text-gray-500">Days Remaining</p>
+                    <p className="text-xs text-gray-500">Target Date</p>
+                    <p className="font-semibold text-gray-900 flex items-center gap-1">
+                      <Calendar size={14} />
+                      {formatDate(goal.targetDate)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Days Left</p>
                     <p className="font-semibold text-gray-900 flex items-center gap-1">
                       <Clock size={14} />
                       {metrics.daysRemaining} days
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Monthly Target</p>
+                    <p className="text-xs text-gray-500">Monthly Need</p>
                     <p className="font-semibold text-blue-600">৳{metrics.monthlyRequired}</p>
                   </div>
                   <div>
@@ -1010,10 +792,6 @@ export default function FinancialGoalsPage() {
                       )}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Linked Account</p>
-                    <p className="font-semibold text-gray-900 truncate">{getAccountName(goal.linkedAccountId)}</p>
-                  </div>
                 </div>
               </div>
             );
@@ -1021,7 +799,7 @@ export default function FinancialGoalsPage() {
         </div>
       )}
 
-      {/* Create/Edit Goal Modal - KEEPING SAME AS BEFORE */}
+      {/* Create/Edit Goal Modal */}
       {showGoalModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-lg w-full max-w-2xl my-8 shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
@@ -1037,6 +815,12 @@ export default function FinancialGoalsPage() {
             </div>
 
             <form onSubmit={handleGoalSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                <p className="text-xs text-blue-800">
+                  <strong>Virtual Goals:</strong> Money stays in your account. Goals just track how much you've mentally allocated.
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Goal Name *</label>
@@ -1142,7 +926,7 @@ export default function FinancialGoalsPage() {
 
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Linked Account (for deposits/withdrawals) *
+                    Linked Account *
                   </label>
                   <select
                     value={goalFormData.linkedAccountId}
@@ -1151,15 +935,15 @@ export default function FinancialGoalsPage() {
                     required
                     disabled={submitting}
                   >
-                    {regularAccounts.map((a) => (
+                    {accounts.map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.name} (৳{a.balance.toLocaleString()})
                       </option>
                     ))}
                   </select>
-                  <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
+                  <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
                     <PiggyBank size={12} />
-                    Money will be saved in the shared "Goals Savings" account
+                    This is where your money physically stays
                   </p>
                 </div>
 
@@ -1218,25 +1002,28 @@ export default function FinancialGoalsPage() {
         </div>
       )}
 
-      {/* Deposit Modal */}
-      {showDepositModal && selectedGoal && (
+      {/* Allocate Modal */}
+      {showAllocateModal && selectedGoal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg w-full max-w-md p-6 shadow-2xl">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-bold text-gray-900">Make Deposit</h2>
-              <button onClick={closeDepositModal} className="text-gray-400 hover:text-gray-600">
+              <h2 className="text-lg font-bold text-gray-900">Allocate to Goal</h2>
+              <button onClick={closeAllocateModal} className="text-gray-400 hover:text-gray-600">
                 <X size={20} />
               </button>
             </div>
 
-            <div className="bg-gray-50 rounded-lg p-3 mb-4">
-              <p className="text-sm font-medium text-gray-900">{selectedGoal.goalName}</p>
-              <p className="text-xs text-gray-600">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+              <p className="text-xs text-blue-800 mb-2">
+                <strong>Virtual Allocation:</strong> This just marks money for this goal. Money stays in your account.
+              </p>
+              <p className="text-sm font-medium text-blue-900">{selectedGoal.goalName}</p>
+              <p className="text-xs text-blue-700">
                 Current: ৳{selectedGoal.currentAmount.toLocaleString()} / ৳{selectedGoal.targetAmount.toLocaleString()}
               </p>
             </div>
 
-            <form onSubmit={handleDeposit} className="space-y-4">
+            <form onSubmit={handleAllocate} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Amount (৳) *</label>
                 <input
@@ -1252,13 +1039,13 @@ export default function FinancialGoalsPage() {
                 />
                 {transactionFormData.amount && (
                   <p className="text-xs text-gray-600 mt-1">
-                    New balance: ৳{(selectedGoal.currentAmount + parseFloat(transactionFormData.amount || 0)).toLocaleString()}
+                    New allocation: ৳{(selectedGoal.currentAmount + parseFloat(transactionFormData.amount || 0)).toLocaleString()}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">From Account *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">From Account</label>
                 <select
                   value={transactionFormData.accountId}
                   onChange={(e) => setTransactionFormData((p) => ({ ...p, accountId: e.target.value }))}
@@ -1266,15 +1053,15 @@ export default function FinancialGoalsPage() {
                   required
                   disabled={submitting}
                 >
-                  {regularAccounts.map((a) => (
+                  {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name} (৳{a.balance.toLocaleString()})
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
+                <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
                   <ArrowUpCircle size={12} />
-                  Will be saved to "Goals Savings" account
+                  Money stays in this account (virtual allocation only)
                 </p>
               </div>
 
@@ -1291,7 +1078,7 @@ export default function FinancialGoalsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                 <input
                   type="text"
                   value={transactionFormData.description}
@@ -1305,7 +1092,7 @@ export default function FinancialGoalsPage() {
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={closeDepositModal}
+                  onClick={closeAllocateModal}
                   className="flex-1 py-2.5 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition"
                   disabled={submitting}
                 >
@@ -1319,10 +1106,10 @@ export default function FinancialGoalsPage() {
                   {submitting ? (
                     <>
                       <Loader2 className="animate-spin" size={16} />
-                      <span>Processing...</span>
+                      <span>Allocating...</span>
                     </>
                   ) : (
-                    <span>Deposit</span>
+                    <span>Allocate</span>
                   )}
                 </button>
               </div>
@@ -1331,13 +1118,13 @@ export default function FinancialGoalsPage() {
         </div>
       )}
 
-      {/* Withdraw Modal */}
-      {showWithdrawModal && selectedGoal && (
+      {/* Deallocate Modal */}
+      {showDeallocateModal && selectedGoal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg w-full max-w-md p-6 shadow-2xl">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-bold text-gray-900">Withdraw</h2>
-              <button onClick={closeWithdrawModal} className="text-gray-400 hover:text-gray-600">
+              <h2 className="text-lg font-bold text-gray-900">Deallocate from Goal</h2>
+              <button onClick={closeDeallocateModal} className="text-gray-400 hover:text-gray-600">
                 <X size={20} />
               </button>
             </div>
@@ -1345,11 +1132,11 @@ export default function FinancialGoalsPage() {
             <div className="bg-gray-50 rounded-lg p-3 mb-4">
               <p className="text-sm font-medium text-gray-900">{selectedGoal.goalName}</p>
               <p className="text-xs text-gray-600">
-                Available: ৳{selectedGoal.currentAmount.toLocaleString()}
+                Allocated: ৳{selectedGoal.currentAmount.toLocaleString()}
               </p>
             </div>
 
-            <form onSubmit={handleWithdraw} className="space-y-4">
+            <form onSubmit={handleDeallocate} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Amount (৳) *</label>
                 <input
@@ -1372,27 +1159,6 @@ export default function FinancialGoalsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">To Account *</label>
-                <select
-                  value={transactionFormData.accountId}
-                  onChange={(e) => setTransactionFormData((p) => ({ ...p, accountId: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-600 focus:border-transparent"
-                  required
-                  disabled={submitting}
-                >
-                  {regularAccounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} (৳{a.balance.toLocaleString()})
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                  <ArrowDownCircle size={12} />
-                  Will be withdrawn from "Goals Savings" account
-                </p>
-              </div>
-
-              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
                 <input
                   type="date"
@@ -1411,21 +1177,21 @@ export default function FinancialGoalsPage() {
                   value={transactionFormData.description}
                   onChange={(e) => setTransactionFormData((p) => ({ ...p, description: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-600 focus:border-transparent"
-                  placeholder="Emergency withdrawal..."
+                  placeholder="Emergency..."
                   disabled={submitting}
                 />
               </div>
 
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                 <p className="text-xs text-amber-800">
-                  ⚠️ Withdrawing will reduce your goal progress
+                  ⚠️ This will reduce your goal allocation (money stays in account)
                 </p>
               </div>
 
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={closeWithdrawModal}
+                  onClick={closeDeallocateModal}
                   className="flex-1 py-2.5 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition"
                   disabled={submitting}
                 >
@@ -1442,7 +1208,7 @@ export default function FinancialGoalsPage() {
                       <span>Processing...</span>
                     </>
                   ) : (
-                    <span>Withdraw</span>
+                    <span>Deallocate</span>
                   )}
                 </button>
               </div>
@@ -1459,27 +1225,17 @@ export default function FinancialGoalsPage() {
               <AlertCircle size={48} className="text-red-500 mx-auto mb-4" />
               <h3 className="text-lg font-semibold mb-2">Delete Goal?</h3>
               <p className="text-sm text-gray-600 mb-4">
-                This will permanently delete "{goalToDelete.goalName}" and reverse all transactions.
+                This will permanently delete "{goalToDelete.goalName}" and all allocation history.
               </p>
-              
-              {deleteImpact && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 text-left">
-                  <p className="text-sm font-medium text-red-900 mb-2">Impact:</p>
-                  <ul className="text-xs text-red-800 space-y-1">
-                    <li>• {deleteImpact.transactionCount} transactions will be deleted</li>
-                    <li>• {deleteImpact.deposits} deposits reversed (৳{deleteImpact.totalDeposits.toLocaleString()})</li>
-                    <li>• {deleteImpact.withdrawals} withdrawals reversed (৳{deleteImpact.totalWithdrawals.toLocaleString()})</li>
-                    <li>• Net balance (৳{deleteImpact.netAmount.toLocaleString()}) will be returned</li>
-                  </ul>
-                </div>
-              )}
+              <p className="text-xs text-blue-600 bg-blue-50 p-2 rounded mb-4">
+                Note: Your money will remain in your account (it was virtual allocation only)
+              </p>
 
               <div className="flex gap-3">
                 <button
                   onClick={() => {
                     setShowDeleteModal(false);
                     setGoalToDelete(null);
-                    setDeleteImpact(null);
                   }}
                   className="flex-1 py-2.5 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition"
                 >
@@ -1489,7 +1245,7 @@ export default function FinancialGoalsPage() {
                   onClick={handleDeleteGoal}
                   className="flex-1 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition"
                 >
-                  Delete & Reverse
+                  Delete Goal
                 </button>
               </div>
             </div>

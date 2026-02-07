@@ -1,4 +1,5 @@
-'use client';
+// src/app/dashboard/admin/landing-settings/page.js
+use client';
 
 import { useEffect, useState } from 'react';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
