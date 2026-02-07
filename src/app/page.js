@@ -1,67 +1,75 @@
 // src/app/page.js
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { collection, getDocs, query, where, limit, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { 
   CheckCircle, 
   ArrowRight, 
   Menu, 
-  X, 
+  X,
   Wallet,
   TrendingUp,
   Shield,
   BarChart3,
-  Users,
-  Activity,
   Star,
-  PlayCircle,
-  Smartphone,
   Lock,
-  Zap,
   Award,
   Moon,
-  Bell,
   Calendar,
-  Target,
-  CreditCard,
-  PiggyBank,
-  ShoppingCart,
-  RefreshCw,
-  TrendingDown,
   FileText,
-  DollarSign,
-  Heart,
   Sparkles,
-  Layers,
-  History,
+  ChevronDown,
+  ChevronUp,
+  Users,
+  Zap,
+  Mail,
+  MapPin,
+  Phone,
+  Globe,
+  Heart,
+  Target,
+  TrendingDown,
+  PiggyBank,
+  RefreshCw,
+  Eye,
+  Clock,
   Gift,
-  Repeat,
-  Receipt
+  Layers
 } from 'lucide-react';
 
-export default function UltimateLandingPage() {
+export default function LandingPage() {
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [stats, setStats] = useState({ users: 0, transactions: 0, satisfaction: 0 });
   const [plans, setPlans] = useState([]);
   const [testimonials, setTestimonials] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [openFaq, setOpenFaq] = useState(null);
+  const [showModal, setShowModal] = useState(null);
   const [activeFeature, setActiveFeature] = useState(0);
 
   useEffect(() => {
     loadAllData();
     
-    // Auto-rotate featured features
+    // Auto-rotate features
     const interval = setInterval(() => {
-      setActiveFeature((prev) => (prev + 1) % allFeatures.length);
-    }, 4000);
+      setActiveFeature((prev) => (prev + 1) % features.length);
+    }, 3000);
     
     return () => clearInterval(interval);
   }, []);
+
+  // Smooth scroll function
+  const scrollToSection = (sectionId) => {
+    const element = document.getElementById(sectionId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setMobileMenuOpen(false);
+    }
+  };
 
   const loadAllData = async () => {
     setLoading(true);
@@ -165,407 +173,392 @@ export default function UltimateLandingPage() {
     }
   };
 
-  const coreFeatures = [
+  const features = [
     {
-      icon: <Moon className="w-8 h-8" />,
-      title: 'Hijri Year (Hawl) Monitoring',
-      description: 'Track your wealth for exactly 12 lunar months with automatic Zakat assessment',
-      gradient: 'from-emerald-500 to-teal-500',
-      tag: 'Lunar Logic'
-    },
-    {
-      icon: <TrendingUp className="w-8 h-8" />,
-      title: 'Real-time Nisab Assessment',
-      description: 'Market-synced Nisab calculation based on current silver rates',
-      gradient: 'from-blue-500 to-cyan-500',
-      tag: 'Market Sync'
-    },
-    {
-      icon: <Wallet className="w-8 h-8" />,
-      title: 'Multi-Account Wealth Hub',
-      description: 'Consolidate Cash, Bank, bKash, and Gold in one secure terminal',
-      gradient: 'from-purple-500 to-pink-500',
-      tag: 'Wealth View'
-    },
-    {
-      icon: <Shield className="w-8 h-8" />,
-      title: 'Automated Zakat Calculator',
-      description: 'Shariah-compliant calculation with complete transparency',
-      gradient: 'from-green-500 to-emerald-500',
-      tag: 'Shariah-First'
-    },
-    {
-      icon: <BarChart3 className="w-8 h-8" />,
-      title: 'Advanced Analytics',
-      description: 'Visual insights and comprehensive financial reports',
-      gradient: 'from-orange-500 to-red-500',
-      tag: 'Data Driven'
-    },
-    {
-      icon: <Lock className="w-8 h-8" />,
-      title: 'Bank-Grade Security',
-      description: 'Military-grade encryption keeps your data protected',
-      gradient: 'from-indigo-500 to-purple-500',
-      tag: 'Secure'
-    }
-  ];
-
-  const allFeatures = [
-    {
-      icon: <Receipt className="w-6 h-6" />,
-      title: 'Tax File Preparation',
-      description: 'Export transaction reports formatted for tax filing',
-      status: 'Coming Soon',
-      color: 'emerald'
-    },
-    {
-      icon: <CreditCard className="w-6 h-6" />,
-      title: 'Loan Tracker',
-      description: 'Monitor loans with Qard Hasan (interest-free) and conventional tracking',
-      status: 'Active',
+      icon: <Moon className="w-6 h-6" />,
+      title: 'Hijri Year Tracking',
+      description: 'Monitor your wealth for exactly 12 lunar months with automatic Zakat assessment',
       color: 'blue'
     },
     {
-      icon: <ShoppingCart className="w-6 h-6" />,
-      title: 'Shopping List',
-      description: 'Plan purchases and track spending against budget',
-      status: 'Coming Soon',
+      icon: <TrendingUp className="w-6 h-6" />,
+      title: 'Real-time Nisab',
+      description: 'Market-synced Nisab calculation based on current silver rates',
+      color: 'green'
+    },
+    {
+      icon: <Wallet className="w-6 h-6" />,
+      title: 'Multi-Account Hub',
+      description: 'Consolidate Cash, Bank, bKash, and Gold in one secure platform',
       color: 'purple'
     },
     {
-      icon: <Repeat className="w-6 h-6" />,
-      title: 'Recurring Transactions',
-      description: 'Automate monthly bills, subscriptions, and regular expenses',
-      status: 'Coming Soon',
-      color: 'orange'
+      icon: <Shield className="w-6 h-6" />,
+      title: 'Automated Zakat',
+      description: 'Shariah-compliant calculation with complete transparency',
+      color: 'emerald'
     },
     {
-      icon: <Target className="w-6 h-6" />,
-      title: 'Budget Tracking',
-      description: 'Set category budgets and monitor spending in real-time',
-      status: 'Coming Soon',
-      color: 'pink'
-    },
-    {
-      icon: <PiggyBank className="w-6 h-6" />,
-      title: 'Financial Goals',
-      description: 'Save for Hajj, Umrah, marriage, or any halal goal',
-      status: 'Coming Soon',
-      color: 'teal'
-    },
-    {
-      icon: <Bell className="w-6 h-6" />,
-      title: 'Smart Notifications',
-      description: 'Payment reminders, Zakat alerts, and budget warnings',
-      status: 'Active',
-      color: 'yellow'
-    },
-    {
-      icon: <TrendingUp className="w-6 h-6" />,
-      title: 'Investment Tracker',
-      description: 'Monitor halal investments and Shariah-compliant portfolios',
-      status: 'Coming Soon',
+      icon: <BarChart3 className="w-6 h-6" />,
+      title: 'Smart Analytics',
+      description: 'Visual insights and comprehensive financial reports',
       color: 'indigo'
     },
     {
-      icon: <Heart className="w-6 h-6" />,
-      title: 'Charity Tracker',
-      description: 'Record Sadaqah, donations, and charitable contributions',
-      status: 'Coming Soon',
-      color: 'red'
+      icon: <FileText className="w-6 h-6" />,
+      title: 'PDF Reports',
+      description: 'Generate professional financial statements instantly',
+      color: 'orange'
     }
   ];
 
-  const securityFeatures = [
-    { icon: <Layers />, title: 'End-to-End Encryption' },
-    { icon: <Bell />, title: 'Smart Alerts' },
-    { icon: <History />, title: 'Auto Backups' },
-    { icon: <Lock />, title: 'Secure Access' }
+  const howItWorks = [
+    {
+      step: 1,
+      title: 'Create Your Account',
+      description: 'Sign up in seconds with just your email. Start with a 5-day free trial.',
+      icon: <Users className="w-8 h-8" />
+    },
+    {
+      step: 2,
+      title: 'Add Your Accounts',
+      description: 'Connect your cash, bank accounts, mobile banking, and gold holdings.',
+      icon: <Wallet className="w-8 h-8" />
+    },
+    {
+      step: 3,
+      title: 'Track Transactions',
+      description: 'Record income and expenses easily. Get real-time insights into your wealth.',
+      icon: <TrendingUp className="w-8 h-8" />
+    },
+    {
+      step: 4,
+      title: 'Calculate Zakat',
+      description: 'Let our automated system calculate your Zakat with Shariah compliance.',
+      icon: <Calendar className="w-8 h-8" />
+    }
   ];
+
+  const faqs = [
+    {
+      question: 'What is Nisab Wallet?',
+      answer: 'Nisab Wallet is a comprehensive Islamic finance management platform that helps Muslims track their wealth, manage Zakat obligations, and maintain financial transparency according to Shariah principles.'
+    },
+    {
+      question: 'How does the free trial work?',
+      answer: 'You get 5 days of full access to all features. No credit card required. After the trial, choose a plan that fits your needs or continue with limited free features.'
+    },
+    {
+      question: 'Is my financial data secure?',
+      answer: 'Absolutely. We use bank-level encryption, secure cloud storage, and never share your data with third parties. Your privacy and security are our top priorities.'
+    },
+    {
+      question: 'How is Zakat calculated?',
+      answer: 'Our system follows Shariah-compliant methods, tracking your wealth for a full lunar year (Hawl) and calculating 2.5% of eligible assets when they exceed the Nisab threshold.'
+    },
+    {
+      question: 'Can I export my financial data?',
+      answer: 'Yes! You can export your data as PDF reports or CSV files at any time. You maintain full control and ownership of your information.'
+    },
+    {
+      question: 'What payment methods do you accept?',
+      answer: 'We accept bKash, Nagad, Rocket, bank transfers, and cash payments. All payment options are displayed during checkout.'
+    }
+  ];
+
+  const additionalFeatures = [
+    { icon: <Eye className="w-5 h-5" />, text: 'Real-time Dashboard' },
+    { icon: <Lock className="w-5 h-5" />, text: 'Bank-Level Security' },
+    { icon: <RefreshCw className="w-5 h-5" />, text: 'Auto-Sync Data' },
+    { icon: <Clock className="w-5 h-5" />, text: '24/7 Access' },
+    { icon: <Gift className="w-5 h-5" />, text: 'Free Updates' },
+    { icon: <Layers className="w-5 h-5" />, text: 'Multi-Platform' }
+  ];
+
+  const colorClasses = {
+    blue: 'bg-blue-50 text-blue-600 group-hover:bg-blue-100',
+    green: 'bg-green-50 text-green-600 group-hover:bg-green-100',
+    purple: 'bg-purple-50 text-purple-600 group-hover:bg-purple-100',
+    emerald: 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100',
+    indigo: 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100',
+    orange: 'bg-orange-50 text-orange-600 group-hover:bg-orange-100'
+  };
+
+  // Modal Component
+  const Modal = ({ title, children, onClose }) => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
+      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-2xl animate-slideUp">
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <X size={24} className="text-gray-600" />
+          </button>
+        </div>
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Navigation */}
-      <nav className="fixed top-0 w-full bg-white/90 backdrop-blur-lg z-50 border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}>
-              <div className="relative w-10 h-10 bg-gray-900 rounded-xl flex items-center justify-center shadow-lg">
-                <Zap className="text-emerald-400" size={24} fill="currentColor" />
-              </div>
-              <div>
-                <h1 className="text-xl font-black italic tracking-tighter uppercase text-gray-900">Nisab Wallet</h1>
-                <p className="text-[8px] font-bold uppercase tracking-widest text-gray-400">Digital Nisab Monitor</p>
-              </div>
-            </div>
+      {/* Add smooth scroll CSS */}
+      <style jsx global>{`
+        html {
+          scroll-behavior: smooth;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes slideUp {
+          from { transform: translateY(20px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.2s ease-out;
+        }
+        .animate-slideUp {
+          animation: slideUp 0.3s ease-out;
+        }
+      `}</style>
 
-            {/* Desktop Menu */}
-            <div className="hidden md:flex items-center gap-6">
-              <a href="#features" className="text-xs font-bold uppercase tracking-wider text-gray-600 hover:text-emerald-600 transition-colors">Features</a>
-              <a href="#pricing" className="text-xs font-bold uppercase tracking-wider text-gray-600 hover:text-emerald-600 transition-colors">Pricing</a>
-              <a href="#testimonials" className="text-xs font-bold uppercase tracking-wider text-gray-600 hover:text-emerald-600 transition-colors">Reviews</a>
-              <button
-                onClick={() => router.push('/login?action=demo')}
-                className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-600 hover:text-emerald-700 transition-colors"
-              >
-                <PlayCircle size={16} /> Live Demo
-              </button>
+      {/* Header */}
+      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-gray-100 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            {/* Logo */}
+            <button onClick={() => scrollToSection('hero')} className="flex items-center gap-2 group">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Wallet className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-xl font-bold text-gray-900">Nisab Wallet</span>
+            </button>
+
+            {/* Desktop Navigation */}
+            <nav className="hidden md:flex items-center gap-8">
+              <button onClick={() => scrollToSection('features')} className="text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors">Features</button>
+              <button onClick={() => scrollToSection('how-it-works')} className="text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors">How It Works</button>
+              <button onClick={() => scrollToSection('pricing')} className="text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors">Pricing</button>
+              <button onClick={() => scrollToSection('testimonials')} className="text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors">Reviews</button>
               <button
                 onClick={() => router.push('/login')}
-                className="text-xs font-bold uppercase tracking-wider text-gray-600 hover:text-gray-900 transition-colors"
+                className="text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors"
               >
                 Login
               </button>
               <button
                 onClick={() => router.push('/register')}
-                className="px-6 py-2.5 bg-gray-900 text-white rounded-full text-xs font-bold uppercase tracking-wider hover:bg-emerald-600 transition-all shadow-lg"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-all hover:shadow-lg"
               >
                 Get Started
               </button>
-            </div>
+            </nav>
 
             {/* Mobile Menu Button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2"
+              className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
             >
               {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
           </div>
-
-          {/* Mobile Menu */}
-          {mobileMenuOpen && (
-            <div className="md:hidden py-4 border-t border-gray-100">
-              <div className="flex flex-col gap-4">
-                <a href="#features" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-gray-700">Features</a>
-                <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-gray-700">Pricing</a>
-                <a href="#testimonials" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-gray-700">Reviews</a>
-                <button onClick={() => { setMobileMenuOpen(false); router.push('/login?action=demo'); }} className="text-left text-sm font-medium text-emerald-600">Live Demo</button>
-                <button onClick={() => { setMobileMenuOpen(false); router.push('/login'); }} className="text-left text-sm font-medium text-gray-700">Login</button>
-                <button
-                  onClick={() => { setMobileMenuOpen(false); router.push('/register'); }}
-                  className="px-6 py-2.5 bg-gray-900 text-white rounded-full text-sm font-semibold text-center"
-                >
-                  Get Started
-                </button>
-              </div>
-            </div>
-          )}
         </div>
-      </nav>
+
+        {/* Mobile Menu */}
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-gray-100 bg-white shadow-lg animate-slideUp">
+            <div className="px-4 py-4 space-y-3">
+              <button onClick={() => scrollToSection('features')} className="block w-full text-left py-2 text-sm font-medium text-gray-600 hover:text-blue-600">Features</button>
+              <button onClick={() => scrollToSection('how-it-works')} className="block w-full text-left py-2 text-sm font-medium text-gray-600 hover:text-blue-600">How It Works</button>
+              <button onClick={() => scrollToSection('pricing')} className="block w-full text-left py-2 text-sm font-medium text-gray-600 hover:text-blue-600">Pricing</button>
+              <button onClick={() => scrollToSection('testimonials')} className="block w-full text-left py-2 text-sm font-medium text-gray-600 hover:text-blue-600">Reviews</button>
+              <button
+                onClick={() => router.push('/login')}
+                className="block w-full text-left py-2 text-sm font-medium text-gray-600 hover:text-blue-600"
+              >
+                Login
+              </button>
+              <button
+                onClick={() => router.push('/register')}
+                className="block w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 text-center"
+              >
+                Get Started
+              </button>
+            </div>
+          </div>
+        )}
+      </header>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
+      <section id="hero" className="relative overflow-hidden bg-gradient-to-br from-blue-50 via-white to-indigo-50 pt-20 pb-28 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
             {/* Left Content */}
-            <div>
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-full mb-6 border border-emerald-200">
-                <Shield size={16} />
-                <span className="text-xs font-bold uppercase tracking-wider">Shariah-Compliant Wealth Tracking</span>
+            <div className="relative z-10">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium mb-6 animate-pulse">
+                <Sparkles size={16} />
+                <span>Trusted by {stats.users.toLocaleString()}+ Muslims</span>
               </div>
-
-              <h1 className="text-6xl md:text-7xl font-black italic tracking-tighter uppercase leading-[0.9] mb-8 text-gray-900">
-                The Digital
-                <br />
-                <span className="text-emerald-600">Nisab</span> Monitor.
+              
+              <h1 className="text-5xl lg:text-6xl font-bold text-gray-900 mb-6 leading-tight">
+                Your Wealth,
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600"> Perfected by Faith</span>
               </h1>
-
+              
               <p className="text-xl text-gray-600 mb-8 leading-relaxed">
-                Engineered for the modern Muslim. Track 12-month Zakat cycles, monitor live Nisab, 
-                and command your financial future with Shariah-first precision.
+                Simplify Zakat, amplify Barakah. The smartest way to manage Islamic finance with complete Shariah compliance and modern technology.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4 mb-8">
                 <button
-                  onClick={() => router.push('/login?action=demo')}
-                  className="group inline-flex items-center justify-center gap-3 px-8 py-4 bg-emerald-600 text-white rounded-2xl font-bold uppercase text-xs tracking-wider shadow-xl hover:bg-emerald-500 hover:shadow-2xl transition-all"
+                  onClick={() => router.push('/register')}
+                  className="group inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all shadow-xl shadow-blue-600/30 hover:shadow-2xl hover:scale-105"
                 >
-                  Try Live Demo
-                  <PlayCircle className="group-hover:scale-110 transition-transform" size={18} />
-                </button>
-                <button
-                  onClick={() => document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' })}
-                  className="inline-flex items-center justify-center gap-3 px-8 py-4 bg-white border-2 border-gray-200 text-gray-900 rounded-2xl font-bold uppercase text-xs tracking-wider hover:border-gray-300 hover:shadow-lg transition-all"
-                >
-                  View Plans
-                  <ArrowRight size={18} />
+                  Begin Your Journey
+                  <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
                 </button>
               </div>
 
-              <div className="flex items-center gap-6 text-sm text-gray-600">
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5 text-emerald-500" />
-                  <span>5-Day Free Trial</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5 text-emerald-500" />
-                  <span>No Credit Card</span>
-                </div>
+              {/* Trust Indicators */}
+              <div className="grid grid-cols-3 gap-4 pt-8 border-t border-gray-200">
+                {additionalFeatures.slice(0, 3).map((feature, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-sm text-gray-600">
+                    <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center text-green-600">
+                      {feature.icon}
+                    </div>
+                    <span className="font-medium">{feature.text}</span>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Right Content - App Preview */}
+            {/* Right Content - Interactive Stats Card */}
             <div className="relative">
-              <div className="absolute inset-0 bg-emerald-500/10 blur-[100px] rounded-full" />
-              <div className="relative bg-gray-900 rounded-[3.5rem] p-3 shadow-2xl border border-gray-800">
-                <div className="bg-white rounded-[2.8rem] overflow-hidden border border-gray-100 shadow-inner">
-                  <div className="p-8 space-y-6">
-                    <div className="flex justify-between items-center mb-2">
-                      <p className="text-xs font-bold uppercase text-gray-400 tracking-wider">Financial Terminal</p>
-                      <div className="flex gap-1.5">
-                        <div className="w-2 h-2 rounded-full bg-red-400" />
-                        <div className="w-2 h-2 rounded-full bg-yellow-400" />
-                        <div className="w-2 h-2 rounded-full bg-green-400" />
-                      </div>
+              <div className="bg-white rounded-2xl shadow-2xl p-8 border border-gray-100 relative z-10">
+                <div className="grid grid-cols-3 gap-6 mb-6">
+                  <div className="text-center transform hover:scale-110 transition-transform cursor-pointer">
+                    <div className="text-3xl font-bold text-blue-600 mb-1">{stats.users.toLocaleString()}</div>
+                    <div className="text-sm text-gray-600">Active Users</div>
+                  </div>
+                  <div className="text-center transform hover:scale-110 transition-transform cursor-pointer">
+                    <div className="text-3xl font-bold text-green-600 mb-1">{(stats.transactions / 1000).toFixed(0)}K+</div>
+                    <div className="text-sm text-gray-600">Transactions</div>
+                  </div>
+                  <div className="text-center transform hover:scale-110 transition-transform cursor-pointer">
+                    <div className="flex items-center justify-center gap-1 mb-1">
+                      <Star className="w-5 h-5 text-yellow-400 fill-yellow-400" />
+                      <span className="text-3xl font-bold text-gray-900">{stats.satisfaction}</span>
                     </div>
-                    <div className="h-32 w-full bg-gradient-to-br from-emerald-600 to-emerald-400 rounded-3xl p-6 text-white flex flex-col justify-between shadow-lg">
-                      <p className="text-xs font-bold opacity-90 uppercase tracking-wider">Total Net Wealth</p>
-                      <p className="text-3xl font-black italic uppercase tracking-tighter">৳4,85,250</p>
+                    <div className="text-sm text-gray-600">Rating</div>
+                  </div>
+                </div>
+                
+                {/* Rotating Feature */}
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 min-h-[140px]">
+                  <div className="flex items-start gap-3">
+                    <div className={`w-12 h-12 rounded-lg ${colorClasses[features[activeFeature].color]} flex items-center justify-center flex-shrink-0`}>
+                      {features[activeFeature].icon}
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-gray-50 rounded-2xl border border-gray-100 p-5 space-y-1">
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Nisab Threshold</p>
-                        <p className="text-lg font-black italic text-gray-900">৳68,420</p>
-                      </div>
-                      <div className="bg-emerald-50 rounded-2xl border border-emerald-100 p-5 space-y-1">
-                        <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Days in Hawl</p>
-                        <p className="text-lg font-black italic text-emerald-700">184 Days</p>
-                      </div>
+                    <div>
+                      <div className="font-semibold text-gray-900 mb-2">{features[activeFeature].title}</div>
+                      <p className="text-sm text-gray-700 leading-relaxed">{features[activeFeature].description}</p>
                     </div>
+                  </div>
+                  
+                  {/* Feature Dots */}
+                  <div className="flex items-center justify-center gap-2 mt-4">
+                    {features.map((_, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setActiveFeature(idx)}
+                        className={`w-2 h-2 rounded-full transition-all ${
+                          idx === activeFeature ? 'bg-blue-600 w-6' : 'bg-gray-300 hover:bg-gray-400'
+                        }`}
+                      />
+                    ))}
                   </div>
                 </div>
               </div>
+
+              {/* Floating Elements */}
+              <div className="absolute -top-4 -right-4 w-24 h-24 bg-blue-200 rounded-full blur-3xl opacity-50 animate-pulse"></div>
+              <div className="absolute -bottom-4 -left-4 w-32 h-32 bg-indigo-200 rounded-full blur-3xl opacity-50 animate-pulse" style={{ animationDelay: '1s' }}></div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Stats Section */}
-      <section className="py-16 px-4 sm:px-6 lg:px-8 bg-gray-50">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {[
-              { icon: Users, value: `${stats.users}+`, label: 'Active Users' },
-              { icon: Activity, value: `${(stats.transactions / 1000).toFixed(0)}K+`, label: 'Transactions' },
-              { icon: Star, value: stats.satisfaction, label: 'User Rating' },
-              { icon: Award, value: '99.9%', label: 'Uptime' }
-            ].map((stat, i) => (
-              <div key={i} className="text-center">
-                <div className="inline-flex items-center justify-center w-12 h-12 bg-white rounded-2xl shadow-sm mb-4 border border-gray-100">
-                  <stat.icon className="w-6 h-6 text-gray-900" />
-                </div>
-                <p className="text-3xl font-black italic text-gray-900 mb-1">{stat.value}</p>
-                <p className="text-xs font-bold uppercase tracking-wider text-gray-500">{stat.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Core Features - Shariah-First Engineering */}
-      <section id="features" className="py-20 px-4 sm:px-6 lg:px-8">
+      {/* Features Section */}
+      <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 scroll-mt-16">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter mb-4 text-gray-900">
-              Shariah-First Engineering
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+              Everything You Need for Islamic Finance
             </h2>
-            <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Built for Accountability</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {coreFeatures.map((feature, i) => (
-              <div key={i} className="group bg-white rounded-3xl p-8 border border-gray-100 hover:shadow-2xl hover:border-emerald-200 transition-all">
-                <div className={`inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br ${feature.gradient} rounded-2xl mb-6 text-white group-hover:scale-110 transition-transform shadow-lg`}>
-                  {feature.icon}
-                </div>
-                <span className="inline-block px-3 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase rounded-full mb-3 tracking-wider">
-                  {feature.tag}
-                </span>
-                <h3 className="text-xl font-black italic uppercase tracking-tight text-gray-900 mb-3">
-                  {feature.title}
-                </h3>
-                <p className="text-sm text-gray-600 leading-relaxed">
-                  {feature.description}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* All Features - Interactive Grid */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter mb-4 text-gray-900">
-              Complete Financial Command
-            </h2>
-            <p className="text-lg text-gray-600">Everything you need to manage wealth the Islamic way</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {allFeatures.map((feature, i) => (
-              <div
-                key={i}
-                className={`group relative bg-white rounded-2xl p-6 border-2 transition-all cursor-pointer ${
-                  activeFeature === i
-                    ? 'border-emerald-500 shadow-xl scale-105'
-                    : 'border-gray-100 hover:border-gray-200 hover:shadow-lg'
-                }`}
-                onMouseEnter={() => setActiveFeature(i)}
-              >
-                {feature.status === 'Coming Soon' && (
-                  <div className="absolute top-4 right-4 px-2 py-1 bg-gray-100 text-gray-600 text-[9px] font-bold uppercase rounded-full">
-                    Soon
-                  </div>
-                )}
-                {feature.status === 'Active' && (
-                  <div className="absolute top-4 right-4 px-2 py-1 bg-emerald-100 text-emerald-700 text-[9px] font-bold uppercase rounded-full flex items-center gap-1">
-                    <Sparkles size={10} /> Active
-                  </div>
-                )}
-                <div className={`inline-flex items-center justify-center w-12 h-12 bg-${feature.color}-100 text-${feature.color}-600 rounded-xl mb-4 group-hover:scale-110 transition-transform`}>
-                  {feature.icon}
-                </div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">{feature.title}</h3>
-                <p className="text-sm text-gray-600">{feature.description}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Mobile App Teaser */}
-          <div className="mt-16 bg-gradient-to-br from-gray-900 to-gray-800 rounded-3xl p-8 md:p-12 text-center text-white">
-            <Smartphone className="w-16 h-16 mx-auto mb-6 text-emerald-400" />
-            <h3 className="text-3xl font-black italic uppercase tracking-tight mb-4">Coming to Mobile</h3>
-            <p className="text-lg text-gray-300 mb-6 max-w-2xl mx-auto">
-              Native iOS and Android apps launching soon. Manage your wealth on-the-go with full offline support.
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+              Powerful features designed to make Zakat calculation and wealth management effortless
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <button className="px-6 py-3 bg-white text-gray-900 rounded-xl font-bold text-sm opacity-50 cursor-not-allowed">
-                Download iOS App (Soon)
-              </button>
-              <button className="px-6 py-3 bg-white text-gray-900 rounded-xl font-bold text-sm opacity-50 cursor-not-allowed">
-                Download Android App (Soon)
-              </button>
-            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {features.map((feature, index) => (
+              <div 
+                key={index} 
+                className="group p-6 bg-white rounded-xl border border-gray-200 hover:border-blue-200 hover:shadow-xl transition-all cursor-pointer transform hover:-translate-y-1"
+              >
+                <div className={`w-12 h-12 rounded-lg ${colorClasses[feature.color]} flex items-center justify-center mb-4 transition-all group-hover:scale-110`}>
+                  {feature.icon}
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">{feature.title}</h3>
+                <p className="text-gray-600 leading-relaxed">{feature.description}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Additional Features */}
+          <div className="mt-12 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            {additionalFeatures.map((feature, idx) => (
+              <div key={idx} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                <div className="text-blue-600">{feature.icon}</div>
+                <span className="text-sm font-medium text-gray-700">{feature.text}</span>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Security Infrastructure */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-5xl mx-auto text-center">
-          <h2 className="text-3xl font-black italic uppercase tracking-tighter mb-12 text-gray-900">
-            Security Infrastructure
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            {securityFeatures.map((feature, i) => (
-              <div key={i} className="p-8 bg-gray-50 rounded-3xl border border-gray-100 hover:border-emerald-200 hover:shadow-lg transition-all group">
-                <div className="text-emerald-600 mb-4 mx-auto w-10 h-10 group-hover:scale-110 transition-transform">
-                  {feature.icon}
+      {/* How It Works */}
+      <section id="how-it-works" className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50 scroll-mt-16">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+              How It Works
+            </h2>
+            <p className="text-xl text-gray-600">
+              Get started in 4 simple steps
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+            {howItWorks.map((step, index) => (
+              <div key={index} className="relative">
+                <div className="bg-white rounded-xl p-6 border border-gray-200 hover:shadow-xl hover:border-blue-200 transition-all h-full transform hover:-translate-y-2">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-600 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                      {step.icon}
+                    </div>
+                    <div className="text-5xl font-bold text-gray-100">{step.step}</div>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{step.title}</h3>
+                  <p className="text-gray-600">{step.description}</p>
                 </div>
-                <p className="text-xs font-bold uppercase tracking-wider text-gray-600">{feature.title}</p>
+                {index < howItWorks.length - 1 && (
+                  <div className="hidden lg:block absolute top-1/2 -right-4 w-8 h-0.5 bg-gradient-to-r from-blue-300 to-transparent">
+                    <ArrowRight className="absolute -top-2 -right-1 text-blue-300" size={20} />
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -573,71 +566,79 @@ export default function UltimateLandingPage() {
       </section>
 
       {/* Pricing Section */}
-      <section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50">
+      <section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8 scroll-mt-16">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter mb-4 text-gray-900">
-              Subscription Plans
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+              Simple, Transparent Pricing
             </h2>
-            <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Choose Your Access Duration</p>
+            <p className="text-xl text-gray-600">
+              Choose the plan that works best for you
+            </p>
           </div>
 
           {loading ? (
             <div className="text-center py-20">
-              <div className="animate-spin h-12 w-12 border-4 border-gray-300 border-t-emerald-600 rounded-full mx-auto"></div>
+              <div className="animate-spin h-12 w-12 border-4 border-gray-200 border-t-blue-600 rounded-full mx-auto"></div>
+              <p className="mt-4 text-gray-600">Loading pricing...</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
               {plans.map((plan, idx) => (
                 <div
                   key={plan.id || idx}
-                  className={`relative p-10 rounded-[3rem] border-2 transition-all ${
+                  className={`relative p-8 rounded-2xl border-2 transition-all transform hover:-translate-y-2 ${
                     idx === 1
-                      ? 'border-emerald-500 shadow-2xl bg-gray-900 text-white scale-105 z-10'
-                      : 'border-gray-200 bg-white hover:border-gray-300 shadow-lg hover:shadow-xl'
+                      ? 'border-blue-600 shadow-2xl bg-gradient-to-br from-blue-50 to-indigo-50 scale-105'
+                      : 'border-gray-200 bg-white hover:border-blue-200 hover:shadow-xl'
                   }`}
                 >
                   {idx === 1 && (
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-emerald-500 text-white px-6 py-2 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-lg">
-                      Recommended
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-1 rounded-full text-sm font-medium shadow-lg">
+                      Most Popular
                     </div>
                   )}
-                  <p className={`text-[10px] font-bold uppercase tracking-widest mb-4 ${
-                    idx === 1 ? 'text-emerald-400' : 'text-gray-400'
-                  }`}>
-                    {plan.name || 'System Package'}
-                  </p>
-                  <div className="flex items-baseline gap-1 mb-8">
-                    <span className="text-5xl font-black italic tracking-tighter uppercase">৳{plan.price}</span>
-                    <span className="text-xs font-bold uppercase opacity-60">/ {plan.months}m</span>
+                  
+                  <div className="text-center mb-6">
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">{plan.name || 'Package'}</h3>
+                    <div className="flex items-baseline justify-center gap-1">
+                      <span className="text-4xl font-bold text-gray-900">৳{plan.price}</span>
+                      <span className="text-gray-600">/ {plan.months}m</span>
+                    </div>
                   </div>
-                  <ul className="space-y-4 mb-10 text-sm">
-                    <li className="flex items-center gap-3">
-                      <CheckCircle size={18} className="text-emerald-500 shrink-0" />
-                      <span className="font-medium">Full Zakat Cycle Tracking</span>
+
+                  <ul className="space-y-3 mb-8">
+                    <li className="flex items-center gap-2 text-gray-700">
+                      <CheckCircle size={20} className="text-green-600 shrink-0" />
+                      <span>Full Zakat Cycle Tracking</span>
                     </li>
-                    <li className="flex items-center gap-3">
-                      <CheckCircle size={18} className="text-emerald-500 shrink-0" />
-                      <span className="font-medium">Market Nisab Monitoring</span>
+                    <li className="flex items-center gap-2 text-gray-700">
+                      <CheckCircle size={20} className="text-green-600 shrink-0" />
+                      <span>Market Nisab Monitoring</span>
                     </li>
-                    <li className="flex items-center gap-3">
-                      <CheckCircle size={18} className="text-emerald-500 shrink-0" />
-                      <span className="font-medium">Secure PDF Statements</span>
+                    <li className="flex items-center gap-2 text-gray-700">
+                      <CheckCircle size={20} className="text-green-600 shrink-0" />
+                      <span>Secure PDF Statements</span>
                     </li>
-                    <li className="flex items-center gap-3">
-                      <CheckCircle size={18} className="text-emerald-500 shrink-0" />
-                      <span className="font-medium">Advanced Analytics</span>
+                    <li className="flex items-center gap-2 text-gray-700">
+                      <CheckCircle size={20} className="text-green-600 shrink-0" />
+                      <span>Advanced Analytics</span>
+                    </li>
+                    <li className="flex items-center gap-2 text-gray-700">
+                      <CheckCircle size={20} className="text-green-600 shrink-0" />
+                      <span>Priority Support</span>
                     </li>
                   </ul>
+
                   <button
                     onClick={() => router.push(`/register?package=${plan.id}`)}
-                    className={`w-full py-4 rounded-2xl text-center font-bold uppercase text-xs tracking-wider transition-all shadow-lg ${
+                    className={`w-full py-3 rounded-lg font-medium transition-all ${
                       idx === 1
-                        ? 'bg-emerald-500 text-white hover:bg-emerald-400'
-                        : 'bg-gray-900 text-white hover:bg-emerald-600'
+                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-lg hover:shadow-xl'
+                        : 'bg-gray-900 text-white hover:bg-blue-600'
                     }`}
                   >
-                    Open Account
+                    Get Started
                   </button>
                 </div>
               ))}
@@ -647,20 +648,22 @@ export default function UltimateLandingPage() {
       </section>
 
       {/* Testimonials */}
-      <section id="testimonials" className="py-20 px-4 sm:px-6 lg:px-8">
+      <section id="testimonials" className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50 scroll-mt-16">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter mb-4 text-gray-900">
-              Trusted by Muslims Worldwide
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+              Loved by Muslims Worldwide
             </h2>
-            <p className="text-lg text-gray-600">Real feedback from real users</p>
+            <p className="text-xl text-gray-600">
+              See what our users have to say
+            </p>
           </div>
 
           {testimonials.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
               {testimonials.map((testimonial) => (
-                <div key={testimonial.id} className="bg-white rounded-3xl p-8 border border-gray-100 hover:shadow-xl hover:border-emerald-200 transition-all">
-                  <div className="flex items-center gap-1 mb-6">
+                <div key={testimonial.id} className="bg-white rounded-xl p-6 border border-gray-200 hover:shadow-xl hover:border-blue-200 transition-all transform hover:-translate-y-2">
+                  <div className="flex items-center gap-1 mb-4">
                     {[...Array(5)].map((_, i) => (
                       <Star
                         key={i}
@@ -670,13 +673,13 @@ export default function UltimateLandingPage() {
                       />
                     ))}
                   </div>
-                  <p className="text-gray-700 mb-6 leading-relaxed italic">"{testimonial.message}"</p>
+                  <p className="text-gray-700 mb-6 leading-relaxed">"{testimonial.message}"</p>
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center text-white font-bold text-lg">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold">
                       {testimonial.name.charAt(0)}
                     </div>
                     <div>
-                      <p className="font-bold text-gray-900">{testimonial.name}</p>
+                      <p className="font-semibold text-gray-900">{testimonial.name}</p>
                       <p className="text-sm text-gray-600">{testimonial.role}</p>
                     </div>
                   </div>
@@ -689,59 +692,301 @@ export default function UltimateLandingPage() {
         </div>
       </section>
 
+      {/* FAQ Section */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 scroll-mt-16">
+        <div className="max-w-3xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+              Frequently Asked Questions
+            </h2>
+            <p className="text-xl text-gray-600">
+              Everything you need to know
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {faqs.map((faq, index) => (
+              <div key={index} className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:border-blue-200 transition-all">
+                <button
+                  onClick={() => setOpenFaq(openFaq === index ? null : index)}
+                  className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
+                >
+                  <span className="font-semibold text-gray-900 pr-4">{faq.question}</span>
+                  <div className={`transform transition-transform ${openFaq === index ? 'rotate-180' : ''}`}>
+                    <ChevronDown className="text-gray-600 shrink-0" size={20} />
+                  </div>
+                </button>
+                {openFaq === index && (
+                  <div className="px-6 pb-4 animate-slideUp">
+                    <p className="text-gray-600 leading-relaxed">{faq.answer}</p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* CTA Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-gray-900 to-gray-800 text-white">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-4xl md:text-6xl font-black italic uppercase tracking-tighter mb-6 leading-tight">
-            Ready to Master Your Wealth?
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-600 text-white relative overflow-hidden">
+        <div className="absolute inset-0 bg-grid-white/10"></div>
+        <div className="max-w-4xl mx-auto text-center relative z-10">
+          <h2 className="text-4xl md:text-5xl font-bold mb-6">
+            Transform Your Financial Journey Today
           </h2>
-          <p className="text-xl text-gray-300 mb-8">
-            Join thousands managing their finances according to Islamic principles
+          <p className="text-xl text-blue-100 mb-8">
+            Join thousands of Muslims managing their finances according to Islamic principles
           </p>
           <button
             onClick={() => router.push('/register')}
-            className="inline-flex items-center gap-3 px-10 py-5 bg-emerald-500 text-white rounded-2xl font-bold uppercase text-sm tracking-wider hover:bg-emerald-400 transition-all shadow-2xl group"
+            className="group inline-flex items-center gap-2 px-8 py-4 bg-white text-blue-600 rounded-xl font-semibold hover:bg-gray-100 transition-all shadow-2xl hover:scale-105"
           >
-            Start Your 5-Day Free Trial
-            <ArrowRight className="group-hover:translate-x-1 transition-transform" size={20} />
+            Unlock Your Financial Clarity
+            <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
           </button>
-          <p className="text-gray-400 mt-6">No credit card required • Full access • Cancel anytime</p>
+          <p className="text-blue-200 mt-6 flex items-center justify-center gap-6 flex-wrap">
+            <span className="flex items-center gap-2">
+              <CheckCircle size={16} />
+              No credit card required
+            </span>
+            <span className="flex items-center gap-2">
+              <CheckCircle size={16} />
+              5-day free trial
+            </span>
+            <span className="flex items-center gap-2">
+              <CheckCircle size={16} />
+              Cancel anytime
+            </span>
+          </p>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="bg-gray-50 border-t border-gray-100 py-12 px-4 sm:px-6 lg:px-8">
+      <footer className="bg-gray-900 text-gray-400 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-8 mb-8">
-            <div className="text-center md:text-left">
-              <div className="flex items-center justify-center md:justify-start gap-2 mb-3">
-                <Zap className="text-emerald-600" size={24} fill="currentColor" />
-                <span className="text-xl font-black italic uppercase tracking-tighter">Nisab Wallet</span>
+          <div className="grid md:grid-cols-4 gap-8 mb-8">
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
+                  <Wallet className="w-5 h-5 text-white" />
+                </div>
+                <span className="text-lg font-bold text-white">Nisab Wallet</span>
               </div>
-              <p className="text-xs font-bold uppercase tracking-widest text-gray-400">
-                Engineered for the Modern Muslim
+              <p className="text-sm leading-relaxed">
+                Modern Islamic finance management for the connected Muslim.
               </p>
             </div>
-            <div className="flex flex-wrap gap-6 text-xs font-bold uppercase tracking-wider text-gray-600 justify-center">
-              <button onClick={() => router.push('/login?action=demo')} className="hover:text-emerald-600 transition-colors">
-                Live Demo
-              </button>
-              <button onClick={() => router.push('/privacy')} className="hover:text-emerald-600 transition-colors">
-                Privacy Policy
-              </button>
-              <button onClick={() => router.push('/terms')} className="hover:text-emerald-600 transition-colors">
-                Terms of Service
-              </button>
-              <button onClick={() => router.push('/contact')} className="hover:text-emerald-600 transition-colors">
-                Contact
-              </button>
+
+            <div>
+              <h3 className="text-white font-semibold mb-4">Product</h3>
+              <ul className="space-y-2 text-sm">
+                <li><button onClick={() => scrollToSection('features')} className="hover:text-white transition-colors">Features</button></li>
+                <li><button onClick={() => scrollToSection('pricing')} className="hover:text-white transition-colors">Pricing</button></li>
+                <li><button onClick={() => scrollToSection('testimonials')} className="hover:text-white transition-colors">Reviews</button></li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="text-white font-semibold mb-4">Company</h3>
+              <ul className="space-y-2 text-sm">
+                <li><button onClick={() => setShowModal('about')} className="hover:text-white transition-colors">About Us</button></li>
+                <li><button onClick={() => setShowModal('contact')} className="hover:text-white transition-colors">Contact</button></li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="text-white font-semibold mb-4">Legal</h3>
+              <ul className="space-y-2 text-sm">
+                <li><button onClick={() => setShowModal('privacy')} className="hover:text-white transition-colors">Privacy Policy</button></li>
+                <li><button onClick={() => setShowModal('terms')} className="hover:text-white transition-colors">Terms of Service</button></li>
+              </ul>
             </div>
           </div>
-          <div className="text-center text-xs font-bold uppercase tracking-widest text-gray-400 border-t border-gray-200 pt-8">
-            © {new Date().getFullYear()} Nisab Wallet Financial. Shariah Optimized.
+
+          <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
+            <p className="text-sm text-center md:text-left">
+              © {new Date().getFullYear()} Nisab Wallet. All rights reserved. Built with <Heart className="inline w-4 h-4 text-red-500 fill-red-500" /> for the Muslim community.
+            </p>
+            <div className="flex items-center gap-6">
+              <a href="mailto:support@nisabwallet.com" className="hover:text-white transition-colors">
+                <Mail size={20} />
+              </a>
+              <a href="tel:+8801234567890" className="hover:text-white transition-colors">
+                <Phone size={20} />
+              </a>
+            </div>
           </div>
         </div>
       </footer>
+
+      {/* Modals */}
+      {showModal === 'about' && (
+        <Modal title="About Nisab Wallet" onClose={() => setShowModal(null)}>
+          <div className="prose max-w-none">
+            <p className="text-gray-700 leading-relaxed mb-4">
+              Nisab Wallet is a comprehensive Islamic finance management platform designed specifically for Muslims who want to manage their wealth according to Shariah principles.
+            </p>
+            <h3 className="text-xl font-semibold text-gray-900 mb-3">Our Mission</h3>
+            <p className="text-gray-700 leading-relaxed mb-4">
+              To simplify Islamic finance management and make Zakat calculation accessible, accurate, and effortless for every Muslim, regardless of their financial expertise.
+            </p>
+            <h3 className="text-xl font-semibold text-gray-900 mb-3">Our Values</h3>
+            <ul className="space-y-2 text-gray-700">
+              <li className="flex items-start gap-2">
+                <CheckCircle size={20} className="text-green-600 shrink-0 mt-0.5" />
+                <span><strong>Shariah Compliance:</strong> Every feature follows Islamic principles</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle size={20} className="text-green-600 shrink-0 mt-0.5" />
+                <span><strong>Transparency:</strong> Clear calculations and complete data ownership</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle size={20} className="text-green-600 shrink-0 mt-0.5" />
+                <span><strong>Security:</strong> Bank-level encryption and data protection</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle size={20} className="text-green-600 shrink-0 mt-0.5" />
+                <span><strong>Innovation:</strong> Modern technology meeting traditional values</span>
+              </li>
+            </ul>
+          </div>
+        </Modal>
+      )}
+
+      {showModal === 'contact' && (
+        <Modal title="Contact Us" onClose={() => setShowModal(null)}>
+          <div className="space-y-6">
+            <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg">
+              <Mail className="w-6 h-6 text-blue-600 shrink-0 mt-1" />
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-1">Email Support</h4>
+                <p className="text-gray-600 mb-2">Get help via email within 24 hours</p>
+                <a href="mailto:support@nisabwallet.com" className="text-blue-600 hover:underline">
+                  support@nisabwallet.com
+                </a>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg">
+              <Phone className="w-6 h-6 text-blue-600 shrink-0 mt-1" />
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-1">Phone Support</h4>
+                <p className="text-gray-600 mb-2">Mon-Fri, 9AM-6PM (GMT+6)</p>
+                <a href="tel:+8801234567890" className="text-blue-600 hover:underline">
+                  +880 1234-567890
+                </a>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg">
+              <MapPin className="w-6 h-6 text-blue-600 shrink-0 mt-1" />
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-1">Office Address</h4>
+                <p className="text-gray-600">
+                  House #123, Road #4<br />
+                  Dhanmondi, Dhaka 1209<br />
+                  Bangladesh
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-900">
+                <strong>Need immediate assistance?</strong> Use the live chat feature in your dashboard after logging in.
+              </p>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {showModal === 'privacy' && (
+        <Modal title="Privacy Policy" onClose={() => setShowModal(null)}>
+          <div className="prose max-w-none">
+            <p className="text-sm text-gray-600 mb-4">Last updated: {new Date().toLocaleDateString()}</p>
+            
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">1. Information We Collect</h3>
+            <p className="text-gray-700 mb-4">
+              We collect information you provide directly to us, including your name, email address, and financial data you choose to input into our platform.
+            </p>
+
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">2. How We Use Your Information</h3>
+            <ul className="space-y-2 text-gray-700 mb-4">
+              <li>• Provide and maintain our services</li>
+              <li>• Calculate your Zakat obligations accurately</li>
+              <li>• Send important account updates and notifications</li>
+              <li>• Improve and optimize our platform</li>
+            </ul>
+
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">3. Data Security</h3>
+            <p className="text-gray-700 mb-4">
+              We use industry-standard encryption and security measures to protect your data. Your financial information is encrypted both in transit and at rest.
+            </p>
+
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">4. Data Sharing</h3>
+            <p className="text-gray-700 mb-4">
+              We never sell your personal information. We only share data with service providers necessary to operate our platform, and they are bound by strict confidentiality agreements.
+            </p>
+
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">5. Your Rights</h3>
+            <p className="text-gray-700 mb-4">
+              You have the right to access, update, or delete your personal information at any time. You can export all your data from the dashboard settings.
+            </p>
+
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mt-6">
+              <p className="text-sm text-gray-700">
+                For any privacy concerns, contact us at <a href="mailto:privacy@nisabwallet.com" className="text-blue-600 hover:underline">privacy@nisabwallet.com</a>
+              </p>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {showModal === 'terms' && (
+        <Modal title="Terms of Service" onClose={() => setShowModal(null)}>
+          <div className="prose max-w-none">
+            <p className="text-sm text-gray-600 mb-4">Last updated: {new Date().toLocaleDateString()}</p>
+            
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">1. Acceptance of Terms</h3>
+            <p className="text-gray-700 mb-4">
+              By accessing and using Nisab Wallet, you accept and agree to be bound by these Terms of Service.
+            </p>
+
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">2. Use of Service</h3>
+            <p className="text-gray-700 mb-4">
+              You agree to use our service only for lawful purposes and in accordance with Islamic principles. You are responsible for maintaining the confidentiality of your account.
+            </p>
+
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">3. Subscription and Payments</h3>
+            <ul className="space-y-2 text-gray-700 mb-4">
+              <li>• All subscriptions start with a 5-day free trial</li>
+              <li>• You can cancel anytime during the trial period</li>
+              <li>• Refunds are processed according to our refund policy</li>
+              <li>• Prices are subject to change with 30 days notice</li>
+            </ul>
+
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">4. Zakat Calculations</h3>
+            <p className="text-gray-700 mb-4">
+              While we strive for accuracy in all Zakat calculations, you should consult with a qualified Islamic scholar for final verification of your obligations.
+            </p>
+
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">5. Limitation of Liability</h3>
+            <p className="text-gray-700 mb-4">
+              Nisab Wallet is provided "as is" without warranties. We are not liable for any financial decisions you make based on the information provided by our platform.
+            </p>
+
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">6. Termination</h3>
+            <p className="text-gray-700 mb-4">
+              We reserve the right to terminate or suspend access to our service for violations of these terms.
+            </p>
+
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mt-6">
+              <p className="text-sm text-gray-700">
+                Questions about our terms? Contact <a href="mailto:legal@nisabwallet.com" className="text-blue-600 hover:underline">legal@nisabwallet.com</a>
+              </p>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
