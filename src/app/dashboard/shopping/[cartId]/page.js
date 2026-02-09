@@ -477,7 +477,7 @@ export default function CartDetailsPage() {
                       </div>
 
                       {/* Item Name */}
-                      <div className="col-span-3">
+                      <div className="col-span-3 overflow-hidden">
                         <input
                           type="text"
                           value={row.name}
@@ -489,7 +489,7 @@ export default function CartDetailsPage() {
                       </div>
 
                       {/* Amount */}
-                      <div className="col-span-2">
+                      <div className="col-span-2 overflow-hidden">
                         <div className="relative">
                           <span className="absolute left-2 top-1.5 text-xs text-gray-500">৳</span>
                           <input
@@ -504,11 +504,11 @@ export default function CartDetailsPage() {
                       </div>
 
                       {/* Category */}
-                      <div className="col-span-2">
+                      <div className="col-span-2 overflow-hidden">
                         <select
                           value={row.categoryId}
                           onChange={(e) => handleRowChange(row.id, 'categoryId', e.target.value)}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent truncate"
                         >
                           <option value="">Select Category</option>
                           {categories.map((cat) => (
@@ -520,11 +520,11 @@ export default function CartDetailsPage() {
                       </div>
 
                       {/* Account */}
-                      <div className="col-span-3">
+                      <div className="col-span-3 overflow-hidden">
                         <select
                           value={row.accountId}
                           onChange={(e) => handleRowChange(row.id, 'accountId', e.target.value)}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent truncate"
                         >
                           <option value="">Select Account</option>
                           {accounts.map((acc) => (
@@ -769,7 +769,7 @@ function InlineEditableItemRow({
           </div>
 
           {/* Item Name */}
-          <div className="col-span-3">
+          <div className="col-span-3 overflow-hidden">
             <input
               type="text"
               value={editFormData.name}
@@ -781,7 +781,7 @@ function InlineEditableItemRow({
           </div>
 
           {/* Amount */}
-          <div className="col-span-2">
+          <div className="col-span-2 overflow-hidden">
             <div className="relative">
               <span className="absolute left-2 top-1.5 text-xs text-gray-500">৳</span>
               <input
@@ -796,11 +796,11 @@ function InlineEditableItemRow({
           </div>
 
           {/* Category */}
-          <div className="col-span-2">
+          <div className="col-span-2 overflow-hidden">
             <select
               value={editFormData.categoryId}
               onChange={(e) => onEditFormChange({ ...editFormData, categoryId: e.target.value })}
-              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:border-transparent truncate"
             >
               <option value="">Select Category</option>
               {categories.map((cat) => (
@@ -812,11 +812,11 @@ function InlineEditableItemRow({
           </div>
 
           {/* Account */}
-          <div className="col-span-2">
+          <div className="col-span-2 overflow-hidden">
             <select
               value={editFormData.accountId}
               onChange={(e) => onEditFormChange({ ...editFormData, accountId: e.target.value })}
-              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:border-transparent truncate"
             >
               <option value="">Select Account</option>
               {accounts.map((acc) => (
@@ -865,25 +865,25 @@ function InlineEditableItemRow({
         </div>
 
         {/* Item Name */}
-        <div className="col-span-3">
-          <p className="text-sm font-medium text-gray-900">{item.name}</p>
+        <div className="col-span-3 overflow-hidden">
+          <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
         </div>
 
         {/* Amount */}
-        <div className="col-span-2">
+        <div className="col-span-2 overflow-hidden">
           <p className="text-sm font-semibold text-gray-900">৳{item.amount.toFixed(2)}</p>
         </div>
 
         {/* Category */}
-        <div className="col-span-2">
-          <span className="inline-block px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded">
+        <div className="col-span-2 overflow-hidden">
+          <span className="inline-block px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded truncate">
             {getCategoryName(item.categoryId)}
           </span>
         </div>
 
         {/* Account */}
-        <div className="col-span-2">
-          <p className="text-xs text-gray-600">{getAccountName(item.accountId)}</p>
+        <div className="col-span-2 overflow-hidden">
+          <p className="text-xs text-gray-600 truncate">{getAccountName(item.accountId)}</p>
         </div>
 
         {/* Actions */}
@@ -919,26 +919,26 @@ function ConfirmedItemRow({ item, onUnconfirm, getCategoryName, getAccountName }
         </div>
 
         {/* Item Name */}
-        <div className="col-span-3">
-          <p className="text-sm font-medium text-gray-900">{item.name}</p>
+        <div className="col-span-3 overflow-hidden">
+          <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
           <p className="text-xs text-green-600">✓ Transaction created</p>
         </div>
 
         {/* Amount */}
-        <div className="col-span-2">
+        <div className="col-span-2 overflow-hidden">
           <p className="text-sm font-semibold text-gray-900">৳{item.amount.toFixed(2)}</p>
         </div>
 
         {/* Category */}
-        <div className="col-span-2">
-          <span className="inline-block px-2 py-0.5 bg-white border border-gray-200 text-gray-700 text-xs rounded">
+        <div className="col-span-2 overflow-hidden">
+          <span className="inline-block px-2 py-0.5 bg-white border border-gray-200 text-gray-700 text-xs rounded truncate">
             {getCategoryName(item.categoryId)}
           </span>
         </div>
 
         {/* Account */}
-        <div className="col-span-2">
-          <p className="text-xs text-gray-600">{getAccountName(item.accountId)}</p>
+        <div className="col-span-2 overflow-hidden">
+          <p className="text-xs text-gray-600 truncate">{getAccountName(item.accountId)}</p>
         </div>
 
         {/* Undo Button */}
