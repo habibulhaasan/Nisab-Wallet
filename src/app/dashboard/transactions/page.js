@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getAccounts, updateAccount } from '@/lib/firestoreCollections';
+import { getAvailableBalance } from '@/lib/goalUtils';
 import {
   Plus,
   Edit2,
@@ -28,7 +29,6 @@ import {
   Wallet,
   AlertTriangle,
   ArrowRightLeft,
-  ArrowRight,
   AlertCircle,
   Loader2,
 } from 'lucide-react';
@@ -42,6 +42,7 @@ export default function TransactionsPage() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [checkingBalance, setCheckingBalance] = useState(false);
 
   const [showModal, setShowModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -50,7 +51,7 @@ export default function TransactionsPage() {
 
   const [filterType, setFilterType] = useState('All');
   const [filterAccount, setFilterAccount] = useState('All');
-  const [dateFilter, setDateFilter] = useState('Weekly'); // Changed default to Weekly
+  const [dateFilter, setDateFilter] = useState('Weekly');
   const [customDateRange, setCustomDateRange] = useState({ start: '', end: '' });
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -73,6 +74,9 @@ export default function TransactionsPage() {
     date: new Date().toISOString().split('T')[0],
   });
 
+  // Store available balances for each account
+  const [accountsWithAvailable, setAccountsWithAvailable] = useState([]);
+
   const [summaryIncome, setSummaryIncome] = useState(0);
   const [summaryExpense, setSummaryExpense] = useState(0);
   const [summaryNet, setSummaryNet] = useState(0);
@@ -89,6 +93,34 @@ export default function TransactionsPage() {
       loadCategories(),
     ]);
     setLoading(false);
+  };
+
+  const loadAccounts = async () => {
+    const result = await getAccounts(user.uid);
+    if (result.success) {
+      // Calculate available balance for each account
+      const accountsWithAvailableBalance = await Promise.all(
+        result.accounts.map(async (account) => {
+          const available = await getAvailableBalance(user.uid, account.id, account.balance);
+          return {
+            ...account,
+            availableBalance: available,
+          };
+        })
+      );
+      
+      setAccounts(result.accounts);
+      setAccountsWithAvailable(accountsWithAvailableBalance);
+      
+      if (result.accounts.length > 0 && !formData.accountId) {
+        setFormData((prev) => ({ ...prev, accountId: result.accounts[0].id }));
+        setTransferData((prev) => ({
+          ...prev,
+          fromAccountId: result.accounts[0].id,
+          toAccountId: result.accounts.length > 1 ? result.accounts[1].id : '',
+        }));
+      }
+    }
   };
 
   const loadTransactionsAndTransfers = async () => {
@@ -191,22 +223,6 @@ export default function TransactionsPage() {
     }
   };
 
-  const loadAccounts = async () => {
-    const result = await getAccounts(user.uid);
-    if (result.success) {
-      setAccounts(result.accounts);
-      if (result.accounts.length > 0 && !formData.accountId) {
-        setFormData((prev) => ({ ...prev, accountId: result.accounts[0].id }));
-        setTransferData((prev) => ({
-          ...prev,
-          fromAccountId: result.accounts[0].id,
-          toAccountId:
-            result.accounts.length > 1 ? result.accounts[1].id : '',
-        }));
-      }
-    }
-  };
-
   const loadCategories = async () => {
     try {
       const ref = collection(db, 'users', user.uid, 'categories');
@@ -268,9 +284,8 @@ export default function TransactionsPage() {
     }
     
     if (dateFilter === 'Monthly') {
-      // Create dates at noon to avoid timezone issues
       const monthStart = new Date(year, month, 1, 12, 0, 0);
-      const monthEnd = new Date(year, month + 1, 0, 12, 0, 0); // Last day of current month
+      const monthEnd = new Date(year, month + 1, 0, 12, 0, 0);
       
       return {
         start: formatDateToISO(monthStart),
@@ -295,7 +310,6 @@ export default function TransactionsPage() {
     return null;
   };
 
-  // Helper function to format date consistently
   const formatDateToISO = (date) => {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -310,10 +324,7 @@ export default function TransactionsPage() {
       .padStart(2, '0')}/${d.getFullYear()}`;
   };
 
-  const totalBalance = accounts.reduce(
-    (sum, a) => sum + (Number(a.balance) || 0),
-    0
-  );
+  const totalBalance = accounts.reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -331,8 +342,26 @@ export default function TransactionsPage() {
     if (!account) return showToast('Invalid account', 'error');
 
     setSubmitting(true);
+    setCheckingBalance(true);
 
     try {
+      // CRITICAL: Check AVAILABLE balance for expenses
+      if (formData.type === 'Expense') {
+        const availableBalance = await getAvailableBalance(user.uid, formData.accountId, account.balance);
+        
+        if (amount > availableBalance) {
+          const allocated = account.balance - availableBalance;
+          setSubmitting(false);
+          setCheckingBalance(false);
+          return showToast(
+            `Insufficient available balance! Account has ৳${account.balance.toLocaleString()} total, ` +
+            `but ৳${allocated.toLocaleString()} is allocated to goals. ` +
+            `Only ৳${availableBalance.toLocaleString()} available to spend.`,
+            'error'
+          );
+        }
+      }
+
       if (editingTransaction) {
         const oldAmount = parseFloat(editingTransaction.amount);
         const oldAcc = accounts.find((a) => a.id === editingTransaction.accountId);
@@ -350,17 +379,27 @@ export default function TransactionsPage() {
         }
 
         if (formData.type === 'Expense') {
-          let availableBalance;
+          let checkBalance;
           
           if (oldAcc?.id === newAcc.id) {
-            availableBalance = revertedBalance;
+            checkBalance = revertedBalance;
           } else {
-            availableBalance = newAcc.balance;
+            checkBalance = newAcc.balance;
           }
 
-          if (availableBalance < amount) {
+          const availableAfterRevert = await getAvailableBalance(user.uid, newAcc.id, checkBalance);
+
+          if (amount > availableAfterRevert) {
+            const allocated = checkBalance - availableAfterRevert;
             setSubmitting(false);
-            return showToast(`Insufficient balance in ${newAcc.name}. Available: ৳${availableBalance.toLocaleString()}`, 'error');
+            setCheckingBalance(false);
+            return showToast(
+              `Insufficient available balance in ${newAcc.name}. ` +
+              `Total: ৳${checkBalance.toLocaleString()}, ` +
+              `Allocated: ৳${allocated.toLocaleString()}, ` +
+              `Available: ৳${availableAfterRevert.toLocaleString()}`,
+              'error'
+            );
           }
         }
 
@@ -401,11 +440,6 @@ export default function TransactionsPage() {
 
         showToast('Updated', 'success');
       } else {
-        if (formData.type === 'Expense' && account.balance < amount) {
-          setSubmitting(false);
-          return showToast(`Insufficient balance in ${account.name}`, 'error');
-        }
-
         await addDoc(collection(db, 'users', user.uid, 'transactions'), {
           type: formData.type,
           amount,
@@ -432,6 +466,7 @@ export default function TransactionsPage() {
       showToast('Error saving', 'error');
     } finally {
       setSubmitting(false);
+      setCheckingBalance(false);
     }
   };
 
@@ -454,8 +489,25 @@ export default function TransactionsPage() {
     if (!from || !to) return showToast('Invalid accounts', 'error');
 
     setSubmitting(true);
+    setCheckingBalance(true);
 
     try {
+      // Check available balance for transfer
+      const availableBalance = await getAvailableBalance(user.uid, from.id, from.balance);
+      
+      if (amount > availableBalance) {
+        const allocated = from.balance - availableBalance;
+        setSubmitting(false);
+        setCheckingBalance(false);
+        return showToast(
+          `Insufficient available balance in ${from.name}! ` +
+          `Total: ৳${from.balance.toLocaleString()}, ` +
+          `Allocated: ৳${allocated.toLocaleString()}, ` +
+          `Available: ৳${availableBalance.toLocaleString()}`,
+          'error'
+        );
+      }
+
       if (editingTransaction) {
         const originalTransferId = editingTransaction.originalId;
         const oldAmount = parseFloat(editingTransaction.amount);
@@ -487,7 +539,13 @@ export default function TransactionsPage() {
           ? { ...from, balance: revertFrom.balance + oldAmount }
           : from;
 
-        if (fromAccountAfterRevert.balance < amount) {
+        const availableAfterRevert = await getAvailableBalance(
+          user.uid, 
+          fromAccountAfterRevert.id, 
+          fromAccountAfterRevert.balance
+        );
+
+        if (amount > availableAfterRevert) {
           if (revertFrom) {
             await updateAccount(user.uid, revertFrom.id, { balance: revertFrom.balance });
           }
@@ -495,7 +553,8 @@ export default function TransactionsPage() {
             await updateAccount(user.uid, revertTo.id, { balance: revertTo.balance });
           }
           setSubmitting(false);
-          return showToast('Insufficient balance', 'error');
+          setCheckingBalance(false);
+          return showToast('Insufficient available balance after reverting', 'error');
         }
 
         await updateDoc(
@@ -525,11 +584,6 @@ export default function TransactionsPage() {
 
         showToast('Transfer updated', 'success');
       } else {
-        if (from.balance < amount) {
-          setSubmitting(false);
-          return showToast('Insufficient balance', 'error');
-        }
-
         await addDoc(collection(db, 'users', user.uid, 'transfers'), {
           fromAccountId: transferData.fromAccountId,
           fromAccountName: from.name,
@@ -554,6 +608,7 @@ export default function TransactionsPage() {
       showToast('Error saving transfer', 'error');
     } finally {
       setSubmitting(false);
+      setCheckingBalance(false);
     }
   };
 
@@ -654,6 +709,7 @@ export default function TransactionsPage() {
     setEditingTransaction(null);
     setModalTab('expense');
     setSubmitting(false);
+    setCheckingBalance(false);
     setFormData({
       type: 'Expense',
       amount: '',
@@ -674,6 +730,7 @@ export default function TransactionsPage() {
   const getAccountName = (id) => accounts.find((a) => a.id === id)?.name || 'Unknown';
   const getCategoryName = (id) => categories.find((c) => c.id === id)?.name || 'Unknown';
   const getCategoryColor = (id) => categories.find((c) => c.id === id)?.color || '#6B7280';
+  const getAccountAvailable = (id) => accountsWithAvailable.find((a) => a.id === id)?.availableBalance || 0;
 
   const getDateRangeForFilter = () => {
     const now = new Date();
@@ -707,9 +764,8 @@ export default function TransactionsPage() {
         break;
         
       case 'Monthly':
-        // Use noon time to avoid timezone edge cases
         const monthStart = new Date(year, month, 1, 12, 0, 0);
-        const monthEnd = new Date(year, month + 1, 0, 12, 0, 0); // Day 0 = last day of previous month
+        const monthEnd = new Date(year, month + 1, 0, 12, 0, 0);
         
         range = {
           start: formatDateToISO(monthStart),
@@ -861,10 +917,10 @@ export default function TransactionsPage() {
 
       {/* Individual Account Balances */}
       <div className="flex space-x-3 overflow-x-auto pb-2 scrollbar-hide">
-        {accounts.map((acc) => (
+        {accountsWithAvailable.map((acc) => (
           <div
             key={acc.id}
-            className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 min-w-[140px] flex flex-col justify-center"
+            className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 min-w-[160px] flex flex-col justify-center"
           >
             <p className="text-[10px] font-bold text-gray-400 uppercase leading-none mb-1">
               {acc.name}
@@ -872,11 +928,14 @@ export default function TransactionsPage() {
             <p className="text-sm font-black text-gray-900 truncate">
               ৳{(acc.balance || 0).toLocaleString()}
             </p>
+            <p className="text-[10px] text-green-600 font-medium">
+              Available: ৳{(acc.availableBalance || 0).toLocaleString()}
+            </p>
           </div>
         ))}
       </div>
         
-      {/* Filters */}
+      {/* Filters - keeping exact same as original */}
       <div className="bg-white rounded-lg shadow-sm p-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
@@ -968,7 +1027,7 @@ export default function TransactionsPage() {
         )}
       </div>
 
-      {/* Transactions List */}
+      {/* Transactions List - keeping exact same */}
       {loading ? (
         <div className="text-center py-10">
           <div className="animate-spin h-8 w-8 border-4 border-gray-300 border-t-gray-900 rounded-full mx-auto"></div>
@@ -1069,7 +1128,7 @@ export default function TransactionsPage() {
         </div>
       )}
 
-      {/* Modal - Keeping your existing modal code exactly as is */}
+      {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg w-full max-w-md p-6 shadow-2xl border border-gray-200">
@@ -1163,9 +1222,9 @@ export default function TransactionsPage() {
                         required
                         disabled={submitting}
                       >
-                        {accounts.map((a) => (
+                        {accountsWithAvailable.map((a) => (
                           <option key={a.id} value={a.id}>
-                            {a.name} (৳{(a.balance || 0).toLocaleString()})
+                            {a.name} (Avail: ৳{(a.availableBalance || 0).toLocaleString()})
                           </option>
                         ))}
                       </select>
@@ -1183,9 +1242,9 @@ export default function TransactionsPage() {
                         disabled={submitting}
                       >
                         <option value="">Select Destination</option>
-                        {accounts.filter(a => a.id !== transferData.fromAccountId).map((a) => (
+                        {accountsWithAvailable.filter(a => a.id !== transferData.fromAccountId).map((a) => (
                           <option key={a.id} value={a.id}>
-                            {a.name} (৳{(a.balance || 0).toLocaleString()})
+                            {a.name}
                           </option>
                         ))}
                       </select>
@@ -1228,7 +1287,7 @@ export default function TransactionsPage() {
                     {submitting ? (
                       <>
                         <Loader2 className="animate-spin" size={16} />
-                        <span>Confirming...</span>
+                        <span>{checkingBalance ? 'Checking...' : 'Confirming...'}</span>
                       </>
                     ) : (
                       <span>{editingTransaction ? 'Update Transfer' : 'Confirm Transfer'}</span>
@@ -1271,9 +1330,9 @@ export default function TransactionsPage() {
                         required
                         disabled={submitting}
                       >
-                        {accounts.map((a) => (
+                        {accountsWithAvailable.map((a) => (
                           <option key={a.id} value={a.id}>
-                            {a.name} (৳{(a.balance || 0).toLocaleString()})
+                            {a.name} (Avail: ৳{(a.availableBalance || 0).toLocaleString()})
                           </option>
                         ))}
                       </select>
@@ -1348,7 +1407,7 @@ export default function TransactionsPage() {
                     {submitting ? (
                       <>
                         <Loader2 className="animate-spin" size={16} />
-                        <span>Confirming...</span>
+                        <span>{checkingBalance ? 'Checking...' : 'Confirming...'}</span>
                       </>
                     ) : (
                       <span>{editingTransaction ? 'Update' : `Confirm ${modalTab === 'income' ? 'Income' : 'Expense'}`}</span>
