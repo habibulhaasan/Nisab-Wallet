@@ -18,7 +18,7 @@ import { categoriesCollection } from '@/lib/firestoreCollections';
 import { getDocs } from 'firebase/firestore';
 import {
   ArrowLeft, Plus, Edit, Trash2, CheckCircle2, Circle,
-  ShoppingBag, Calendar, AlertCircle, X, Check, ChevronDown
+  ShoppingBag, Calendar, AlertCircle, X, Check, ChevronDown, Save
 } from 'lucide-react';
 
 export default function CartDetailsPage() {
@@ -34,18 +34,24 @@ export default function CartDetailsPage() {
   const [loading, setLoading] = useState(true);
 
   // Modals
-  const [showAddItemModal, setShowAddItemModal] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(null);
 
-  // Form state
-  const [itemName, setItemName] = useState('');
-  const [itemAmount, setItemAmount] = useState('');
-  const [itemQuantity, setItemQuantity] = useState('1');
-  const [itemCategory, setItemCategory] = useState('');
-  const [itemAccount, setItemAccount] = useState('');
-  const [showQuantity, setShowQuantity] = useState(false);
+  // Multi-item Add Form State
+  const [showAddForms, setShowAddForms] = useState(false);
+  const [addFormRows, setAddFormRows] = useState([
+    { id: 1, name: '', amount: '', categoryId: '', accountId: '' }
+  ]);
+  const [nextRowId, setNextRowId] = useState(2);
+
+  // Inline Edit State
+  const [editingItemId, setEditingItemId] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    amount: '',
+    categoryId: '',
+    accountId: ''
+  });
 
   // Confirmation state
   const [selectedItems, setSelectedItems] = useState([]);
@@ -106,70 +112,148 @@ export default function CartDetailsPage() {
     }
   };
 
-  const handleAddItem = () => {
-    setItemName('');
-    setItemAmount('');
-    setItemQuantity('1');
-    setItemCategory('');
-    setItemAccount('');
-    setShowQuantity(false);
-    setEditingItem(null);
-    setShowAddItemModal(true);
+  const handleShowAddForms = () => {
+    setShowAddForms(true);
+    const defaultCategoryId = categories.length > 0 ? categories[0].categoryId : '';
+    const defaultAccountId = accounts.length > 0 ? accounts[0].accountId : '';
+    setAddFormRows([
+      { id: 1, name: '', amount: '', categoryId: defaultCategoryId, accountId: defaultAccountId }
+    ]);
+    setNextRowId(4);
   };
 
-  const handleEditItem = (item) => {
-    setItemName(item.name);
-    setItemAmount(item.amount.toString());
-    setItemQuantity(item.quantity?.toString() || '1');
-    setItemCategory(item.categoryId);
-    setItemAccount(item.accountId);
-    setShowQuantity(item.quantity && item.quantity > 1);
-    setEditingItem(item);
-    setShowAddItemModal(true);
+  const handleAddRow = () => {
+    const lastRow = addFormRows[addFormRows.length - 1];
+    setAddFormRows([
+      ...addFormRows,
+      { 
+        id: nextRowId, 
+        name: '', 
+        amount: '', 
+        categoryId: lastRow.categoryId, // Use same category as last row
+        accountId: lastRow.accountId    // Use same account as last row
+      }
+    ]);
+    setNextRowId(nextRowId + 1);
   };
 
-  const handleSaveItem = async () => {
-    if (!itemName.trim()) {
+  const handleRemoveRow = (rowId) => {
+    if (addFormRows.length > 1) {
+      setAddFormRows(addFormRows.filter(row => row.id !== rowId));
+    }
+  };
+
+  const handleRowChange = (rowId, field, value) => {
+    setAddFormRows(addFormRows.map(row => 
+      row.id === rowId ? { ...row, [field]: value } : row
+    ));
+  };
+
+  const handleCancelAdd = () => {
+    setShowAddForms(false);
+    setAddFormRows([
+      { id: 1, name: '', amount: '', categoryId: '', accountId: '' }
+    ]);
+    setNextRowId(2);
+  };
+
+  const handleSaveAllItems = async () => {
+    // Filter out empty rows
+    const validRows = addFormRows.filter(row => 
+      row.name.trim() && row.amount && parseFloat(row.amount) > 0 && row.categoryId && row.accountId
+    );
+
+    if (validRows.length === 0) {
+      alert('Please fill in at least one complete item (name, amount, category, and account)');
+      return;
+    }
+
+    // Add all valid items
+    let successCount = 0;
+    for (const row of validRows) {
+      const itemData = {
+        name: row.name,
+        amount: parseFloat(row.amount),
+        quantity: 1,
+        categoryId: row.categoryId,
+        accountId: row.accountId,
+      };
+
+      const result = await addCartItem(user.uid, cartId, itemData);
+      if (result.success) {
+        successCount++;
+      }
+    }
+
+    if (successCount > 0) {
+      await loadData();
+      
+      // Check if there are any incomplete rows
+      const hasIncompleteRows = addFormRows.some(row => 
+        row.name.trim() && (!row.amount || !row.categoryId || !row.accountId)
+      );
+
+      if (hasIncompleteRows) {
+        alert(`${successCount} item(s) added successfully. Some incomplete items were skipped.`);
+      }
+
+      // Reset form
+      const defaultCategoryId = categories.length > 0 ? categories[0].categoryId : '';
+      const defaultAccountId = accounts.length > 0 ? accounts[0].accountId : '';
+      setAddFormRows([
+        { id: nextRowId, name: '', amount: '', categoryId: defaultCategoryId, accountId: defaultAccountId },
+        { id: nextRowId + 1, name: '', amount: '', categoryId: defaultCategoryId, accountId: defaultAccountId },
+        { id: nextRowId + 2, name: '', amount: '', categoryId: defaultCategoryId, accountId: defaultAccountId }
+      ]);
+      setNextRowId(nextRowId + 3);
+    } else {
+      alert('Failed to add items. Please check all fields.');
+    }
+  };
+
+  const handleStartEdit = (item) => {
+    setEditingItemId(item.id);
+    setEditFormData({
+      name: item.name,
+      amount: item.amount.toString(),
+      categoryId: item.categoryId,
+      accountId: item.accountId
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingItemId(null);
+    setEditFormData({
+      name: '',
+      amount: '',
+      categoryId: '',
+      accountId: ''
+    });
+  };
+
+  const handleSaveEdit = async (itemId) => {
+    if (!editFormData.name.trim()) {
       alert('Please enter item name');
       return;
     }
-    if (!itemAmount || parseFloat(itemAmount) <= 0) {
+    if (!editFormData.amount || parseFloat(editFormData.amount) <= 0) {
       alert('Please enter valid amount');
-      return;
-    }
-    if (!itemCategory) {
-      alert('Please select a category');
-      return;
-    }
-    if (!itemAccount) {
-      alert('Please select an account');
       return;
     }
 
     const itemData = {
-      name: itemName,
-      amount: parseFloat(itemAmount),
-      quantity: showQuantity ? parseInt(itemQuantity) || 1 : 1,
-      categoryId: itemCategory,
-      accountId: itemAccount,
+      name: editFormData.name,
+      amount: parseFloat(editFormData.amount),
+      categoryId: editFormData.categoryId,
+      accountId: editFormData.accountId,
     };
 
-    if (editingItem) {
-      const result = await updateCartItem(user.uid, cartId, editingItem.id, itemData);
-      if (result.success) {
-        await loadData();
-        setShowAddItemModal(false);
-      } else {
-        alert('Failed to update item');
-      }
+    const result = await updateCartItem(user.uid, cartId, itemId, itemData);
+    if (result.success) {
+      await loadData();
+      setEditingItemId(null);
     } else {
-      const result = await addCartItem(user.uid, cartId, itemData);
-      if (result.success) {
-        await loadData();
-        setShowAddItemModal(false);
-      } else {
-        alert('Failed to add item');
-      }
+      alert('Failed to update item');
     }
   };
 
@@ -270,7 +354,7 @@ export default function CartDetailsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto pb-20">
+    <div className="max-w-6xl mx-auto pb-20">
       {/* Header */}
       <div className="mb-6">
         <button
@@ -288,13 +372,6 @@ export default function CartDetailsPage() {
               <p className="text-sm text-gray-600 mt-1">{cart.description}</p>
             )}
           </div>
-          <button
-            onClick={handleAddItem}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Add Item</span>
-          </button>
         </div>
 
         {/* Cart Summary */}
@@ -321,7 +398,7 @@ export default function CartDetailsPage() {
       </div>
 
       {/* Empty State */}
-      {items.length === 0 && (
+      {items.length === 0 && !showAddForms && (
         <div className="bg-white rounded-lg border-2 border-dashed border-gray-200 p-12 text-center">
           <ShoppingBag className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No items yet</h3>
@@ -329,33 +406,35 @@ export default function CartDetailsPage() {
             Start adding items to your shopping cart
           </p>
           <button
-            onClick={handleAddItem}
+            onClick={handleShowAddForms}
             className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
           >
             <Plus className="w-4 h-4" />
-            Add First Item
+            Add Items
           </button>
         </div>
       )}
 
       {/* Items List */}
-      {items.length > 0 && (
+      {(items.length > 0 || showAddForms) && (
         <div className="space-y-4">
           {/* Pending Items Section */}
-          {pendingItems.length > 0 && (
-            <div className="bg-white rounded-lg border border-gray-200">
-              <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-base font-semibold text-gray-900">
-                    Pending Items ({pendingItems.length})
-                  </h2>
+          <div className="bg-white rounded-lg border border-gray-200">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <h2 className="text-base font-semibold text-gray-900">
+                  Pending Items ({pendingItems.length})
+                </h2>
+                {pendingItems.length > 0 && (
                   <button
                     onClick={handleSelectAll}
                     className="text-xs text-gray-600 hover:text-gray-900"
                   >
                     {selectedItems.length === pendingItems.length ? 'Deselect All' : 'Select All'}
                   </button>
-                </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
                 {selectedItems.length > 0 && (
                   <button
                     onClick={handleConfirmItems}
@@ -365,24 +444,158 @@ export default function CartDetailsPage() {
                     Confirm ({selectedItems.length})
                   </button>
                 )}
-              </div>
-
-              <div className="divide-y divide-gray-100">
-                {pendingItems.map((item) => (
-                  <PendingItemRow
-                    key={item.id}
-                    item={item}
-                    selected={selectedItems.includes(item.id)}
-                    onToggle={handleToggleItem}
-                    onEdit={handleEditItem}
-                    onDelete={handleDeleteItem}
-                    getCategoryName={getCategoryName}
-                    getAccountName={getAccountName}
-                  />
-                ))}
+                {!showAddForms && (
+                  <button
+                    onClick={handleShowAddForms}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 text-white text-sm rounded-lg hover:bg-gray-800 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Items
+                  </button>
+                )}
               </div>
             </div>
-          )}
+
+            <div className="divide-y divide-gray-100">
+              {/* Multi-row Add Forms */}
+              {showAddForms && (
+                <div className="p-3 bg-blue-50 bg-opacity-50 space-y-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-gray-700">Add Multiple Items</p>
+                    <button
+                      onClick={handleAddRow}
+                      className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Add Row
+                    </button>
+                  </div>
+
+                  {addFormRows.map((row, index) => (
+                    <div key={row.id} className="grid grid-cols-12 gap-2 items-center">
+                      {/* Row number */}
+                      <div className="col-span-1 flex justify-center">
+                        <span className="text-xs text-gray-500">{index + 1}</span>
+                      </div>
+
+                      {/* Item Name */}
+                      <div className="col-span-12 sm:col-span-3">
+                        <input
+                          type="text"
+                          value={row.name}
+                          onChange={(e) => handleRowChange(row.id, 'name', e.target.value)}
+                          placeholder="Item name"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          autoFocus={index === 0}
+                        />
+                      </div>
+
+                      {/* Amount */}
+                      <div className="col-span-6 sm:col-span-2">
+                        <div className="relative">
+                          <span className="absolute left-2 top-1.5 text-xs text-gray-500">$</span>
+                          <input
+                            type="number"
+                            value={row.amount}
+                            onChange={(e) => handleRowChange(row.id, 'amount', e.target.value)}
+                            placeholder="0.00"
+                            step="0.01"
+                            className="w-full pl-5 pr-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Category */}
+                      <div className="col-span-6 sm:col-span-2">
+                        <select
+                          value={row.categoryId}
+                          onChange={(e) => handleRowChange(row.id, 'categoryId', e.target.value)}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          {categories.map((cat) => (
+                            <option key={cat.id} value={cat.categoryId}>
+                              {cat.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Account */}
+                      <div className="col-span-10 sm:col-span-3">
+                        <select
+                          value={row.accountId}
+                          onChange={(e) => handleRowChange(row.id, 'accountId', e.target.value)}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          {accounts.map((acc) => (
+                            <option key={acc.id} value={acc.accountId}>
+                              {acc.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Remove row button */}
+                      <div className="col-span-2 sm:col-span-1 flex justify-center">
+                        {addFormRows.length > 1 && (
+                          <button
+                            onClick={() => handleRemoveRow(row.id)}
+                            className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                            title="Remove row"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center justify-between pt-3 mt-3 border-t border-blue-200">
+                    <p className="text-xs text-gray-600">
+                      Fill in item details and click Save All. Empty rows will be skipped.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleCancelAdd}
+                        className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSaveAllItems}
+                        className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1"
+                      >
+                        <Save className="w-4 h-4" />
+                        Save All
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Existing Pending Items */}
+              {pendingItems.map((item) => (
+                <InlineEditableItemRow
+                  key={item.id}
+                  item={item}
+                  selected={selectedItems.includes(item.id)}
+                  editing={editingItemId === item.id}
+                  editFormData={editFormData}
+                  categories={categories}
+                  accounts={accounts}
+                  onToggle={handleToggleItem}
+                  onStartEdit={handleStartEdit}
+                  onCancelEdit={handleCancelEdit}
+                  onSaveEdit={handleSaveEdit}
+                  onDelete={handleDeleteItem}
+                  onEditFormChange={setEditFormData}
+                  getCategoryName={getCategoryName}
+                  getAccountName={getAccountName}
+                />
+              ))}
+            </div>
+          </div>
 
           {/* Confirmed Items Section */}
           {confirmedItems.length > 0 && (
@@ -406,157 +619,6 @@ export default function CartDetailsPage() {
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* Add/Edit Item Modal */}
-      {showAddItemModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">
-                {editingItem ? 'Edit Item' : 'Add Item'}
-              </h2>
-              <button
-                onClick={() => setShowAddItemModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {/* Item Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Item Name *
-                </label>
-                <input
-                  type="text"
-                  value={itemName}
-                  onChange={(e) => setItemName(e.target.value)}
-                  placeholder="e.g., Milk, Bread, Phone"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                  autoFocus
-                />
-              </div>
-
-              {/* Amount */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Amount *
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2 text-gray-500">$</span>
-                  <input
-                    type="number"
-                    value={itemAmount}
-                    onChange={(e) => setItemAmount(e.target.value)}
-                    placeholder="0.00"
-                    step="0.01"
-                    min="0"
-                    className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              {/* Quantity (Optional) */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-sm font-medium text-gray-700">
-                    Quantity (optional)
-                  </label>
-                  <button
-                    onClick={() => setShowQuantity(!showQuantity)}
-                    className="text-xs text-gray-600 hover:text-gray-900"
-                  >
-                    {showQuantity ? 'Hide' : 'Show'}
-                  </button>
-                </div>
-                {showQuantity && (
-                  <input
-                    type="number"
-                    value={itemQuantity}
-                    onChange={(e) => setItemQuantity(e.target.value)}
-                    placeholder="1"
-                    min="1"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                  />
-                )}
-              </div>
-
-              {/* Category */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Category *
-                </label>
-                <div className="relative">
-                  <select
-                    value={itemCategory}
-                    onChange={(e) => setItemCategory(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent appearance-none"
-                  >
-                    <option value="">Select category</option>
-                    {categories.map((cat) => (
-                      <option key={cat.id} value={cat.categoryId}>
-                        {cat.name}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-3 pointer-events-none" />
-                </div>
-              </div>
-
-              {/* Account */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Payment Account *
-                </label>
-                <div className="relative">
-                  <select
-                    value={itemAccount}
-                    onChange={(e) => setItemAccount(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent appearance-none"
-                  >
-                    <option value="">Select account</option>
-                    {accounts.map((acc) => (
-                      <option key={acc.id} value={acc.accountId}>
-                        {acc.name} (${acc.balance?.toFixed(2) || '0.00'})
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-3 pointer-events-none" />
-                </div>
-              </div>
-
-              {/* Info Box */}
-              {itemCategory && itemAccount && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex gap-2">
-                    <AlertCircle className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                    <p className="text-xs text-blue-900">
-                      Items with the same category and account will be grouped into one transaction when confirmed.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex gap-2 mt-6">
-              <button
-                onClick={() => setShowAddItemModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveItem}
-                className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
-              >
-                {editingItem ? 'Update' : 'Add'} Item
-              </button>
-            </div>
-          </div>
         </div>
       )}
 
@@ -679,55 +741,162 @@ export default function CartDetailsPage() {
   );
 }
 
-// Component for Pending Item Row
-function PendingItemRow({ item, selected, onToggle, onEdit, onDelete, getCategoryName, getAccountName }) {
-  return (
-    <div className="p-4 hover:bg-gray-50 transition-colors">
-      <div className="flex items-start gap-3">
-        {/* Checkbox */}
-        <button
-          onClick={() => onToggle(item.id)}
-          className="mt-0.5 flex-shrink-0"
-        >
-          {selected ? (
-            <CheckCircle2 className="w-5 h-5 text-gray-900" />
-          ) : (
-            <Circle className="w-5 h-5 text-gray-400" />
-          )}
-        </button>
-
-        {/* Item Details */}
-        <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-medium text-gray-900">{item.name}</h3>
-          <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-gray-500">
-            <span className="bg-gray-100 px-2 py-0.5 rounded">{getCategoryName(item.categoryId)}</span>
-            <span>•</span>
-            <span>{getAccountName(item.accountId)}</span>
-            {item.quantity > 1 && (
-              <>
-                <span>•</span>
-                <span>Qty: {item.quantity}</span>
-              </>
-            )}
+// Component for Inline Editable Item Row
+function InlineEditableItemRow({ 
+  item, 
+  selected, 
+  editing, 
+  editFormData, 
+  categories, 
+  accounts,
+  onToggle, 
+  onStartEdit, 
+  onCancelEdit,
+  onSaveEdit,
+  onDelete, 
+  onEditFormChange,
+  getCategoryName, 
+  getAccountName 
+}) {
+  if (editing) {
+    // Edit Mode
+    return (
+      <div className="p-3 bg-yellow-50 bg-opacity-50">
+        <div className="grid grid-cols-12 gap-2 items-center">
+          {/* Checkbox placeholder */}
+          <div className="col-span-1 flex justify-center">
+            <div className="w-5 h-5" />
           </div>
+
+          {/* Item Name */}
+          <div className="col-span-12 sm:col-span-3">
+            <input
+              type="text"
+              value={editFormData.name}
+              onChange={(e) => onEditFormChange({ ...editFormData, name: e.target.value })}
+              onKeyPress={(e) => e.key === 'Enter' && onSaveEdit(item.id)}
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+              autoFocus
+            />
+          </div>
+
+          {/* Amount */}
+          <div className="col-span-6 sm:col-span-2">
+            <div className="relative">
+              <span className="absolute left-2 top-1.5 text-xs text-gray-500">$</span>
+              <input
+                type="number"
+                value={editFormData.amount}
+                onChange={(e) => onEditFormChange({ ...editFormData, amount: e.target.value })}
+                onKeyPress={(e) => e.key === 'Enter' && onSaveEdit(item.id)}
+                step="0.01"
+                className="w-full pl-5 pr-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          {/* Category */}
+          <div className="col-span-6 sm:col-span-2">
+            <select
+              value={editFormData.categoryId}
+              onChange={(e) => onEditFormChange({ ...editFormData, categoryId: e.target.value })}
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+            >
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.categoryId}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Account */}
+          <div className="col-span-12 sm:col-span-2">
+            <select
+              value={editFormData.accountId}
+              onChange={(e) => onEditFormChange({ ...editFormData, accountId: e.target.value })}
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+            >
+              {accounts.map((acc) => (
+                <option key={acc.id} value={acc.accountId}>
+                  {acc.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Actions */}
+          <div className="col-span-12 sm:col-span-2 flex items-center gap-1 justify-end">
+            <button
+              onClick={() => onSaveEdit(item.id)}
+              className="p-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+              title="Save"
+            >
+              <Save className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onCancelEdit}
+              className="p-1.5 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+              title="Cancel"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // View Mode
+  return (
+    <div className="p-3 hover:bg-gray-50 transition-colors">
+      <div className="grid grid-cols-12 gap-2 items-center">
+        {/* Checkbox */}
+        <div className="col-span-1 flex justify-center">
+          <button onClick={() => onToggle(item.id)}>
+            {selected ? (
+              <CheckCircle2 className="w-5 h-5 text-gray-900" />
+            ) : (
+              <Circle className="w-5 h-5 text-gray-400" />
+            )}
+          </button>
+        </div>
+
+        {/* Item Name */}
+        <div className="col-span-12 sm:col-span-3">
+          <p className="text-sm font-medium text-gray-900">{item.name}</p>
         </div>
 
         {/* Amount */}
-        <div className="text-right flex-shrink-0">
+        <div className="col-span-6 sm:col-span-2">
           <p className="text-sm font-semibold text-gray-900">${item.amount.toFixed(2)}</p>
         </div>
 
+        {/* Category */}
+        <div className="col-span-6 sm:col-span-2">
+          <span className="inline-block px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded">
+            {getCategoryName(item.categoryId)}
+          </span>
+        </div>
+
+        {/* Account */}
+        <div className="col-span-12 sm:col-span-2">
+          <p className="text-xs text-gray-600">{getAccountName(item.accountId)}</p>
+        </div>
+
         {/* Actions */}
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="col-span-12 sm:col-span-2 flex items-center gap-1 justify-end">
           <button
-            onClick={() => onEdit(item)}
+            onClick={() => onStartEdit(item)}
             className="p-1.5 text-gray-400 hover:text-gray-900 rounded transition-colors"
+            title="Edit"
           >
             <Edit className="w-4 h-4" />
           </button>
           <button
             onClick={() => onDelete(item)}
             className="p-1.5 text-gray-400 hover:text-red-600 rounded transition-colors"
+            title="Delete"
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -740,42 +909,45 @@ function PendingItemRow({ item, selected, onToggle, onEdit, onDelete, getCategor
 // Component for Confirmed Item Row
 function ConfirmedItemRow({ item, onUnconfirm, getCategoryName, getAccountName }) {
   return (
-    <div className="p-4 bg-green-50 bg-opacity-50">
-      <div className="flex items-start gap-3">
+    <div className="p-3 bg-green-50 bg-opacity-50">
+      <div className="grid grid-cols-12 gap-2 items-center">
         {/* Checkmark */}
-        <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+        <div className="col-span-1 flex justify-center">
+          <CheckCircle2 className="w-5 h-5 text-green-600" />
+        </div>
 
-        {/* Item Details */}
-        <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-medium text-gray-900">{item.name}</h3>
-          <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-gray-500">
-            <span className="bg-white px-2 py-0.5 rounded border border-gray-200">
-              {getCategoryName(item.categoryId)}
-            </span>
-            <span>•</span>
-            <span>{getAccountName(item.accountId)}</span>
-            {item.quantity > 1 && (
-              <>
-                <span>•</span>
-                <span>Qty: {item.quantity}</span>
-              </>
-            )}
-          </div>
-          <p className="text-xs text-green-600 mt-1">✓ Transaction created</p>
+        {/* Item Name */}
+        <div className="col-span-12 sm:col-span-3">
+          <p className="text-sm font-medium text-gray-900">{item.name}</p>
+          <p className="text-xs text-green-600">✓ Transaction created</p>
         </div>
 
         {/* Amount */}
-        <div className="text-right flex-shrink-0">
+        <div className="col-span-6 sm:col-span-2">
           <p className="text-sm font-semibold text-gray-900">${item.amount.toFixed(2)}</p>
         </div>
 
-        {/* Unconfirm Button */}
-        <button
-          onClick={() => onUnconfirm(item.id)}
-          className="px-2 py-1 text-xs text-gray-600 hover:text-gray-900 rounded transition-colors"
-        >
-          Undo
-        </button>
+        {/* Category */}
+        <div className="col-span-6 sm:col-span-2">
+          <span className="inline-block px-2 py-0.5 bg-white border border-gray-200 text-gray-700 text-xs rounded">
+            {getCategoryName(item.categoryId)}
+          </span>
+        </div>
+
+        {/* Account */}
+        <div className="col-span-12 sm:col-span-2">
+          <p className="text-xs text-gray-600">{getAccountName(item.accountId)}</p>
+        </div>
+
+        {/* Undo Button */}
+        <div className="col-span-12 sm:col-span-2 flex justify-end">
+          <button
+            onClick={() => onUnconfirm(item.id)}
+            className="px-2 py-1 text-xs text-gray-600 hover:text-gray-900 rounded transition-colors"
+          >
+            Undo
+          </button>
+        </div>
       </div>
     </div>
   );
