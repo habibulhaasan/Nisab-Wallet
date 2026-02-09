@@ -114,12 +114,12 @@ export default function CartDetailsPage() {
 
   const handleShowAddForms = () => {
     setShowAddForms(true);
-    const defaultCategoryId = categories.length > 0 ? categories[0].categoryId : '';
-    const defaultAccountId = accounts.length > 0 ? accounts[0].accountId : '';
+    const defaultCategoryId = '';
+    const defaultAccountId = '';
     setAddFormRows([
       { id: 1, name: '', amount: '', categoryId: defaultCategoryId, accountId: defaultAccountId }
     ]);
-    setNextRowId(4);
+    setNextRowId(2);
   };
 
   const handleAddRow = () => {
@@ -198,14 +198,12 @@ export default function CartDetailsPage() {
       }
 
       // Reset form
-      const defaultCategoryId = categories.length > 0 ? categories[0].categoryId : '';
-      const defaultAccountId = accounts.length > 0 ? accounts[0].accountId : '';
+      const defaultCategoryId = '';
+      const defaultAccountId = '';
       setAddFormRows([
-        { id: nextRowId, name: '', amount: '', categoryId: defaultCategoryId, accountId: defaultAccountId },
-        { id: nextRowId + 1, name: '', amount: '', categoryId: defaultCategoryId, accountId: defaultAccountId },
-        { id: nextRowId + 2, name: '', amount: '', categoryId: defaultCategoryId, accountId: defaultAccountId }
+        { id: nextRowId, name: '', amount: '', categoryId: defaultCategoryId, accountId: defaultAccountId }
       ]);
-      setNextRowId(nextRowId + 3);
+      setNextRowId(nextRowId + 1);
     } else {
       alert('Failed to add items. Please check all fields.');
     }
@@ -325,12 +323,12 @@ export default function CartDetailsPage() {
   };
 
   const getCategoryName = (categoryId) => {
-    const category = categories.find((c) => c.categoryId === categoryId);
+    const category = categories.find((c) => c.id === categoryId);
     return category?.name || 'Unknown';
   };
 
   const getAccountName = (accountId) => {
-    const account = accounts.find((a) => a.accountId === accountId);
+    const account = accounts.find((a) => a.id === accountId);
     return account?.name || 'Unknown';
   };
 
@@ -391,7 +389,7 @@ export default function CartDetailsPage() {
           <div className="bg-white rounded-lg border border-gray-200 p-3">
             <p className="text-xs text-gray-500">Total</p>
             <p className="text-xl font-semibold text-gray-900">
-              ${(cart.totalAmount || 0).toFixed(2)}
+              ৳{(cart.totalAmount || 0).toFixed(2)}
             </p>
           </div>
         </div>
@@ -479,7 +477,7 @@ export default function CartDetailsPage() {
                       </div>
 
                       {/* Item Name */}
-                      <div className="col-span-12 sm:col-span-3">
+                      <div className="col-span-3">
                         <input
                           type="text"
                           value={row.name}
@@ -491,9 +489,9 @@ export default function CartDetailsPage() {
                       </div>
 
                       {/* Amount */}
-                      <div className="col-span-6 sm:col-span-2">
+                      <div className="col-span-2">
                         <div className="relative">
-                          <span className="absolute left-2 top-1.5 text-xs text-gray-500">$</span>
+                          <span className="absolute left-2 top-1.5 text-xs text-gray-500">৳</span>
                           <input
                             type="number"
                             value={row.amount}
@@ -506,14 +504,15 @@ export default function CartDetailsPage() {
                       </div>
 
                       {/* Category */}
-                      <div className="col-span-6 sm:col-span-2">
+                      <div className="col-span-2">
                         <select
                           value={row.categoryId}
                           onChange={(e) => handleRowChange(row.id, 'categoryId', e.target.value)}
                           className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
+                          <option value="">Select Category</option>
                           {categories.map((cat) => (
-                            <option key={cat.id} value={cat.categoryId}>
+                            <option key={cat.id} value={cat.id}>
                               {cat.name}
                             </option>
                           ))}
@@ -521,14 +520,15 @@ export default function CartDetailsPage() {
                       </div>
 
                       {/* Account */}
-                      <div className="col-span-10 sm:col-span-3">
+                      <div className="col-span-3">
                         <select
                           value={row.accountId}
                           onChange={(e) => handleRowChange(row.id, 'accountId', e.target.value)}
                           className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
+                          <option value="">Select Account</option>
                           {accounts.map((acc) => (
-                            <option key={acc.id} value={acc.accountId}>
+                            <option key={acc.id} value={acc.id}>
                               {acc.name}
                             </option>
                           ))}
@@ -536,7 +536,7 @@ export default function CartDetailsPage() {
                       </div>
 
                       {/* Remove row button */}
-                      <div className="col-span-2 sm:col-span-1 flex justify-center">
+                      <div className="col-span-1 flex justify-center">
                         {addFormRows.length > 1 && (
                           <button
                             onClick={() => handleRemoveRow(row.id)}
@@ -665,14 +665,14 @@ export default function CartDetailsPage() {
                     .map((item) => (
                       <div key={item.id} className="flex items-center justify-between text-xs">
                         <span className="text-gray-900">{item.name}</span>
-                        <span className="text-gray-600">${item.amount.toFixed(2)}</span>
+                        <span className="text-gray-600">৳{item.amount.toFixed(2)}</span>
                       </div>
                     ))}
                 </div>
                 <div className="mt-2 pt-2 border-t border-gray-200 flex items-center justify-between text-sm font-medium">
                   <span className="text-gray-900">Total</span>
                   <span className="text-gray-900">
-                    $
+                    ৳
                     {items
                       .filter((item) => selectedItems.includes(item.id))
                       .reduce((sum, item) => sum + item.amount, 0)
@@ -769,7 +769,7 @@ function InlineEditableItemRow({
           </div>
 
           {/* Item Name */}
-          <div className="col-span-12 sm:col-span-3">
+          <div className="col-span-3">
             <input
               type="text"
               value={editFormData.name}
@@ -781,9 +781,9 @@ function InlineEditableItemRow({
           </div>
 
           {/* Amount */}
-          <div className="col-span-6 sm:col-span-2">
+          <div className="col-span-2">
             <div className="relative">
-              <span className="absolute left-2 top-1.5 text-xs text-gray-500">$</span>
+              <span className="absolute left-2 top-1.5 text-xs text-gray-500">৳</span>
               <input
                 type="number"
                 value={editFormData.amount}
@@ -796,14 +796,15 @@ function InlineEditableItemRow({
           </div>
 
           {/* Category */}
-          <div className="col-span-6 sm:col-span-2">
+          <div className="col-span-2">
             <select
               value={editFormData.categoryId}
               onChange={(e) => onEditFormChange({ ...editFormData, categoryId: e.target.value })}
               className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
             >
+              <option value="">Select Category</option>
               {categories.map((cat) => (
-                <option key={cat.id} value={cat.categoryId}>
+                <option key={cat.id} value={cat.id}>
                   {cat.name}
                 </option>
               ))}
@@ -811,14 +812,15 @@ function InlineEditableItemRow({
           </div>
 
           {/* Account */}
-          <div className="col-span-12 sm:col-span-2">
+          <div className="col-span-2">
             <select
               value={editFormData.accountId}
               onChange={(e) => onEditFormChange({ ...editFormData, accountId: e.target.value })}
               className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
             >
+              <option value="">Select Account</option>
               {accounts.map((acc) => (
-                <option key={acc.id} value={acc.accountId}>
+                <option key={acc.id} value={acc.id}>
                   {acc.name}
                 </option>
               ))}
@@ -826,7 +828,7 @@ function InlineEditableItemRow({
           </div>
 
           {/* Actions */}
-          <div className="col-span-12 sm:col-span-2 flex items-center gap-1 justify-end">
+          <div className="col-span-2 flex items-center gap-1 justify-end">
             <button
               onClick={() => onSaveEdit(item.id)}
               className="p-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
@@ -863,29 +865,29 @@ function InlineEditableItemRow({
         </div>
 
         {/* Item Name */}
-        <div className="col-span-12 sm:col-span-3">
+        <div className="col-span-3">
           <p className="text-sm font-medium text-gray-900">{item.name}</p>
         </div>
 
         {/* Amount */}
-        <div className="col-span-6 sm:col-span-2">
-          <p className="text-sm font-semibold text-gray-900">${item.amount.toFixed(2)}</p>
+        <div className="col-span-2">
+          <p className="text-sm font-semibold text-gray-900">৳{item.amount.toFixed(2)}</p>
         </div>
 
         {/* Category */}
-        <div className="col-span-6 sm:col-span-2">
+        <div className="col-span-2">
           <span className="inline-block px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded">
             {getCategoryName(item.categoryId)}
           </span>
         </div>
 
         {/* Account */}
-        <div className="col-span-12 sm:col-span-2">
+        <div className="col-span-2">
           <p className="text-xs text-gray-600">{getAccountName(item.accountId)}</p>
         </div>
 
         {/* Actions */}
-        <div className="col-span-12 sm:col-span-2 flex items-center gap-1 justify-end">
+        <div className="col-span-2 flex items-center gap-1 justify-end">
           <button
             onClick={() => onStartEdit(item)}
             className="p-1.5 text-gray-400 hover:text-gray-900 rounded transition-colors"
@@ -917,30 +919,30 @@ function ConfirmedItemRow({ item, onUnconfirm, getCategoryName, getAccountName }
         </div>
 
         {/* Item Name */}
-        <div className="col-span-12 sm:col-span-3">
+        <div className="col-span-3">
           <p className="text-sm font-medium text-gray-900">{item.name}</p>
           <p className="text-xs text-green-600">✓ Transaction created</p>
         </div>
 
         {/* Amount */}
-        <div className="col-span-6 sm:col-span-2">
-          <p className="text-sm font-semibold text-gray-900">${item.amount.toFixed(2)}</p>
+        <div className="col-span-2">
+          <p className="text-sm font-semibold text-gray-900">৳{item.amount.toFixed(2)}</p>
         </div>
 
         {/* Category */}
-        <div className="col-span-6 sm:col-span-2">
+        <div className="col-span-2">
           <span className="inline-block px-2 py-0.5 bg-white border border-gray-200 text-gray-700 text-xs rounded">
             {getCategoryName(item.categoryId)}
           </span>
         </div>
 
         {/* Account */}
-        <div className="col-span-12 sm:col-span-2">
+        <div className="col-span-2">
           <p className="text-xs text-gray-600">{getAccountName(item.accountId)}</p>
         </div>
 
         {/* Undo Button */}
-        <div className="col-span-12 sm:col-span-2 flex justify-end">
+        <div className="col-span-2 flex justify-end">
           <button
             onClick={() => onUnconfirm(item.id)}
             className="px-2 py-1 text-xs text-gray-600 hover:text-gray-900 rounded transition-colors"
