@@ -14,9 +14,8 @@ import {
   unconfirmCartItems,
 } from '@/lib/shoppingCartCollections';
 import { getAccounts } from '@/lib/firestoreCollections';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { getAvailableBalance } from '@/lib/goalUtils';
+import { categoriesCollection } from '@/lib/firestoreCollections';
+import { getDocs } from 'firebase/firestore';
 import {
   ArrowLeft, Plus, Edit, Trash2, CheckCircle2, Circle,
   ShoppingBag, Calendar, X, Check, Save
@@ -31,7 +30,6 @@ export default function CartDetailsPage() {
   const [cart, setCart] = useState(null);
   const [items, setItems] = useState([]);
   const [accounts, setAccounts] = useState([]);
-  const [accountsWithAvailable, setAccountsWithAvailable] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -49,7 +47,8 @@ export default function CartDetailsPage() {
   const [editFormData, setEditFormData] = useState({
     name: '',
     amount: '',
-    categoryId: ''
+    categoryId: '',
+    accountId: ''
   });
 
   // Confirmation state
@@ -57,7 +56,6 @@ export default function CartDetailsPage() {
   const [transactionDate, setTransactionDate] = useState(
     new Date().toISOString().split('T')[0]
   );
-  const [selectedAccount, setSelectedAccount] = useState('');
 
   useEffect(() => {
     if (user && cartId) {
@@ -95,31 +93,39 @@ export default function CartDetailsPage() {
   const loadAccounts = async () => {
     const result = await getAccounts(user.uid);
     if (result.success) {
-      // Calculate available balance for each account (matching transaction page)
-      const accountsWithAvailableBalance = await Promise.all(
-        result.accounts.map(async (account) => {
-          const available = await getAvailableBalance(user.uid, account.id, account.balance);
-          return {
-            ...account,
-            availableBalance: available,
-          };
-        })
-      );
-      
-      setAccounts(result.accounts);
-      setAccountsWithAvailable(accountsWithAvailableBalance);
+      // Ensure each account has both id and accountId
+      const accountsWithIds = result.accounts.map(acc => ({
+        id: acc.id,              // Firestore document ID
+        accountId: acc.accountId, // Account unique ID from data
+        name: acc.name,
+        balance: acc.balance,
+        ...acc
+      }));
+      setAccounts(accountsWithIds);
+      console.log('Loaded accounts:', accountsWithIds); // Debug log
     }
   };
 
   const loadCategories = async () => {
     try {
-      const ref = collection(db, 'users', user.uid, 'categories');
-      const snap = await getDocs(ref);
-      const allCategories = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      
-      // Filter only expense categories (matching transaction page)
-      const expenseCategories = allCategories.filter(c => c.type?.toLowerCase() === 'expense');
-      setCategories(expenseCategories);
+      const snapshot = await getDocs(categoriesCollection(user.uid));
+      let cats = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.type === 'expense') {
+          // Store both document id and categoryId for reference
+          cats.push({ 
+            id: doc.id,           // Firestore document ID
+            categoryId: data.categoryId,  // Category unique ID from data
+            name: data.name,
+            type: data.type,
+            ...data 
+          });
+        }
+      });
+      cats.sort((a, b) => a.name.localeCompare(b.name));
+      setCategories(cats);
+      console.log('Loaded categories:', cats); // Debug log
     } catch (error) {
       console.error('Error loading categories:', error);
     }
@@ -127,21 +133,25 @@ export default function CartDetailsPage() {
 
   const handleShowAddForms = () => {
     setShowAddForms(true);
+    const defaultCategoryId = '';
+    const defaultAccountId = '';
+    // Add one empty row
     setAddFormRows([
-      { id: nextRowId, name: '', amount: '', categoryId: '' }
+      { id: nextRowId, name: '', amount: '', categoryId: defaultCategoryId, accountId: defaultAccountId }
     ]);
     setNextRowId(nextRowId + 1);
   };
 
   const handleAddRow = () => {
-    const lastRow = addFormRows.length > 0 ? addFormRows[addFormRows.length - 1] : { categoryId: '' };
+    const lastRow = addFormRows.length > 0 ? addFormRows[addFormRows.length - 1] : { categoryId: '', accountId: '' };
     setAddFormRows([
       ...addFormRows,
       { 
         id: nextRowId, 
         name: '', 
         amount: '', 
-        categoryId: lastRow.categoryId
+        categoryId: lastRow.categoryId,
+        accountId: lastRow.accountId
       }
     ]);
     setNextRowId(nextRowId + 1);
@@ -165,7 +175,7 @@ export default function CartDetailsPage() {
     const lastRow = updatedRows[updatedRows.length - 1];
     
     // If last row has name and amount, add a new empty row
-    if (lastRow.id === rowId && lastRow.name && lastRow.amount && field !== 'categoryId') {
+    if (lastRow.id === rowId && lastRow.name && lastRow.amount && field !== 'categoryId' && field !== 'accountId') {
       handleAddRow();
     }
   };
@@ -176,17 +186,19 @@ export default function CartDetailsPage() {
   };
 
   const handleSaveAllItems = async () => {
-    // Filter out empty rows (no account needed)
+    // Filter out empty rows
     const validRows = addFormRows.filter(row => 
-      row.name.trim() && row.amount && parseFloat(row.amount) > 0 && row.categoryId
+      row.name.trim() && row.amount && parseFloat(row.amount) > 0 && row.categoryId && row.accountId
     );
 
     if (validRows.length === 0) {
-      alert('Please fill in at least one complete item (name, amount, and category)');
+      alert('Please fill in at least one complete item (name, amount, category, and account)');
       return;
     }
 
-    // Add all valid items (without account)
+    console.log('Saving items:', validRows); // Debug log
+
+    // Add all valid items
     let successCount = 0;
     for (const row of validRows) {
       const itemData = {
@@ -194,12 +206,15 @@ export default function CartDetailsPage() {
         amount: parseFloat(row.amount),
         quantity: 1,
         categoryId: row.categoryId,
-        // accountId will be assigned during confirmation
+        accountId: row.accountId,
       };
 
+      console.log('Adding item:', itemData); // Debug log
       const result = await addCartItem(user.uid, cartId, itemData);
       if (result.success) {
         successCount++;
+      } else {
+        console.error('Failed to add item:', result.error);
       }
     }
 
@@ -217,7 +232,8 @@ export default function CartDetailsPage() {
     setEditFormData({
       name: item.name,
       amount: item.amount.toString(),
-      categoryId: item.categoryId
+      categoryId: item.categoryId,
+      accountId: item.accountId
     });
   };
 
@@ -226,7 +242,8 @@ export default function CartDetailsPage() {
     setEditFormData({
       name: '',
       amount: '',
-      categoryId: ''
+      categoryId: '',
+      accountId: ''
     });
   };
 
@@ -239,16 +256,12 @@ export default function CartDetailsPage() {
       alert('Please enter valid amount');
       return;
     }
-    if (!editFormData.categoryId) {
-      alert('Please select a category');
-      return;
-    }
 
     const itemData = {
       name: editFormData.name,
       amount: parseFloat(editFormData.amount),
       categoryId: editFormData.categoryId,
-      // accountId will be assigned during confirmation
+      accountId: editFormData.accountId,
     };
 
     const result = await updateCartItem(user.uid, cartId, itemId, itemData);
@@ -301,22 +314,14 @@ export default function CartDetailsPage() {
       alert('Please select items to confirm');
       return;
     }
-    // Reset account selection
-    setSelectedAccount('');
     setShowConfirmModal(true);
   };
 
   const confirmTransaction = async () => {
-    if (!selectedAccount) {
-      alert('Please select an account');
-      return;
-    }
-    
-    const result = await confirmCartItems(user.uid, cartId, selectedItems, transactionDate, selectedAccount);
+    const result = await confirmCartItems(user.uid, cartId, selectedItems, transactionDate);
     if (result.success) {
       await loadData();
       setSelectedItems([]);
-      setSelectedAccount('');
       setShowConfirmModal(false);
       alert(`${result.transactionCount} transaction(s) created successfully!`);
     } else {
@@ -336,12 +341,17 @@ export default function CartDetailsPage() {
   };
 
   const getCategoryName = (categoryId) => {
-    const category = categories.find((c) => c.id === categoryId);
+    const category = categories.find((c) => c.categoryId === categoryId);
     return category?.name || 'Unknown';
   };
 
+  const getAccountName = (accountId) => {
+    const account = accounts.find((a) => a.accountId === accountId);
+    return account?.name || 'Unknown';
+  };
+
   const pendingItems = items.filter((item) => !item.isConfirmed);
-  const confirmedItems = items.filter((item) => !item.isConfirmed);
+  const confirmedItems = items.filter((item) => item.isConfirmed);
 
   if (loading) {
     return (
@@ -470,15 +480,83 @@ export default function CartDetailsPage() {
 
                   {addFormRows.map((row, index) => (
                     <div key={row.id} className="bg-white rounded-lg border border-blue-200 p-2">
-                      {/* Single Row: # | Name | Amount | Category | Remove */}
-                      <div className="grid grid-cols-12 gap-2 items-center">
+                      {/* Mobile: Stacked Layout */}
+                      <div className="block sm:hidden space-y-2">
+                        {/* Row number and remove button */}
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-gray-500">Item {index + 1}</span>
+                          {addFormRows.length > 1 && (
+                            <button
+                              onClick={() => handleRemoveRow(row.id)}
+                              className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                              title="Remove"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* First Row: Name and Amount */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            value={row.name}
+                            onChange={(e) => handleRowChange(row.id, 'name', e.target.value)}
+                            placeholder="Item name"
+                            className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            autoFocus={index === 0}
+                          />
+                          <div className="relative">
+                            <span className="absolute left-2 top-1.5 text-xs text-gray-500">৳</span>
+                            <input
+                              type="number"
+                              value={row.amount}
+                              onChange={(e) => handleRowChange(row.id, 'amount', e.target.value)}
+                              placeholder="0.00"
+                              step="0.01"
+                              className="w-full pl-5 pr-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Second Row: Category and Account */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <select
+                            value={row.categoryId}
+                            onChange={(e) => handleRowChange(row.id, 'categoryId', e.target.value)}
+                            className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          >
+                            <option value="">Category</option>
+                            {categories.map((cat) => (
+                              <option key={cat.id} value={cat.categoryId}>
+                                {cat.name}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={row.accountId}
+                            onChange={(e) => handleRowChange(row.id, 'accountId', e.target.value)}
+                            className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          >
+                            <option value="">Account</option>
+                            {accounts.map((acc) => (
+                              <option key={acc.id} value={acc.accountId}>
+                                {acc.name} (৳{(acc.balance || 0).toFixed(2)})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Desktop: Grid Layout */}
+                      <div className="hidden sm:grid sm:grid-cols-12 gap-2 items-center">
                         {/* Row number */}
                         <div className="col-span-1 flex justify-center">
                           <span className="text-xs text-gray-500">{index + 1}</span>
                         </div>
 
                         {/* Item Name */}
-                        <div className="col-span-4">
+                        <div className="col-span-3">
                           <input
                             type="text"
                             value={row.name}
@@ -505,7 +583,7 @@ export default function CartDetailsPage() {
                         </div>
 
                         {/* Category */}
-                        <div className="col-span-4">
+                        <div className="col-span-3">
                           <select
                             value={row.categoryId}
                             onChange={(e) => handleRowChange(row.id, 'categoryId', e.target.value)}
@@ -513,20 +591,36 @@ export default function CartDetailsPage() {
                           >
                             <option value="">Category</option>
                             {categories.map((cat) => (
-                              <option key={cat.id} value={cat.id}>
+                              <option key={cat.id} value={cat.categoryId}>
                                 {cat.name}
                               </option>
                             ))}
                           </select>
                         </div>
 
-                        {/* Remove button */}
+                        {/* Account */}
+                        <div className="col-span-3">
+                          <select
+                            value={row.accountId}
+                            onChange={(e) => handleRowChange(row.id, 'accountId', e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          >
+                            <option value="">Account</option>
+                            {accounts.map((acc) => (
+                              <option key={acc.id} value={acc.accountId}>
+                                {acc.name} (৳{(acc.balance || 0).toFixed(2)})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Remove row button */}
                         <div className="col-span-1 flex justify-center">
                           {addFormRows.length > 1 && (
                             <button
                               onClick={() => handleRemoveRow(row.id)}
                               className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                              title="Remove"
+                              title="Remove row"
                             >
                               <X className="w-4 h-4" />
                             </button>
@@ -566,13 +660,14 @@ export default function CartDetailsPage() {
 
               {/* Existing Pending Items */}
               {pendingItems.map((item) => (
-                <ItemRow
+                <InlineEditableItemRow
                   key={item.id}
                   item={item}
                   selected={selectedItems.includes(item.id)}
                   editing={editingItemId === item.id}
                   editFormData={editFormData}
                   categories={categories}
+                  accounts={accounts}
                   onToggle={handleToggleItem}
                   onStartEdit={handleStartEdit}
                   onCancelEdit={handleCancelEdit}
@@ -580,6 +675,7 @@ export default function CartDetailsPage() {
                   onDelete={handleDeleteItem}
                   onEditFormChange={setEditFormData}
                   getCategoryName={getCategoryName}
+                  getAccountName={getAccountName}
                 />
               ))}
             </div>
@@ -601,6 +697,7 @@ export default function CartDetailsPage() {
                     item={item}
                     onUnconfirm={handleUnconfirmItem}
                     getCategoryName={getCategoryName}
+                    getAccountName={getAccountName}
                   />
                 ))}
               </div>
@@ -623,7 +720,7 @@ export default function CartDetailsPage() {
             <div className="mb-4">
               <p className="text-sm text-gray-600 mb-3">
                 Creating transactions for {selectedItems.length} item(s). 
-                Items with same category will be grouped.
+                Items with same category and account will be grouped.
               </p>
 
               {/* Transaction Date */}
@@ -641,25 +738,6 @@ export default function CartDetailsPage() {
                     className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                   />
                 </div>
-              </div>
-
-              {/* Account Selection */}
-              <div className="mb-3">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Payment Account *
-                </label>
-                <select
-                  value={selectedAccount}
-                  onChange={(e) => setSelectedAccount(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                >
-                  <option value="">Select Account</option>
-                  {accountsWithAvailable.map((acc) => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.name} (Avail: ৳{(acc.availableBalance || 0).toFixed(2)})
-                    </option>
-                  ))}
-                </select>
               </div>
 
               {/* Preview */}
@@ -746,33 +824,111 @@ export default function CartDetailsPage() {
   );
 }
 
-// Component for Item Row (View/Edit)
-function ItemRow({ 
+// Component for Inline Editable Item Row
+function InlineEditableItemRow({ 
   item, 
   selected, 
   editing, 
   editFormData, 
-  categories,
+  categories, 
+  accounts,
   onToggle, 
   onStartEdit, 
   onCancelEdit,
   onSaveEdit,
   onDelete, 
   onEditFormChange,
-  getCategoryName
+  getCategoryName, 
+  getAccountName 
 }) {
   const [showActions, setShowActions] = useState(false);
 
   if (editing) {
-    // Edit Mode - Single Row
+    // Edit Mode - Responsive
     return (
       <div className="p-3 bg-yellow-50 bg-opacity-50">
-        <div className="grid grid-cols-12 gap-2 items-center">
+        {/* Mobile: Stacked Layout */}
+        <div className="block sm:hidden space-y-2">
+          {/* First Row: Name and Amount */}
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              type="text"
+              value={editFormData.name}
+              onChange={(e) => onEditFormChange({ ...editFormData, name: e.target.value })}
+              onKeyPress={(e) => e.key === 'Enter' && onSaveEdit(item.id)}
+              className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+              placeholder="Item name"
+              autoFocus
+            />
+            <div className="relative">
+              <span className="absolute left-2 top-1.5 text-xs text-gray-500">৳</span>
+              <input
+                type="number"
+                value={editFormData.amount}
+                onChange={(e) => onEditFormChange({ ...editFormData, amount: e.target.value })}
+                onKeyPress={(e) => e.key === 'Enter' && onSaveEdit(item.id)}
+                step="0.01"
+                className="w-full pl-5 pr-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+
+          {/* Second Row: Category and Account */}
+          <div className="grid grid-cols-2 gap-2">
+            <select
+              value={editFormData.categoryId}
+              onChange={(e) => onEditFormChange({ ...editFormData, categoryId: e.target.value })}
+              className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+            >
+              <option value="">Select Category</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.categoryId}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={editFormData.accountId}
+              onChange={(e) => onEditFormChange({ ...editFormData, accountId: e.target.value })}
+              className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+            >
+              <option value="">Select Account</option>
+              {accounts.map((acc) => (
+                <option key={acc.id} value={acc.accountId}>
+                  {acc.name} (৳{(acc.balance || 0).toFixed(2)})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-2 justify-end">
+            <button
+              onClick={() => onSaveEdit(item.id)}
+              className="px-3 py-1.5 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center gap-1"
+            >
+              <Save className="w-3 h-3" />
+              Save
+            </button>
+            <button
+              onClick={onCancelEdit}
+              className="px-3 py-1.5 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+
+        {/* Desktop: Grid Layout */}
+        <div className="hidden sm:grid sm:grid-cols-12 gap-2 items-center">
           {/* Checkbox placeholder */}
-          <div className="col-span-1"></div>
+          <div className="col-span-1 flex justify-center">
+            <div className="w-5 h-5" />
+          </div>
 
           {/* Item Name */}
-          <div className="col-span-4">
+          <div className="col-span-3">
             <input
               type="text"
               value={editFormData.name}
@@ -799,7 +955,7 @@ function ItemRow({
           </div>
 
           {/* Category */}
-          <div className="col-span-4">
+          <div className="col-span-3">
             <select
               value={editFormData.categoryId}
               onChange={(e) => onEditFormChange({ ...editFormData, categoryId: e.target.value })}
@@ -807,28 +963,44 @@ function ItemRow({
             >
               <option value="">Category</option>
               {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
+                <option key={cat.id} value={cat.categoryId}>
                   {cat.name}
                 </option>
               ))}
             </select>
           </div>
 
+          {/* Account */}
+          <div className="col-span-2">
+            <select
+              value={editFormData.accountId}
+              onChange={(e) => onEditFormChange({ ...editFormData, accountId: e.target.value })}
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+            >
+              <option value="">Account</option>
+              {accounts.map((acc) => (
+                <option key={acc.id} value={acc.accountId}>
+                  {acc.name} (৳{(acc.balance || 0).toFixed(2)})
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Actions */}
-          <div className="col-span-1 flex gap-1 justify-end">
+          <div className="col-span-1 flex items-center gap-1 justify-end">
             <button
               onClick={() => onSaveEdit(item.id)}
-              className="p-1 bg-green-600 text-white rounded hover:bg-green-700"
+              className="p-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
               title="Save"
             >
-              <Save className="w-3 h-3" />
+              <Save className="w-4 h-4" />
             </button>
             <button
               onClick={onCancelEdit}
-              className="p-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+              className="p-1.5 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
               title="Cancel"
             >
-              <X className="w-3 h-3" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -836,21 +1008,84 @@ function ItemRow({
     );
   }
 
-  // View Mode - Single Row
+  // View Mode - Responsive
   return (
-    <div 
-      className="p-3 hover:bg-gray-50 transition-colors"
-      onClick={() => setShowActions(!showActions)}
-    >
-      <div className="grid grid-cols-12 gap-2 items-center">
-        {/* Checkbox */}
-        <div className="col-span-1 flex justify-center">
+    <div className="p-3 hover:bg-gray-50 transition-colors active:bg-gray-100">
+      {/* Mobile View - Stacked */}
+      <div 
+        className="block sm:hidden"
+        onClick={() => setShowActions(!showActions)}
+      >
+        <div className="flex items-start gap-2">
+          {/* Checkbox */}
           <button 
             onClick={(e) => {
               e.stopPropagation();
               onToggle(item.id);
             }}
+            className="flex-shrink-0 mt-0.5"
           >
+            {selected ? (
+              <CheckCircle2 className="w-5 h-5 text-gray-900" />
+            ) : (
+              <Circle className="w-5 h-5 text-gray-400" />
+            )}
+          </button>
+
+          {/* Content */}
+          <div className="flex-1 min-w-0">
+            {/* First line: Name and Amount */}
+            <div className="flex items-start justify-between gap-2 mb-1">
+              <p className="text-sm font-medium text-gray-900 truncate flex-1">
+                {item.name}
+              </p>
+              <p className="text-sm font-semibold text-gray-900 flex-shrink-0">
+                ৳{item.amount.toFixed(2)}
+              </p>
+            </div>
+            
+            {/* Second line: Category and Account */}
+            <p className="text-xs text-gray-500">
+              <span className="inline-block px-1.5 py-0.5 bg-gray-100 rounded mr-1">
+                {getCategoryName(item.categoryId)}
+              </span>
+              <span className="inline-block px-1.5 py-0.5 bg-gray-100 rounded">
+                {getAccountName(item.accountId)}
+              </span>
+            </p>
+          </div>
+
+          {/* Actions - Show on tap */}
+          {showActions && (
+            <div className="flex-shrink-0 flex gap-1" onClick={(e) => e.stopPropagation()}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStartEdit(item);
+                }}
+                className="p-1.5 text-gray-400 hover:text-gray-900 rounded transition-colors"
+              >
+                <Edit className="w-4 h-4" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(item);
+                }}
+                className="p-1.5 text-gray-400 hover:text-red-600 rounded transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Desktop View - Grid */}
+      <div className="hidden sm:grid sm:grid-cols-12 gap-2 items-center">
+        {/* Checkbox */}
+        <div className="col-span-1 flex justify-center">
+          <button onClick={() => onToggle(item.id)}>
             {selected ? (
               <CheckCircle2 className="w-5 h-5 text-gray-900" />
             ) : (
@@ -860,8 +1095,8 @@ function ItemRow({
         </div>
 
         {/* Item Name */}
-        <div className="col-span-4">
-          <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
+        <div className="col-span-3">
+          <p className="text-sm font-medium text-gray-900">{item.name}</p>
         </div>
 
         {/* Amount */}
@@ -870,36 +1105,33 @@ function ItemRow({
         </div>
 
         {/* Category */}
-        <div className="col-span-4">
+        <div className="col-span-3">
           <span className="inline-block px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded">
             {getCategoryName(item.categoryId)}
           </span>
         </div>
 
+        {/* Account */}
+        <div className="col-span-2">
+          <p className="text-xs text-gray-600">{getAccountName(item.accountId)}</p>
+        </div>
+
         {/* Actions */}
-        <div className="col-span-1 flex gap-1 justify-end">
-          {showActions && (
-            <>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStartEdit(item);
-                }}
-                className="p-1 hover:bg-gray-100 rounded"
-              >
-                <Edit className="w-4 h-4 text-gray-500" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(item);
-                }}
-                className="p-1 hover:bg-red-50 rounded"
-              >
-                <Trash2 className="w-4 h-4 text-gray-500" />
-              </button>
-            </>
-          )}
+        <div className="col-span-1 flex items-center gap-1 justify-end">
+          <button
+            onClick={() => onStartEdit(item)}
+            className="p-1.5 text-gray-400 hover:text-gray-900 rounded transition-colors"
+            title="Edit"
+          >
+            <Edit className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => onDelete(item)}
+            className="p-1.5 text-gray-400 hover:text-red-600 rounded transition-colors"
+            title="Delete"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </div>
@@ -907,52 +1139,56 @@ function ItemRow({
 }
 
 // Component for Confirmed Item Row
-function ConfirmedItemRow({ item, onUnconfirm, getCategoryName }) {
+function ConfirmedItemRow({ item, onUnconfirm, getCategoryName, getAccountName }) {
   const [showActions, setShowActions] = useState(false);
 
   return (
     <div 
-      className="p-3 bg-green-50 bg-opacity-50"
+      className="p-3 bg-green-50 bg-opacity-50 active:bg-green-100" 
       onClick={() => setShowActions(!showActions)}
     >
-      <div className="grid grid-cols-12 gap-2 items-center">
+      <div className="flex items-start gap-2">
         {/* Checkmark */}
-        <div className="col-span-1 flex justify-center">
-          <CheckCircle2 className="w-5 h-5 text-green-600" />
-        </div>
+        <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
 
-        {/* Item Name */}
-        <div className="col-span-4">
-          <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          {/* First line: Name and Amount */}
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <p className="text-sm font-medium text-gray-900 truncate flex-1">
+              {item.name}
+            </p>
+            <p className="text-sm font-semibold text-gray-900 flex-shrink-0">
+              ৳{item.amount.toFixed(2)}
+            </p>
+          </div>
+          
+          {/* Second line: Category and Account */}
+          <p className="text-xs text-gray-500 mb-1">
+            <span className="inline-block px-1.5 py-0.5 bg-white border border-gray-200 rounded mr-1">
+              {getCategoryName(item.categoryId)}
+            </span>
+            <span className="inline-block px-1.5 py-0.5 bg-white border border-gray-200 rounded">
+              {getAccountName(item.accountId)}
+            </span>
+          </p>
+          
+          {/* Transaction status */}
           <p className="text-xs text-green-600">✓ Transaction created</p>
         </div>
 
-        {/* Amount */}
-        <div className="col-span-2">
-          <p className="text-sm font-semibold text-gray-900">৳{item.amount.toFixed(2)}</p>
-        </div>
-
-        {/* Category */}
-        <div className="col-span-4">
-          <span className="inline-block px-2 py-0.5 bg-white border border-gray-200 text-gray-700 text-xs rounded">
-            {getCategoryName(item.categoryId)}
-          </span>
-        </div>
-
-        {/* Undo Button */}
-        <div className="col-span-1 flex justify-end">
-          {showActions && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onUnconfirm(item.id);
-              }}
-              className="px-2 py-1 text-xs text-gray-600 hover:text-gray-900 rounded"
-            >
-              Undo
-            </button>
-          )}
-        </div>
+        {/* Undo Button - Show on tap */}
+        {showActions && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onUnconfirm(item.id);
+            }}
+            className="px-2 py-1 text-xs text-gray-600 hover:text-gray-900 rounded transition-colors flex-shrink-0"
+          >
+            Undo
+          </button>
+        )}
       </div>
     </div>
   );

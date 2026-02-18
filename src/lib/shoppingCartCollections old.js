@@ -271,7 +271,7 @@ export const groupItemsForTransactions = (items) => {
 };
 
 // Create transactions from cart items
-export const confirmCartItems = async (userId, cartDocId, selectedItemIds, transactionDate, accountId) => {
+export const confirmCartItems = async (userId, cartDocId, selectedItemIds, transactionDate) => {
   try {
     const batch = writeBatch(db);
     
@@ -288,27 +288,13 @@ export const confirmCartItems = async (userId, cartDocId, selectedItemIds, trans
       return { success: false, error: 'No valid items to confirm' };
     }
     
-    // Group items by category only (account is now the same for all)
-    const transactionGroups = {};
-    selectedItems.forEach(item => {
-      const key = item.categoryId;
-      if (!transactionGroups[key]) {
-        transactionGroups[key] = {
-          accountId: accountId, // Use the provided account
-          categoryId: item.categoryId,
-          items: [],
-          totalAmount: 0,
-        };
-      }
-      
-      transactionGroups[key].items.push(item);
-      transactionGroups[key].totalAmount += parseFloat(item.amount) || 0;
-    });
+    // Group items by account + category
+    const transactionGroups = groupItemsForTransactions(selectedItems);
     
     const createdTransactions = [];
     
     // Create transactions for each group
-    for (const group of Object.values(transactionGroups)) {
+    for (const group of transactionGroups) {
       const transactionId = generateId();
       const itemNames = group.items.map(item => item.name).join(', ');
       
@@ -333,7 +319,6 @@ export const confirmCartItems = async (userId, cartDocId, selectedItemIds, trans
         batch.update(itemRef, {
           isConfirmed: true,
           transactionId,
-          accountId: group.accountId, // Store the account used
           confirmedAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
