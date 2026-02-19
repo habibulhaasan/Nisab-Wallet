@@ -10,7 +10,7 @@ import {
   LogOut, Menu, X, ArrowRightLeft, Settings, 
   Users, Package, DollarSign, Globe,
   HandCoins, MessageCircleQuestion, Goal, Blend, MessageSquareMore,
-  Home,
+  Home, Repeat ,
   ShoppingBag
 } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
@@ -57,6 +57,7 @@ export default function DashboardNav() {
       { name: 'Goals', href: '/dashboard/goals', icon: Goal },
       { name: 'Zakat', href: '/dashboard/zakat', icon: Star },
       { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
+      { name: 'Recurring', href: '/dashboard/recurring', icon: Repeat,  description: 'Automate transactions'}
     ],
     other: [
       { name: 'Feedback', href: '/dashboard/feedback', icon: MessageCircleQuestion },

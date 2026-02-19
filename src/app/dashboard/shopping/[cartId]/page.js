@@ -43,6 +43,7 @@ export default function CartDetailsPage() {
   const [showAddForms, setShowAddForms] = useState(false);
   const [addFormRows, setAddFormRows] = useState([]);
   const [nextRowId, setNextRowId] = useState(1);
+  const [submittingItems, setSubmittingItems] = useState(false);
 
   // Inline Edit State
   const [editingItemId, setEditingItemId] = useState(null);
@@ -58,6 +59,7 @@ export default function CartDetailsPage() {
     new Date().toISOString().split('T')[0]
   );
   const [selectedAccount, setSelectedAccount] = useState('');
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     if (user && cartId) {
@@ -157,17 +159,6 @@ export default function CartDetailsPage() {
     setAddFormRows(addFormRows.map(row => 
       row.id === rowId ? { ...row, [field]: value } : row
     ));
-    
-    // Auto-add new row when the last row gets filled
-    const updatedRows = addFormRows.map(row => 
-      row.id === rowId ? { ...row, [field]: value } : row
-    );
-    const lastRow = updatedRows[updatedRows.length - 1];
-    
-    // If last row has name and amount, add a new empty row
-    if (lastRow.id === rowId && lastRow.name && lastRow.amount && field !== 'categoryId') {
-      handleAddRow();
-    }
   };
 
   const handleCancelAdd = () => {
@@ -176,6 +167,8 @@ export default function CartDetailsPage() {
   };
 
   const handleSaveAllItems = async () => {
+    if (submittingItems) return; // Prevent double submission
+    
     // Filter out empty rows (no account needed)
     const validRows = addFormRows.filter(row => 
       row.name.trim() && row.amount && parseFloat(row.amount) > 0 && row.categoryId
@@ -185,6 +178,8 @@ export default function CartDetailsPage() {
       alert('Please fill in at least one complete item (name, amount, and category)');
       return;
     }
+
+    setSubmittingItems(true);
 
     // Add all valid items (without account)
     let successCount = 0;
@@ -210,6 +205,8 @@ export default function CartDetailsPage() {
     } else {
       alert('Failed to add items. Please check all fields.');
     }
+    
+    setSubmittingItems(false);
   };
 
   const handleStartEdit = (item) => {
@@ -307,10 +304,41 @@ export default function CartDetailsPage() {
   };
 
   const confirmTransaction = async () => {
+    if (confirming) return; // Prevent double submission
+    
     if (!selectedAccount) {
       alert('Please select an account');
       return;
     }
+    
+    // Calculate total amount of selected items
+    const totalAmount = items
+      .filter((item) => selectedItems.includes(item.id))
+      .reduce((sum, item) => sum + item.amount, 0);
+    
+    // Get selected account's available balance
+    const selectedAcc = accountsWithAvailable.find(a => a.id === selectedAccount);
+    if (!selectedAcc) {
+      alert('Invalid account selected');
+      return;
+    }
+    
+    // Check if available balance is sufficient
+    if (totalAmount > selectedAcc.availableBalance) {
+      const allocated = selectedAcc.balance - selectedAcc.availableBalance;
+      alert(
+        `Insufficient available balance!\n\n` +
+        `Account: ${selectedAcc.name}\n` +
+        `Total Balance: ৳${selectedAcc.balance.toLocaleString()}\n` +
+        `Allocated to Goals: ৳${allocated.toLocaleString()}\n` +
+        `Available: ৳${selectedAcc.availableBalance.toLocaleString()}\n\n` +
+        `Required: ৳${totalAmount.toLocaleString()}\n` +
+        `Short by: ৳${(totalAmount - selectedAcc.availableBalance).toLocaleString()}`
+      );
+      return;
+    }
+    
+    setConfirming(true);
     
     const result = await confirmCartItems(user.uid, cartId, selectedItems, transactionDate, selectedAccount);
     if (result.success) {
@@ -322,6 +350,8 @@ export default function CartDetailsPage() {
     } else {
       alert('Failed to create transactions: ' + result.error);
     }
+    
+    setConfirming(false);
   };
 
   const handleUnconfirmItem = async (itemId) => {
@@ -341,7 +371,7 @@ export default function CartDetailsPage() {
   };
 
   const pendingItems = items.filter((item) => !item.isConfirmed);
-  const confirmedItems = items.filter((item) => !item.isConfirmed);
+  const confirmedItems = items.filter((item) => item.isConfirmed);
 
   if (loading) {
     return (
@@ -490,7 +520,7 @@ export default function CartDetailsPage() {
                         </div>
 
                         {/* Amount */}
-                        <div className="col-span-2">
+                        <div className="col-span-3">
                           <div className="relative">
                             <span className="absolute left-2 top-1.5 text-xs text-gray-500">৳</span>
                             <input
@@ -505,7 +535,7 @@ export default function CartDetailsPage() {
                         </div>
 
                         {/* Category */}
-                        <div className="col-span-4">
+                        <div className="col-span-3">
                           <select
                             value={row.categoryId}
                             onChange={(e) => handleRowChange(row.id, 'categoryId', e.target.value)}
@@ -554,10 +584,11 @@ export default function CartDetailsPage() {
                       </button>
                       <button
                         onClick={handleSaveAllItems}
-                        className="px-3 py-1.5 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1"
+                        disabled={submittingItems}
+                        className="px-3 py-1.5 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Save className="w-3 h-3" />
-                        Save All
+                        {submittingItems ? 'Saving...' : 'Save All'}
                       </button>
                     </div>
                   </div>
@@ -696,9 +727,10 @@ export default function CartDetailsPage() {
               </button>
               <button
                 onClick={confirmTransaction}
-                className="flex-1 px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                disabled={confirming}
+                className="flex-1 px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Confirm
+                {confirming ? 'Confirming...' : 'Confirm'}
               </button>
             </div>
           </div>
@@ -784,7 +816,7 @@ function ItemRow({
           </div>
 
           {/* Amount */}
-          <div className="col-span-2">
+          <div className="col-span-3">
             <div className="relative">
               <span className="absolute left-2 top-1.5 text-xs text-gray-500">৳</span>
               <input
@@ -799,7 +831,7 @@ function ItemRow({
           </div>
 
           {/* Category */}
-          <div className="col-span-4">
+          <div className="col-span-3">
             <select
               value={editFormData.categoryId}
               onChange={(e) => onEditFormChange({ ...editFormData, categoryId: e.target.value })}
@@ -865,12 +897,12 @@ function ItemRow({
         </div>
 
         {/* Amount */}
-        <div className="col-span-2">
+        <div className="col-span-3">
           <p className="text-sm font-semibold text-gray-900">৳{item.amount.toFixed(2)}</p>
         </div>
 
         {/* Category */}
-        <div className="col-span-4">
+        <div className="col-span-3">
           <span className="inline-block px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded">
             {getCategoryName(item.categoryId)}
           </span>
@@ -922,13 +954,13 @@ function ConfirmedItemRow({ item, onUnconfirm, getCategoryName }) {
         </div>
 
         {/* Item Name */}
-        <div className="col-span-4">
+        <div className="col-span-3">
           <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
-          <p className="text-xs text-green-600">✓ Transaction created</p>
+          <p className="text-xs text-green-600"></p>
         </div>
 
         {/* Amount */}
-        <div className="col-span-2">
+        <div className="col-span-3">
           <p className="text-sm font-semibold text-gray-900">৳{item.amount.toFixed(2)}</p>
         </div>
 
