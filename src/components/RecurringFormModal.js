@@ -175,42 +175,42 @@ export default function RecurringFormModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-white rounded-lg w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-900">
-            {isEditing ? 'Edit Recurring Transaction' : 'Create Recurring Transaction'}
+        <div className="flex-shrink-0 bg-white border-b border-gray-200 p-3 sm:p-4 flex items-center justify-between">
+          <h2 className="text-base sm:text-lg font-bold text-gray-900">
+            {isEditing ? 'Edit Recurring' : 'Create Recurring'}
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-gray-400 hover:text-gray-600 transition-colors p-1"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4">
           {/* Type Selector */}
           {!isEditing && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
                 Transaction Type *
               </label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
                 <button
                   type="button"
                   onClick={() => setFormData(prev => ({ ...prev, type: 'income', categoryId: '' }))}
-                  className={`p-4 rounded-lg border-2 transition-all ${
+                  className={`p-3 sm:p-4 rounded-lg border-2 transition-all ${
                     formData.type === 'income'
                       ? 'border-green-600 bg-green-50'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
-                  <TrendingUp className={`w-6 h-6 mx-auto mb-2 ${
+                  <TrendingUp className={`w-5 h-5 sm:w-6 sm:h-6 mx-auto mb-1 sm:mb-2 ${
                     formData.type === 'income' ? 'text-green-600' : 'text-gray-400'
                   }`} />
-                  <p className={`text-sm font-medium ${
+                  <p className={`text-xs sm:text-sm font-medium ${
                     formData.type === 'income' ? 'text-green-900' : 'text-gray-600'
                   }`}>
                     Income
@@ -219,16 +219,16 @@ export default function RecurringFormModal({
                 <button
                   type="button"
                   onClick={() => setFormData(prev => ({ ...prev, type: 'expense', categoryId: '' }))}
-                  className={`p-4 rounded-lg border-2 transition-all ${
+                  className={`p-3 sm:p-4 rounded-lg border-2 transition-all ${
                     formData.type === 'expense'
                       ? 'border-red-600 bg-red-50'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
-                  <TrendingDown className={`w-6 h-6 mx-auto mb-2 ${
+                  <TrendingDown className={`w-5 h-5 sm:w-6 sm:h-6 mx-auto mb-1 sm:mb-2 ${
                     formData.type === 'expense' ? 'text-red-600' : 'text-gray-400'
                   }`} />
-                  <p className={`text-sm font-medium ${
+                  <p className={`text-xs sm:text-sm font-medium ${
                     formData.type === 'expense' ? 'text-red-900' : 'text-gray-600'
                   }`}>
                     Expense
@@ -240,17 +240,17 @@ export default function RecurringFormModal({
 
           {/* Amount */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
               Amount *
             </label>
             <div className="relative">
-              <span className="absolute left-3 top-2.5 text-gray-500">৳</span>
+              <span className="absolute left-3 top-2 sm:top-2.5 text-sm text-gray-500">৳</span>
               <input
                 type="number"
                 step="0.01"
                 value={formData.amount}
                 onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-                className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                 placeholder="0.00"
                 required
                 disabled={submitting}
@@ -259,15 +259,15 @@ export default function RecurringFormModal({
           </div>
 
           {/* Account and Category */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                 Account *
               </label>
               <select
                 value={formData.accountId}
                 onChange={(e) => setFormData(prev => ({ ...prev, accountId: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                 required
                 disabled={submitting}
               >
@@ -281,13 +281,13 @@ export default function RecurringFormModal({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                 Category *
               </label>
               <select
                 value={formData.categoryId}
                 onChange={(e) => setFormData(prev => ({ ...prev, categoryId: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                 required
                 disabled={submitting}
               >
@@ -303,13 +303,13 @@ export default function RecurringFormModal({
 
           {/* Frequency */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
               Frequency *
             </label>
             <select
               value={formData.frequency}
               onChange={(e) => setFormData(prev => ({ ...prev, frequency: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
               required
               disabled={submitting || isEditing}
             >
@@ -329,7 +329,7 @@ export default function RecurringFormModal({
           {/* Interval */}
           {formData.frequency !== 'custom' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                 Repeat Every
               </label>
               <div className="flex items-center gap-2">
@@ -338,10 +338,10 @@ export default function RecurringFormModal({
                   min="1"
                   value={formData.interval}
                   onChange={(e) => setFormData(prev => ({ ...prev, interval: e.target.value }))}
-                  className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                  className="w-16 sm:w-20 px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                   disabled={submitting}
                 />
-                <span className="text-sm text-gray-600">
+                <span className="text-xs sm:text-sm text-gray-600">
                   {formData.frequency === 'daily' && 'day(s)'}
                   {formData.frequency === 'weekly' && 'week(s)'}
                   {formData.frequency === 'monthly' && 'month(s)'}
@@ -354,13 +354,13 @@ export default function RecurringFormModal({
           {/* Day of Week (Weekly) */}
           {formData.frequency === 'weekly' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                 Day of Week *
               </label>
               <select
                 value={formData.dayOfWeek}
                 onChange={(e) => setFormData(prev => ({ ...prev, dayOfWeek: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                 required
                 disabled={submitting}
               >
@@ -376,7 +376,7 @@ export default function RecurringFormModal({
           {/* Day of Month (Monthly) */}
           {formData.frequency === 'monthly' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                 Day of Month *
               </label>
               <input
@@ -385,7 +385,7 @@ export default function RecurringFormModal({
                 max="31"
                 value={formData.dayOfMonth}
                 onChange={(e) => setFormData(prev => ({ ...prev, dayOfMonth: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                 placeholder="1-31"
                 required
                 disabled={submitting}
@@ -399,7 +399,7 @@ export default function RecurringFormModal({
           {/* Custom Dates */}
           {formData.frequency === 'custom' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                 Custom Dates *
               </label>
               <div className="flex gap-2 mb-2">
@@ -407,13 +407,13 @@ export default function RecurringFormModal({
                   type="date"
                   value={customDateInput}
                   onChange={(e) => setCustomDateInput(e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                  className="flex-1 px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                   disabled={submitting}
                 />
                 <button
                   type="button"
                   onClick={handleAddCustomDate}
-                  className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+                  className="px-3 sm:px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-xs sm:text-sm whitespace-nowrap"
                   disabled={submitting}
                 >
                   Add
@@ -424,7 +424,7 @@ export default function RecurringFormModal({
                   {formData.customDates.map((date) => (
                     <div
                       key={date}
-                      className="inline-flex items-center gap-2 px-3 py-1 bg-gray-100 rounded-lg text-sm"
+                      className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 bg-gray-100 rounded-lg text-xs sm:text-sm"
                     >
                       <span>{new Date(date).toLocaleDateString()}</span>
                       <button
@@ -433,7 +433,7 @@ export default function RecurringFormModal({
                         className="text-gray-500 hover:text-red-600"
                         disabled={submitting}
                       >
-                        <X className="w-4 h-4" />
+                        <X className="w-3 h-3 sm:w-4 sm:h-4" />
                       </button>
                     </div>
                   ))}
@@ -444,14 +444,14 @@ export default function RecurringFormModal({
 
           {/* Start Date */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
               Start Date *
             </label>
             <input
               type="date"
               value={formData.startDate}
               onChange={(e) => setFormData(prev => ({ ...prev, startDate: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
               required
               disabled={submitting}
             />
@@ -459,13 +459,13 @@ export default function RecurringFormModal({
 
           {/* End Condition */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
               End Condition
             </label>
             <select
               value={formData.endCondition}
               onChange={(e) => setFormData(prev => ({ ...prev, endCondition: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent mb-2"
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent mb-2"
               disabled={submitting}
             >
               <option value="never">Never (until manually stopped)</option>
@@ -479,7 +479,7 @@ export default function RecurringFormModal({
                 value={formData.endDate}
                 onChange={(e) => setFormData(prev => ({ ...prev, endDate: e.target.value }))}
                 min={formData.startDate}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                 required
                 disabled={submitting}
               />
@@ -492,41 +492,41 @@ export default function RecurringFormModal({
                   min="1"
                   value={formData.occurrences}
                   onChange={(e) => setFormData(prev => ({ ...prev, occurrences: e.target.value }))}
-                  className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                  className="w-20 sm:w-32 px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                   placeholder="0"
                   required
                   disabled={submitting}
                 />
-                <span className="text-sm text-gray-600">occurrences</span>
+                <span className="text-xs sm:text-sm text-gray-600">occurrences</span>
               </div>
             )}
           </div>
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
               Description
             </label>
             <input
               type="text"
               value={formData.description}
               onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
               placeholder="e.g., Monthly rent, Weekly groceries"
               disabled={submitting}
             />
           </div>
 
           {/* Info Box */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 sm:p-3">
             <div className="flex gap-2">
               <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
               <div className="text-xs text-blue-900">
                 <p className="font-medium mb-1">How it works:</p>
-                <ul className="list-disc list-inside space-y-1">
-                  <li>Transactions will be created automatically on due dates</li>
-                  <li>Available balance will be checked before creating</li>
-                  <li>If insufficient, you'll be notified to approve manually</li>
+                <ul className="list-disc list-inside space-y-0.5">
+                  <li>Transactions created automatically on due dates</li>
+                  <li>Available balance checked before creating</li>
+                  <li>If insufficient, you'll be notified</li>
                   <li>You can pause or delete anytime</li>
                 </ul>
               </div>
@@ -534,11 +534,11 @@ export default function RecurringFormModal({
           </div>
 
           {/* Actions */}
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-2 sm:gap-3 pt-2 sm:pt-4 sticky bottom-0 bg-white py-2 sm:py-3 -mx-3 sm:-mx-4 px-3 sm:px-4 border-t border-gray-100">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              className="flex-1 px-3 sm:px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
               disabled={submitting}
             >
               Cancel
@@ -546,7 +546,7 @@ export default function RecurringFormModal({
             <button
               type="submit"
               disabled={submitting}
-              className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-3 sm:px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
             >
               {submitting ? 'Saving...' : isEditing ? 'Update' : 'Create'}
             </button>
