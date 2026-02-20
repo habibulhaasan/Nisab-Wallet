@@ -10,8 +10,7 @@ import {
   LogOut, Menu, X, ArrowRightLeft, Settings, 
   Users, Package, DollarSign, Globe,
   HandCoins, MessageCircleQuestion, Goal, Blend, MessageSquareMore,
-  Home, Repeat ,
-  ShoppingBag
+  Home, Repeat ,FileText, ShoppingBag
 } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
 import { checkIsAdmin } from '@/lib/adminUtils';
@@ -57,7 +56,9 @@ export default function DashboardNav() {
       { name: 'Goals', href: '/dashboard/goals', icon: Goal },
       { name: 'Zakat', href: '/dashboard/zakat', icon: Star },
       { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
-      { name: 'Recurring', href: '/dashboard/recurring', icon: Repeat,  description: 'Automate transactions'}
+      { name: 'Recurring', href: '/dashboard/recurring', icon: Repeat},
+      { name: 'Tax File', href: '/dashboard/tax', icon: FileText}
+
     ],
     other: [
       { name: 'Feedback', href: '/dashboard/feedback', icon: MessageCircleQuestion },
