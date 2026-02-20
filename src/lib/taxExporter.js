@@ -11,7 +11,7 @@ import { getTaxCategoryById } from './taxCategories';
  * Generate IT-10BB (Expenditure Statement) HTML
  */
 export const generateIT10BB = (taxYear, expenseAnalysis, taxpayerInfo = {}) => {
-  const { name = 'Taxpayer Name', tin = 'TIN Number' } = taxpayerInfo;
+  const { taxpayerName = 'Taxpayer Name', tin = 'TIN Number' } = taxpayerInfo;
   
   let html = `
 <!DOCTYPE html>
@@ -90,7 +90,7 @@ export const generateIT10BB = (taxYear, expenseAnalysis, taxpayerInfo = {}) => {
   </div>
 
   <div class="info-section">
-    <div class="info-row"><strong>Name of Taxpayer:</strong> ${name}</div>
+    <div class="info-row"><strong>Name of Taxpayer:</strong> ${taxpayerName}</div>
     <div class="info-row"><strong>TIN:</strong> ${tin}</div>
     <div class="info-row"><strong>Assessment Year:</strong> ${taxYear.taxYear}</div>
   </div>
@@ -264,7 +264,7 @@ export const generateIT10BB = (taxYear, expenseAnalysis, taxpayerInfo = {}) => {
  * Generate IT-10BB2 (Assets & Liabilities Statement) HTML
  */
 export const generateIT10BB2 = (taxYear, assets = [], liabilities = [], accounts = [], taxpayerInfo = {}) => {
-  const { name = 'Taxpayer Name', tin = 'TIN Number' } = taxpayerInfo;
+  const { taxpayerName = 'Taxpayer Name', tin = 'TIN Number' } = taxpayerInfo;
   
   // Calculate totals
   const totalAssets = assets.reduce((sum, a) => sum + (a.currentValue || 0), 0);
@@ -345,7 +345,7 @@ export const generateIT10BB2 = (taxYear, assets = [], liabilities = [], accounts
   </div>
 
   <div class="info-section">
-    <div class="info-row"><strong>Name of Taxpayer:</strong> ${name}</div>
+    <div class="info-row"><strong>Name of Taxpayer:</strong> ${taxpayerName}</div>
     <div class="info-row"><strong>TIN:</strong> ${tin}</div>
     <div class="info-row"><strong>Assessment Year:</strong> ${taxYear.taxYear}</div>
   </div>

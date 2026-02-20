@@ -8,11 +8,23 @@ import {
   getTaxYear as getTaxYearDoc,
   updateTaxYear,
   deleteTaxYear,
-  getTaxMappings
+  getTaxMappings,
+  getTaxAssets,
+  getTaxLiabilities,
+  deleteTaxAsset,
+  deleteTaxLiability
 } from '@/lib/taxCollections';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { getAccounts } from '@/lib/firestoreCollections';
+import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { getTaxCategoryById } from '@/lib/taxCategories';
+import { getTaxCategoryById, getSectionForTaxCategory } from '@/lib/taxCategories';
+import {
+  generateIT10BB,
+  generateIT10BB2,
+  downloadAsPDF,
+  generateExcelData,
+  downloadAsExcel
+} from '@/lib/taxExporter';
 import {
   ArrowLeft,
   FileText,
@@ -26,9 +38,16 @@ import {
   Edit,
   Trash2,
   CheckCircle,
-  Clock
+  Clock,
+  Plus,
+  FileSpreadsheet,
+  Building,
+  CreditCard,
+  Settings
 } from 'lucide-react';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import AssetLiabilityModal from '@/components/AssetLiabilityModal';
+import TaxProfileModal, { getTaxProfile } from '@/components/TaxProfileModal';
 import { showToast } from '@/components/Toast';
 
 export default function TaxYearDetailsPage() {
@@ -42,8 +61,19 @@ export default function TaxYearDetailsPage() {
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
   const [accounts, setAccounts] = useState([]);
+  const [assets, setAssets] = useState([]);
+  const [liabilities, setLiabilities] = useState([]);
+  const [taxProfile, setTaxProfile] = useState({ taxpayerName: '', tin: '' });
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  // Modals
+  const [showAssetModal, setShowAssetModal] = useState(false);
+  const [showLiabilityModal, setShowLiabilityModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [editingAsset, setEditingAsset] = useState(null);
+  const [editingLiability, setEditingLiability] = useState(null);
 
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
@@ -66,7 +96,10 @@ export default function TaxYearDetailsPage() {
       loadMappings(),
       loadTransactions(),
       loadCategories(),
-      loadAccounts()
+      loadAccounts(),
+      loadAssets(),
+      loadLiabilities(),
+      loadProfile()
     ]);
     setLoading(false);
   };
@@ -109,49 +142,117 @@ export default function TaxYearDetailsPage() {
   };
 
   const loadAccounts = async () => {
-    try {
-      const ref = collection(db, 'users', user.uid, 'accounts');
-      const snap = await getDocs(ref);
-      setAccounts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch (error) {
-      console.error('Error loading accounts:', error);
+    const result = await getAccounts(user.uid);
+    if (result.success) {
+      setAccounts(result.accounts);
+    }
+  };
+
+  const loadAssets = async () => {
+    const result = await getTaxAssets(user.uid, taxYearDocId);
+    if (result.success) {
+      setAssets(result.assets);
+    }
+  };
+
+  const loadLiabilities = async () => {
+    const result = await getTaxLiabilities(user.uid, taxYearDocId);
+    if (result.success) {
+      setLiabilities(result.liabilities);
+    }
+  };
+
+  const loadProfile = async () => {
+    const result = await getTaxProfile(user.uid);
+    if (result.success && result.profile) {
+      setTaxProfile(result.profile);
     }
   };
 
   const analyzeTransactions = () => {
-    if (!taxYear) return { income: {}, expenses: {}, totalIncome: 0, totalExpenses: 0 };
+    if (!taxYear) return { 
+      income: {}, 
+      expenses: {}, 
+      personal: {},
+      taxPaid: {},
+      investments: {},
+      loanRepayment: {},
+      totalIncome: 0, 
+      totalExpenses: 0 
+    };
+
+    console.log('=== ANALYZING TRANSACTIONS ===');
+    console.log('Fiscal Year:', taxYear.fiscalYearStart, 'to', taxYear.fiscalYearEnd);
+    console.log('Total transactions:', transactions.length);
+    console.log('Total mappings:', mappings.length);
 
     // Filter transactions within fiscal year
-    const fiscalTransactions = transactions.filter(t => 
-      t.date >= taxYear.fiscalYearStart && t.date <= taxYear.fiscalYearEnd
-    );
+    const fiscalTransactions = transactions.filter(t => {
+      const inRange = t.date >= taxYear.fiscalYearStart && t.date <= taxYear.fiscalYearEnd;
+      if (!inRange) {
+        console.log('Transaction EXCLUDED (out of range):', t.date, t.description || t.categoryId);
+      }
+      return inRange;
+    });
+
+    console.log('Transactions in fiscal year:', fiscalTransactions.length);
 
     const incomeByTaxCategory = {};
     const expensesByTaxCategory = {};
+    const personal = {};
+    const taxPaid = {};
+    const investments = {};
+    const loanRepayment = {};
     let totalIncome = 0;
     let totalExpenses = 0;
 
     fiscalTransactions.forEach(transaction => {
-      // Find mapping for this transaction's category
       const mapping = mappings.find(m => m.userCategoryId === transaction.categoryId);
       
-      if (mapping) {
-        const taxCategoryId = mapping.taxCategoryId;
-        const amount = transaction.amount;
+      if (!mapping) {
+        console.log('⚠️ NO MAPPING for category:', transaction.categoryId, '- Transaction will be skipped');
+        return;
+      }
 
-        if (transaction.type === 'income') {
-          incomeByTaxCategory[taxCategoryId] = (incomeByTaxCategory[taxCategoryId] || 0) + amount;
-          totalIncome += amount;
-        } else if (transaction.type === 'expense') {
-          expensesByTaxCategory[taxCategoryId] = (expensesByTaxCategory[taxCategoryId] || 0) + amount;
-          totalExpenses += amount;
+      console.log('✓ Processing:', transaction.type, transaction.amount, 'Category:', mapping.userCategoryName, '→ Tax:', mapping.taxCategoryId);
+
+      const taxCategoryId = mapping.taxCategoryId;
+      const amount = transaction.amount;
+      const section = getSectionForTaxCategory(taxCategoryId);
+
+      if (transaction.type === 'income') {
+        incomeByTaxCategory[taxCategoryId] = (incomeByTaxCategory[taxCategoryId] || 0) + amount;
+        totalIncome += amount;
+      } else if (transaction.type === 'expense') {
+        expensesByTaxCategory[taxCategoryId] = (expensesByTaxCategory[taxCategoryId] || 0) + amount;
+        totalExpenses += amount;
+
+        // Also categorize by section for IT-10BB
+        if (section === 'personal_expenses') {
+          personal[taxCategoryId] = (personal[taxCategoryId] || 0) + amount;
+        } else if (section === 'tax_paid') {
+          taxPaid[taxCategoryId] = (taxPaid[taxCategoryId] || 0) + amount;
+        } else if (section === 'investments') {
+          investments[taxCategoryId] = (investments[taxCategoryId] || 0) + amount;
+        } else if (section === 'loan_repayment') {
+          loanRepayment[taxCategoryId] = (loanRepayment[taxCategoryId] || 0) + amount;
         }
       }
     });
 
+    console.log('=== ANALYSIS COMPLETE ===');
+    console.log('Total Income:', totalIncome);
+    console.log('Total Expenses:', totalExpenses);
+    console.log('Income categories:', Object.keys(incomeByTaxCategory).length);
+    console.log('Expense categories:', Object.keys(expensesByTaxCategory).length);
+
     return { 
       income: incomeByTaxCategory, 
-      expenses: expensesByTaxCategory, 
+      expenses: expensesByTaxCategory,
+      personal,
+      taxPaid,
+      investments,
+      loanRepayment,
       totalIncome, 
       totalExpenses 
     };
@@ -162,16 +263,114 @@ export default function TaxYearDetailsPage() {
     
     const analysis = analyzeTransactions();
     
+    // Calculate asset & liability totals
+    const totalManualAssets = assets.reduce((sum, a) => sum + (a.currentValue || 0), 0);
+    const totalAccounts = accounts.reduce((sum, a) => sum + (a.balance || 0), 0);
+    const totalAssets = totalManualAssets + totalAccounts;
+    const totalLiabilities = liabilities.reduce((sum, l) => sum + (l.principal || 0), 0);
+    const netWorth = totalAssets - totalLiabilities;
+    
     // Update tax year with totals
     await updateTaxYear(user.uid, taxYearDocId, {
       totalIncome: analysis.totalIncome,
       totalExpenses: analysis.totalExpenses,
-      // Assets and liabilities would be calculated separately
+      totalAssets: totalAssets,
+      totalLiabilities: totalLiabilities,
+      netWorth: netWorth
     });
 
     await loadTaxYear();
     showToast('Analysis complete!', 'success');
     setAnalyzing(false);
+  };
+
+  const handleGenerateIT10BB = () => {
+    setExporting(true);
+    
+    const analysis = analyzeTransactions();
+    const expenseAnalysis = {
+      personal: analysis.personal,
+      taxPaid: analysis.taxPaid,
+      investments: analysis.investments,
+      loanRepayment: analysis.loanRepayment,
+      totalExpenses: analysis.totalExpenses
+    };
+
+    const html = generateIT10BB(taxYear, expenseAnalysis, taxProfile);
+    downloadAsPDF(html, `IT-10BB_${taxYear.incomeYear}.html`);
+    
+    showToast('IT-10BB generated! Print dialog will open.', 'success');
+    setExporting(false);
+  };
+
+  const handleGenerateIT10BB2 = () => {
+    setExporting(true);
+    
+    const html = generateIT10BB2(taxYear, assets, liabilities, accounts, taxProfile);
+    downloadAsPDF(html, `IT-10BB2_${taxYear.incomeYear}.html`);
+    
+    showToast('IT-10BB2 generated! Print dialog will open.', 'success');
+    setExporting(false);
+  };
+
+  const handleExportExcel = () => {
+    setExporting(true);
+    
+    const analysis = analyzeTransactions();
+    const expenseAnalysis = {
+      personal: analysis.personal,
+      taxPaid: analysis.taxPaid,
+      investments: analysis.investments,
+      loanRepayment: analysis.loanRepayment,
+      totalExpenses: analysis.totalExpenses
+    };
+
+    const incomeAnalysis = {
+      income: analysis.income,
+      totalIncome: analysis.totalIncome
+    };
+
+    const csvData = generateExcelData(taxYear, incomeAnalysis, expenseAnalysis, assets, liabilities, accounts);
+    downloadAsExcel(csvData, `Tax_Report_${taxYear.incomeYear}.csv`);
+    
+    showToast('Excel file downloaded!', 'success');
+    setExporting(false);
+  };
+
+  const handleDeleteAsset = (asset) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Asset?',
+      message: `Are you sure you want to delete "${asset.description}"?`,
+      type: 'danger',
+      onConfirm: async () => {
+        const result = await deleteTaxAsset(user.uid, asset.id);
+        if (result.success) {
+          showToast('Asset deleted', 'success');
+          await loadAssets();
+        } else {
+          showToast('Failed to delete', 'error');
+        }
+      }
+    });
+  };
+
+  const handleDeleteLiability = (liability) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Liability?',
+      message: `Are you sure you want to delete "${liability.description}"?`,
+      type: 'danger',
+      onConfirm: async () => {
+        const result = await deleteTaxLiability(user.uid, liability.id);
+        if (result.success) {
+          showToast('Liability deleted', 'success');
+          await loadLiabilities();
+        } else {
+          showToast('Failed to delete', 'error');
+        }
+      }
+    });
   };
 
   const handleDelete = () => {
@@ -278,6 +477,15 @@ export default function TaxYearDetailsPage() {
 
             <div className="flex gap-2">
               <button
+                onClick={() => setShowProfileModal(true)}
+                className="flex items-center gap-2 px-3 sm:px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+                title="Edit Tax Profile"
+              >
+                <Settings className="w-4 h-4" />
+                <span className="hidden sm:inline">Profile</span>
+              </button>
+
+              <button
                 onClick={handleAnalyze}
                 disabled={analyzing}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50"
@@ -360,8 +568,8 @@ export default function TaxYearDetailsPage() {
         </div>
       )}
 
-      {/* Sections */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Income & Expense Analysis */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Income Analysis */}
         <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6">
           <div className="flex items-center gap-2 mb-4">
@@ -423,7 +631,8 @@ export default function TaxYearDetailsPage() {
           ) : (
             <div className="space-y-3">
               {Object.entries(analysis.expenses)
-                .sort((a, b) => b[1] - a[1]) // Sort by amount descending
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10)
                 .map(([taxCategoryId, amount]) => {
                   const taxCat = getTaxCategoryById(taxCategoryId);
                   const percentage = analysis.totalExpenses > 0 
@@ -459,36 +668,228 @@ export default function TaxYearDetailsPage() {
         </div>
       </div>
 
-      {/* Action Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+      {/* Assets & Liabilities */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Assets */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Building className="w-5 h-5 text-blue-600" />
+              <h2 className="text-lg font-semibold text-gray-900">Assets</h2>
+            </div>
+            <button
+              onClick={() => {
+                setEditingAsset(null);
+                setShowAssetModal(true);
+              }}
+              className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {assets.map((asset) => {
+              const cat = getTaxCategoryById(asset.assetType);
+              return (
+                <div key={asset.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900">{asset.description}</p>
+                    <p className="text-xs text-gray-500">{cat?.name}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-gray-900">
+                      ৳{(asset.currentValue || 0).toLocaleString()}
+                    </p>
+                    <button
+                      onClick={() => {
+                        setEditingAsset(asset);
+                        setShowAssetModal(true);
+                      }}
+                      className="p-1 text-gray-400 hover:text-blue-600"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteAsset(asset)}
+                      className="p-1 text-gray-400 hover:text-red-600"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {assets.length === 0 && (
+              <div className="text-center py-8">
+                <p className="text-sm text-gray-500">No assets added</p>
+              </div>
+            )}
+
+            <div className="pt-3 border-t border-gray-200 flex items-center justify-between">
+              <p className="text-sm font-semibold text-gray-900">Total Assets</p>
+              <p className="text-lg font-bold text-blue-600">
+                ৳{(taxYear.totalAssets || 0).toLocaleString()}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Liabilities */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-orange-600" />
+              <h2 className="text-lg font-semibold text-gray-900">Liabilities</h2>
+            </div>
+            <button
+              onClick={() => {
+                setEditingLiability(null);
+                setShowLiabilityModal(true);
+              }}
+              className="flex items-center gap-1 px-3 py-1.5 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {liabilities.map((liability) => {
+              const cat = getTaxCategoryById(liability.liabilityType);
+              return (
+                <div key={liability.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900">{liability.description}</p>
+                    <p className="text-xs text-gray-500">{cat?.name}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-gray-900">
+                      ৳{(liability.principal || 0).toLocaleString()}
+                    </p>
+                    <button
+                      onClick={() => {
+                        setEditingLiability(liability);
+                        setShowLiabilityModal(true);
+                      }}
+                      className="p-1 text-gray-400 hover:text-blue-600"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteLiability(liability)}
+                      className="p-1 text-gray-400 hover:text-red-600"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {liabilities.length === 0 && (
+              <div className="text-center py-8">
+                <p className="text-sm text-gray-500">No liabilities added</p>
+              </div>
+            )}
+
+            <div className="pt-3 border-t border-gray-200 flex items-center justify-between">
+              <p className="text-sm font-semibold text-gray-900">Total Liabilities</p>
+              <p className="text-lg font-bold text-orange-600">
+                ৳{(taxYear.totalLiabilities || 0).toLocaleString()}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Export Actions */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <button
-          onClick={() => showToast('Export feature coming soon!', 'info')}
-          className="flex items-center gap-3 p-4 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow text-left"
+          onClick={handleGenerateIT10BB}
+          disabled={exporting}
+          className="flex items-center gap-3 p-4 bg-white border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:shadow-md transition-all text-left disabled:opacity-50"
         >
-          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-            <Download className="w-5 h-5 text-blue-600" />
+          <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+            <FileText className="w-6 h-6 text-blue-600" />
           </div>
           <div>
             <p className="text-sm font-semibold text-gray-900">Generate IT-10BB</p>
-            <p className="text-xs text-gray-500">Expenditure statement</p>
+            <p className="text-xs text-gray-500">Expenditure statement (PDF)</p>
           </div>
         </button>
 
         <button
-          onClick={() => showToast('Export feature coming soon!', 'info')}
-          className="flex items-center gap-3 p-4 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow text-left"
+          onClick={handleGenerateIT10BB2}
+          disabled={exporting}
+          className="flex items-center gap-3 p-4 bg-white border-2 border-gray-200 rounded-lg hover:border-purple-500 hover:shadow-md transition-all text-left disabled:opacity-50"
         >
-          <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-            <Wallet className="w-5 h-5 text-purple-600" />
+          <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+            <Wallet className="w-6 h-6 text-purple-600" />
           </div>
           <div>
             <p className="text-sm font-semibold text-gray-900">Generate IT-10BB2</p>
-            <p className="text-xs text-gray-500">Assets & liabilities</p>
+            <p className="text-xs text-gray-500">Assets & liabilities (PDF)</p>
+          </div>
+        </button>
+
+        <button
+          onClick={handleExportExcel}
+          disabled={exporting}
+          className="flex items-center gap-3 p-4 bg-white border-2 border-gray-200 rounded-lg hover:border-green-500 hover:shadow-md transition-all text-left disabled:opacity-50"
+        >
+          <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+            <FileSpreadsheet className="w-6 h-6 text-green-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Download Excel</p>
+            <p className="text-xs text-gray-500">Complete tax report (CSV)</p>
           </div>
         </button>
       </div>
 
-      {/* Confirmation Dialog */}
+      {/* Modals */}
+      <TaxProfileModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        onSuccess={loadProfile}
+        userId={user.uid}
+      />
+
+      <AssetLiabilityModal
+        isOpen={showAssetModal}
+        onClose={() => {
+          setShowAssetModal(false);
+          setEditingAsset(null);
+        }}
+        onSuccess={async () => {
+          await loadAssets();
+          await handleAnalyze();
+        }}
+        type="asset"
+        editingItem={editingAsset}
+        taxYearDocId={taxYearDocId}
+        userId={user.uid}
+      />
+
+      <AssetLiabilityModal
+        isOpen={showLiabilityModal}
+        onClose={() => {
+          setShowLiabilityModal(false);
+          setEditingLiability(null);
+        }}
+        onSuccess={async () => {
+          await loadLiabilities();
+          await handleAnalyze();
+        }}
+        type="liability"
+        editingItem={editingLiability}
+        taxYearDocId={taxYearDocId}
+        userId={user.uid}
+      />
+
       <ConfirmDialog
         isOpen={confirmDialog.isOpen}
         onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
