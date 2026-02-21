@@ -1,0 +1,500 @@
+// src/app/dashboard/budgets/page.js
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/context/AuthContext';
+import { useRouter } from 'next/navigation';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import {
+  getBudgetsForMonth,
+  addBudget,
+  updateBudget
+} from '@/lib/budgetCollections';
+import {
+  PiggyBank,
+  TrendingUp,
+  TrendingDown,
+  AlertCircle,
+  CheckCircle,
+  Calendar,
+  Save,
+  ChevronRight,
+  Info
+} from 'lucide-react';
+import { showToast } from '@/components/Toast';
+
+export default function BudgetsPage() {
+  const { user } = useAuth();
+  const router = useRouter();
+  
+  const [categories, setCategories] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [budgets, setBudgets] = useState([]);
+  const [previousMonthBudgets, setPreviousMonthBudgets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  
+  // Budget inputs for each category
+  const [budgetInputs, setBudgetInputs] = useState({});
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      loadData();
+    }
+  }, [user, selectedYear, selectedMonth]);
+
+  const loadData = async () => {
+    setLoading(true);
+    await Promise.all([
+      loadCategories(),
+      loadBudgets(),
+      loadPreviousMonthBudgets(),
+      loadTransactions()
+    ]);
+    setLoading(false);
+  };
+
+  const loadCategories = async () => {
+    try {
+      const ref = collection(db, 'users', user.uid, 'categories');
+      const q = query(ref, where('type', '==', 'Expense'));
+      const snap = await getDocs(q);
+      const cats = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setCategories(cats.sort((a, b) => a.name.localeCompare(b.name)));
+    } catch (error) {
+      console.error('Error loading categories:', error);
+    }
+  };
+
+  const loadBudgets = async () => {
+    const result = await getBudgetsForMonth(user.uid, selectedYear, selectedMonth);
+    if (result.success) {
+      setBudgets(result.budgets);
+      
+      // Initialize budget inputs from existing budgets
+      const inputs = {};
+      result.budgets.forEach(budget => {
+        inputs[budget.categoryId] = budget.amount.toString();
+      });
+      setBudgetInputs(inputs);
+      setHasUnsavedChanges(false);
+    }
+  };
+
+  const loadPreviousMonthBudgets = async () => {
+    const prevMonth = selectedMonth === 1 ? 12 : selectedMonth - 1;
+    const prevYear = selectedMonth === 1 ? selectedYear - 1 : selectedYear;
+    
+    const result = await getBudgetsForMonth(user.uid, prevYear, prevMonth);
+    if (result.success) {
+      setPreviousMonthBudgets(result.budgets);
+      
+      // Auto-fill from previous month if current month has no budgets
+      if (budgets.length === 0 && result.budgets.length > 0) {
+        const inputs = {};
+        result.budgets.forEach(budget => {
+          inputs[budget.categoryId] = budget.amount.toString();
+        });
+        setBudgetInputs(inputs);
+      }
+    }
+  };
+
+  const loadTransactions = async () => {
+    try {
+      const ref = collection(db, 'users', user.uid, 'transactions');
+      const snap = await getDocs(ref);
+      const allTransactions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      
+      // Filter for current month (exclude transfers, goals, lending, loans)
+      const startDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`;
+      const lastDay = new Date(selectedYear, selectedMonth, 0).getDate();
+      const endDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      
+      const filtered = allTransactions.filter(t => 
+        t.type === 'Expense' &&
+        t.date >= startDate &&
+        t.date <= endDate &&
+        !t.isTransfer &&
+        !t.collectionType &&
+        !t.source &&
+        !t.goalId &&
+        !t.lendingId &&
+        !t.loanId
+      );
+      
+      setTransactions(filtered);
+    } catch (error) {
+      console.error('Error loading transactions:', error);
+    }
+  };
+
+  const calculateSpent = (categoryId) => {
+    return transactions
+      .filter(t => t.categoryId === categoryId)
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+  };
+
+  const handleInputChange = (categoryId, value) => {
+    setBudgetInputs(prev => ({
+      ...prev,
+      [categoryId]: value
+    }));
+    setHasUnsavedChanges(true);
+  };
+
+  const handleSaveAll = async () => {
+    if (saving) return;
+
+    setSaving(true);
+
+    try {
+      const updates = [];
+
+      for (const category of categories) {
+        const inputValue = budgetInputs[category.id];
+        const amount = parseFloat(inputValue);
+
+        // Skip if no input or invalid
+        if (!inputValue || isNaN(amount) || amount <= 0) {
+          continue;
+        }
+
+        // Check if budget already exists for this category
+        const existingBudget = budgets.find(b => b.categoryId === category.id);
+
+        const budgetData = {
+          categoryId: category.id,
+          categoryName: category.name,
+          amount: amount,
+          year: selectedYear,
+          month: selectedMonth,
+          rollover: false,
+          notes: ''
+        };
+
+        if (existingBudget) {
+          // Update existing
+          updates.push(updateBudget(user.uid, existingBudget.id, budgetData));
+        } else {
+          // Create new
+          updates.push(addBudget(user.uid, budgetData));
+        }
+      }
+
+      if (updates.length === 0) {
+        showToast('No budgets to save', 'info');
+        setSaving(false);
+        return;
+      }
+
+      await Promise.all(updates);
+      
+      showToast(`${updates.length} budget(s) saved successfully`, 'success');
+      setHasUnsavedChanges(false);
+      await loadBudgets();
+    } catch (error) {
+      console.error('Error saving budgets:', error);
+      showToast('Failed to save budgets', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCategoryClick = (categoryId) => {
+    router.push(`/dashboard/budgets/${categoryId}`);
+  };
+
+  const getMonthName = (month) => {
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                    'July', 'August', 'September', 'October', 'November', 'December'];
+    return months[month - 1];
+  };
+
+  const getProgressColor = (percentage) => {
+    if (percentage >= 100) return 'bg-red-500';
+    if (percentage >= 80) return 'bg-yellow-500';
+    return 'bg-green-500';
+  };
+
+  const getStatusIcon = (percentage) => {
+    if (percentage >= 100) return { Icon: AlertCircle, color: 'text-red-600' };
+    if (percentage >= 80) return { Icon: AlertCircle, color: 'text-yellow-600' };
+    return { Icon: CheckCircle, color: 'text-green-600' };
+  };
+
+  // Calculate totals
+  const totalBudget = categories.reduce((sum, cat) => {
+    const amount = parseFloat(budgetInputs[cat.id]) || 0;
+    return sum + amount;
+  }, 0);
+
+  const totalSpent = categories.reduce((sum, cat) => {
+    return sum + calculateSpent(cat.id);
+  }, 0);
+
+  const totalRemaining = totalBudget - totalSpent;
+  const overallPercentage = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-6xl mx-auto pb-20">
+      {/* Header */}
+      <div className="mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <PiggyBank className="w-7 h-7" />
+              Budget Management
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">
+              Set budgets for all categories at once
+            </p>
+          </div>
+          
+          {hasUnsavedChanges && (
+            <button
+              onClick={handleSaveAll}
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 shadow-lg"
+            >
+              {saving ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  Save All Budgets
+                </>
+              )}
+            </button>
+          )}
+        </div>
+
+        {/* Month Selector */}
+        <div className="flex items-center gap-3">
+          <Calendar className="w-5 h-5 text-gray-400" />
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+          >
+            {Array.from({ length: 12 }, (_, i) => i + 1).map(month => (
+              <option key={month} value={month}>
+                {getMonthName(month)}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+          >
+            {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(year => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Info Banner */}
+      {budgets.length === 0 && previousMonthBudgets.length > 0 && (
+        <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex gap-3">
+            <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-blue-900 mb-1">
+                Budgets auto-filled from previous month
+              </p>
+              <p className="text-xs text-blue-700">
+                We've pre-filled budgets from {getMonthName(selectedMonth === 1 ? 12 : selectedMonth - 1)}. 
+                Adjust amounts as needed and click "Save All Budgets".
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Overall Summary */}
+      <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6 mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          {getMonthName(selectedMonth)} {selectedYear} Summary
+        </h2>
+        
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+          <div>
+            <p className="text-xs text-gray-500 mb-1">Total Budget</p>
+            <p className="text-xl font-bold text-gray-900">৳{totalBudget.toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 mb-1">Total Spent</p>
+            <p className="text-xl font-bold text-red-600">৳{totalSpent.toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 mb-1">Remaining</p>
+            <p className={`text-xl font-bold ${totalRemaining >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              ৳{totalRemaining.toLocaleString()}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 mb-1">Used</p>
+            <p className="text-xl font-bold text-gray-900">{overallPercentage.toFixed(0)}%</p>
+          </div>
+        </div>
+
+        {totalBudget > 0 && (
+          <div className="relative">
+            <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all ${getProgressColor(overallPercentage)}`}
+                style={{ width: `${Math.min(overallPercentage, 100)}%` }}
+              ></div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Categories List */}
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="grid grid-cols-1 divide-y divide-gray-200">
+          {categories.map((category) => {
+            const budgetAmount = parseFloat(budgetInputs[category.id]) || 0;
+            const spent = calculateSpent(category.id);
+            const remaining = budgetAmount - spent;
+            const percentage = budgetAmount > 0 ? (spent / budgetAmount) * 100 : 0;
+            const status = getStatusIcon(percentage);
+            const StatusIcon = status.Icon;
+
+            return (
+              <div
+                key={category.id}
+                className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
+                onClick={(e) => {
+                  // Don't navigate if clicking on input
+                  if (e.target.tagName !== 'INPUT') {
+                    handleCategoryClick(category.id);
+                  }
+                }}
+              >
+                <div className="flex items-center gap-4">
+                  {/* Category Name */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: category.color }}
+                      ></div>
+                      <h3 className="text-sm font-semibold text-gray-900 truncate">
+                        {category.name}
+                      </h3>
+                    </div>
+                    
+                    {/* Stats on mobile */}
+                    <div className="flex items-center gap-3 text-xs text-gray-500 sm:hidden">
+                      <span>৳{spent.toLocaleString()} spent</span>
+                      {budgetAmount > 0 && (
+                        <span className={percentage >= 80 ? 'text-yellow-600 font-medium' : ''}>
+                          {percentage.toFixed(0)}%
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Budget Input */}
+                  <div className="w-32 sm:w-40">
+                    <div className="relative">
+                      <span className="absolute left-2 top-2 text-xs text-gray-500">৳</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={budgetInputs[category.id] || ''}
+                        onChange={(e) => handleInputChange(category.id, e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full pl-6 pr-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Progress - Hidden on mobile */}
+                  {budgetAmount > 0 && (
+                    <div className="hidden sm:block w-32 lg:w-48">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs text-gray-600">
+                          ৳{spent.toLocaleString()}
+                        </span>
+                        <StatusIcon className={`w-3 h-3 ${status.color}`} />
+                      </div>
+                      <div className="relative">
+                        <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full transition-all ${getProgressColor(percentage)}`}
+                            style={{ width: `${Math.min(percentage, 100)}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Remaining */}
+                  <div className="hidden sm:block w-24 text-right">
+                    {budgetAmount > 0 ? (
+                      <p className={`text-sm font-semibold ${remaining >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        ৳{remaining.toLocaleString()}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-gray-400">No budget</p>
+                    )}
+                  </div>
+
+                  {/* Arrow */}
+                  <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Save Button at Bottom */}
+      {hasUnsavedChanges && (
+        <div className="fixed bottom-20 sm:bottom-6 left-0 right-0 px-4 sm:px-0 sm:max-w-6xl sm:mx-auto z-10">
+          <button
+            onClick={handleSaveAll}
+            disabled={saving}
+            className="w-full sm:w-auto sm:float-right px-6 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 shadow-2xl flex items-center justify-center gap-2"
+          >
+            {saving ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                Saving Budgets...
+              </>
+            ) : (
+              <>
+                <Save className="w-5 h-5" />
+                Save All Budgets
+              </>
+            )}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

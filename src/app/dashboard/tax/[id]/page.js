@@ -183,14 +183,60 @@ export default function TaxYearDetailsPage() {
 
     console.log('=== ANALYZING TRANSACTIONS ===');
     console.log('Fiscal Year:', taxYear.fiscalYearStart, 'to', taxYear.fiscalYearEnd);
-    console.log('Total transactions:', transactions.length);
+    console.log('Total transactions loaded:', transactions.length);
     console.log('Total mappings:', mappings.length);
 
+    // First, filter for REAL taxable transactions only
+    const taxableTransactions = transactions.filter(t => {
+      // 1. EXCLUDE transfers (not real income/expense)
+      if (t.isTransfer || t.collectionType === 'transfers') {
+        console.log('❌ EXCLUDED (Transfer):', t.description || 'Transfer');
+        return false;
+      }
+
+      // 2. EXCLUDE goal transactions (internal money movement)
+      if (t.source === 'goal_deposit' || 
+          t.source === 'goal_withdrawal' || 
+          t.goalId) {
+        console.log('❌ EXCLUDED (Goal transaction):', t.description || 'Goal movement');
+        return false;
+      }
+
+      // 3. EXCLUDE lending transactions (asset, not expense/income)
+      if (t.source === 'lending_given' || 
+          t.source === 'lending_payment_received' || 
+          t.lendingId) {
+        console.log('❌ EXCLUDED (Lending transaction):', t.description || 'Lending');
+        return false;
+      }
+
+      // 4. EXCLUDE loan taken (liability, not taxable income)
+      if (t.source === 'loan_taken' || t.loanId) {
+        // But allow loan interest payments through
+        if (t.source === 'loan_payment' && t.isInterest) {
+          console.log('✓ INCLUDED (Loan interest payment):', t.description);
+          return true;
+        }
+        console.log('❌ EXCLUDED (Loan transaction):', t.description || 'Loan');
+        return false;
+      }
+
+      // 5. EXCLUDE loan principal repayment (not expense, just reducing liability)
+      if (t.source === 'loan_payment' && !t.isInterest) {
+        console.log('❌ EXCLUDED (Loan principal):', t.description || 'Principal payment');
+        return false;
+      }
+
+      return true;
+    });
+
+    console.log('After excluding transfers/goals/lending/loans:', taxableTransactions.length);
+
     // Filter transactions within fiscal year
-    const fiscalTransactions = transactions.filter(t => {
+    const fiscalTransactions = taxableTransactions.filter(t => {
       const inRange = t.date >= taxYear.fiscalYearStart && t.date <= taxYear.fiscalYearEnd;
       if (!inRange) {
-        console.log('Transaction EXCLUDED (out of range):', t.date, t.description || t.categoryId);
+        console.log('❌ EXCLUDED (Out of fiscal year):', t.date, t.description || t.categoryId);
       }
       return inRange;
     });
@@ -220,10 +266,10 @@ export default function TaxYearDetailsPage() {
       const amount = transaction.amount;
       const section = getSectionForTaxCategory(taxCategoryId);
 
-      if (transaction.type === 'income') {
+      if (transaction.type === 'income' || transaction.type === 'Income') {
         incomeByTaxCategory[taxCategoryId] = (incomeByTaxCategory[taxCategoryId] || 0) + amount;
         totalIncome += amount;
-      } else if (transaction.type === 'expense') {
+      } else if (transaction.type === 'expense' || transaction.type === 'Expense') {
         expensesByTaxCategory[taxCategoryId] = (expensesByTaxCategory[taxCategoryId] || 0) + amount;
         totalExpenses += amount;
 

@@ -10,7 +10,7 @@ import {
   LogOut, Menu, X, ArrowRightLeft, Settings, 
   Users, Package, DollarSign, Globe,
   HandCoins, MessageCircleQuestion, Goal, Blend, MessageSquareMore,
-  Home, Repeat ,FileText, ShoppingBag
+  Home, Repeat ,FileText, ShoppingBag, PiggyBank
 } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
 import { checkIsAdmin } from '@/lib/adminUtils';
@@ -51,6 +51,7 @@ export default function DashboardNav() {
     ],
     features: [
       { name: 'Shopping List', href: '/dashboard/shopping', icon: ShoppingBag },
+      { name: 'Budgets', href: '/dashboard/budgets', icon: PiggyBank, description: 'Monthly budgets'},
       { name: 'Loans', href: '/dashboard/loans', icon: HandCoins },
       { name: 'Lend', href: '/dashboard/lendings', icon: Blend },
       { name: 'Goals', href: '/dashboard/goals', icon: Goal },
