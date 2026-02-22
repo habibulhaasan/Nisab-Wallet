@@ -393,10 +393,11 @@ export default function BudgetsPage() {
                   }
                 }}
               >
-                <div className="flex items-center gap-4">
+                {/* Desktop Layout */}
+                <div className="hidden sm:flex items-center gap-4">
                   {/* Category Name */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2">
                       <div
                         className="w-3 h-3 rounded-full flex-shrink-0"
                         style={{ backgroundColor: category.color }}
@@ -404,16 +405,6 @@ export default function BudgetsPage() {
                       <h3 className="text-sm font-semibold text-gray-900 truncate">
                         {category.name}
                       </h3>
-                    </div>
-                    
-                    {/* Stats on mobile */}
-                    <div className="flex items-center gap-3 text-xs text-gray-500 sm:hidden">
-                      <span>৳{spent.toLocaleString()} spent</span>
-                      {budgetAmount > 0 && (
-                        <span className={percentage >= 80 ? 'text-yellow-600 font-medium' : ''}>
-                          {percentage.toFixed(0)}%
-                        </span>
-                      )}
                     </div>
                   </div>
 
@@ -433,9 +424,9 @@ export default function BudgetsPage() {
                     </div>
                   </div>
 
-                  {/* Progress - Hidden on mobile */}
+                  {/* Progress */}
                   {budgetAmount > 0 && (
-                    <div className="hidden sm:block w-32 lg:w-48">
+                    <div className="w-32 lg:w-48">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-xs text-gray-600">
                           ৳{spent.toLocaleString()}
@@ -454,31 +445,8 @@ export default function BudgetsPage() {
                     </div>
                   )}
 
-                  {/* Progress Bar on Mobile */}
-                  {budgetAmount > 0 && (
-                    <div className="sm:hidden w-full mt-2">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-gray-600">
-                          ৳{spent.toLocaleString()} / ৳{budgetAmount.toLocaleString()}
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <StatusIcon className={`w-3 h-3 ${status.color}`} />
-                          <span className="text-xs text-gray-600">{percentage.toFixed(0)}%</span>
-                        </div>
-                      </div>
-                      <div className="relative">
-                        <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full transition-all ${getProgressColor(percentage)}`}
-                            style={{ width: `${Math.min(percentage, 100)}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   {/* Remaining */}
-                  <div className="hidden sm:block w-24 text-right">
+                  <div className="w-24 text-right">
                     {budgetAmount > 0 ? (
                       <p className={`text-sm font-semibold ${remaining >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                         ৳{remaining.toLocaleString()}
@@ -490,6 +458,77 @@ export default function BudgetsPage() {
 
                   {/* Arrow */}
                   <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                </div>
+
+                {/* Mobile Layout */}
+                <div className="sm:hidden">
+                  {/* Category Name and Input */}
+                  <div className="flex items-center gap-3 mb-3">
+                    {/* Category */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-3 h-3 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: category.color }}
+                        ></div>
+                        <h3 className="text-sm font-semibold text-gray-900 truncate">
+                          {category.name}
+                        </h3>
+                      </div>
+                    </div>
+
+                    {/* Budget Input */}
+                    <div className="w-28">
+                      <div className="relative">
+                        <span className="absolute left-2 top-2 text-xs text-gray-500">৳</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={budgetInputs[category.id] || ''}
+                          onChange={(e) => handleInputChange(category.id, e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full pl-6 pr-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Arrow */}
+                    <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  </div>
+
+                  {/* Progress Bar (Below category name) */}
+                  {budgetAmount > 0 && (
+                    <div className="pl-5">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs text-gray-600">
+                          ৳{spent.toLocaleString()} / ৳{budgetAmount.toLocaleString()}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <StatusIcon className={`w-3 h-3 ${status.color}`} />
+                          <span className="text-xs font-medium text-gray-600">{percentage.toFixed(0)}%</span>
+                        </div>
+                      </div>
+                      <div className="relative">
+                        <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full transition-all ${getProgressColor(percentage)}`}
+                            style={{ width: `${Math.min(percentage, 100)}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                      <p className={`text-xs mt-1 ${remaining >= 0 ? 'text-green-600' : 'text-red-600'} font-medium`}>
+                        Remaining: ৳{remaining.toLocaleString()}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* No Budget Message */}
+                  {budgetAmount === 0 && (
+                    <div className="pl-5">
+                      <p className="text-xs text-gray-400 italic">No budget set</p>
+                    </div>
+                  )}
                 </div>
               </div>
             );
