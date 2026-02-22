@@ -17,7 +17,6 @@ import {
   TrendingDown,
   AlertCircle,
   CheckCircle,
-  Calendar,
   Save,
   ChevronRight,
   Info
@@ -35,8 +34,10 @@ export default function BudgetsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  // Always use current month
+  const currentDate = new Date();
+  const selectedYear = currentDate.getFullYear();
+  const selectedMonth = currentDate.getMonth() + 1;
   
   // Budget inputs for each category
   const [budgetInputs, setBudgetInputs] = useState({});
@@ -46,7 +47,7 @@ export default function BudgetsPage() {
     if (user) {
       loadData();
     }
-  }, [user, selectedYear, selectedMonth]);
+  }, [user]);
 
   const loadData = async () => {
     setLoading(true);
@@ -302,7 +303,7 @@ export default function BudgetsPage() {
               Budget Management
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Set budgets for all categories at once
+              {getMonthName(selectedMonth)} {selectedYear} - Set your monthly budgets
             </p>
           </div>
           
@@ -326,34 +327,6 @@ export default function BudgetsPage() {
             </button>
           )}
         </div>
-
-        {/* Month Selector */}
-        <div className="flex items-center gap-3">
-          <Calendar className="w-5 h-5 text-gray-400" />
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-          >
-            {Array.from({ length: 12 }, (_, i) => i + 1).map(month => (
-              <option key={month} value={month}>
-                {getMonthName(month)}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-          >
-            {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(year => (
-              <option key={year} value={year}>
-                {year}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
       {/* Info Banner */}
@@ -363,11 +336,11 @@ export default function BudgetsPage() {
             <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-sm font-medium text-blue-900 mb-1">
-                Budgets auto-filled from previous month
+                Budgets auto-filled from last month
               </p>
               <p className="text-xs text-blue-700">
-                We've pre-filled budgets from {getMonthName(selectedMonth === 1 ? 12 : selectedMonth - 1)}. 
-                Adjust amounts as needed and click "Save All Budgets". Your budgets will automatically carry forward to future months.
+                Your previous budgets have been carried forward. Adjust any amounts and save. 
+                Changes will automatically apply to future months.
               </p>
             </div>
           </div>
@@ -381,11 +354,11 @@ export default function BudgetsPage() {
             <Info className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-sm font-medium text-green-900 mb-1">
-                Auto Carry-Forward Enabled
+                Auto Carry-Forward Active
               </p>
               <p className="text-xs text-green-700">
-                When you save budgets, they automatically carry forward to {getMonthName(selectedMonth === 12 ? 1 : selectedMonth + 1)}. 
-                Update any amount here and it will update future months too!
+                Your budgets automatically continue each month. Update any amount here and it will apply to all future months.
+                Click any category to see monthly history.
               </p>
             </div>
           </div>
