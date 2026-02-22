@@ -155,6 +155,11 @@ export default function BudgetsPage() {
 
     try {
       const updates = [];
+      const nextMonthBudgets = [];
+
+      // Calculate next month
+      const nextMonth = selectedMonth === 12 ? 1 : selectedMonth + 1;
+      const nextYear = selectedMonth === 12 ? selectedYear + 1 : selectedYear;
 
       for (const category of categories) {
         const inputValue = budgetInputs[category.id];
@@ -165,7 +170,7 @@ export default function BudgetsPage() {
           continue;
         }
 
-        // Check if budget already exists for this category
+        // Check if budget already exists for this category (current month)
         const existingBudget = budgets.find(b => b.categoryId === category.id);
 
         const budgetData = {
@@ -185,6 +190,15 @@ export default function BudgetsPage() {
           // Create new
           updates.push(addBudget(user.uid, budgetData));
         }
+
+        // Prepare next month's budget (carry forward)
+        nextMonthBudgets.push({
+          categoryId: category.id,
+          categoryName: category.name,
+          amount: amount,
+          year: nextYear,
+          month: nextMonth
+        });
       }
 
       if (updates.length === 0) {
@@ -193,9 +207,37 @@ export default function BudgetsPage() {
         return;
       }
 
+      // Save current month budgets
       await Promise.all(updates);
+
+      // Now carry forward to next month
+      const nextMonthResult = await getBudgetsForMonth(user.uid, nextYear, nextMonth);
+      const existingNextMonthBudgets = nextMonthResult.success ? nextMonthResult.budgets : [];
+
+      const carryForwardUpdates = [];
+      for (const nextBudget of nextMonthBudgets) {
+        // Check if next month already has a budget for this category
+        const existingNextBudget = existingNextMonthBudgets.find(b => b.categoryId === nextBudget.categoryId);
+
+        if (existingNextBudget) {
+          // Update next month's budget with new amount
+          carryForwardUpdates.push(
+            updateBudget(user.uid, existingNextBudget.id, nextBudget)
+          );
+        } else {
+          // Create new budget for next month
+          carryForwardUpdates.push(
+            addBudget(user.uid, nextBudget)
+          );
+        }
+      }
+
+      // Execute carry forward
+      if (carryForwardUpdates.length > 0) {
+        await Promise.all(carryForwardUpdates);
+      }
       
-      showToast(`${updates.length} budget(s) saved successfully`, 'success');
+      showToast(`${updates.length} budget(s) saved and carried forward to next month`, 'success');
       setHasUnsavedChanges(false);
       await loadBudgets();
     } catch (error) {
@@ -325,7 +367,25 @@ export default function BudgetsPage() {
               </p>
               <p className="text-xs text-blue-700">
                 We've pre-filled budgets from {getMonthName(selectedMonth === 1 ? 12 : selectedMonth - 1)}. 
-                Adjust amounts as needed and click "Save All Budgets".
+                Adjust amounts as needed and click "Save All Budgets". Your budgets will automatically carry forward to future months.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Carry Forward Info */}
+      {budgets.length > 0 && (
+        <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex gap-3">
+            <Info className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-green-900 mb-1">
+                Auto Carry-Forward Enabled
+              </p>
+              <p className="text-xs text-green-700">
+                When you save budgets, they automatically carry forward to {getMonthName(selectedMonth === 12 ? 1 : selectedMonth + 1)}. 
+                Update any amount here and it will update future months too!
               </p>
             </div>
           </div>
