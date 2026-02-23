@@ -28,6 +28,7 @@ import {
   BarChart3
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
+import InvestmentModal from '@/components/InvestmentModal';
 
 export default function InvestmentsPage() {
   const { user } = useAuth();
@@ -41,6 +42,9 @@ export default function InvestmentsPage() {
   const [filterStatus, setFilterStatus] = useState('active');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('date'); // date, return, value
+
+  const [showModal, setShowModal] = useState(false);
+  const [editingInvestment, setEditingInvestment] = useState(null);
 
   useEffect(() => {
     if (user) {
@@ -104,11 +108,17 @@ export default function InvestmentsPage() {
   };
 
   const handleInvestmentClick = (investment) => {
-    router.push(`/dashboard/investments/${investment.id}`);
+    setEditingInvestment(investment);
+    setShowModal(true);
   };
 
   const handleAddInvestment = () => {
-    router.push('/dashboard/investments/add');
+    setEditingInvestment(null);
+    setShowModal(true);
+  };
+
+  const handleModalSuccess = () => {
+    loadInvestments();
   };
 
   // Calculate portfolio summary
@@ -428,6 +438,18 @@ export default function InvestmentsPage() {
           </div>
         </>
       )}
+
+      {/* Investment Modal */}
+      <InvestmentModal
+        isOpen={showModal}
+        onClose={() => {
+          setShowModal(false);
+          setEditingInvestment(null);
+        }}
+        investment={editingInvestment}
+        userId={user?.uid}
+        onSuccess={handleModalSuccess}
+      />
     </div>
   );
 }
