@@ -27,6 +27,8 @@ export default function BudgetCategoryDetailPage() {
   const [category, setCategory] = useState(null);
   const [monthlyData, setMonthlyData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const monthsPerPage = 12;
 
   useEffect(() => {
     if (user && categoryId) {
@@ -82,11 +84,11 @@ export default function BudgetCategoryDetailPage() {
         !t.loanId
       );
 
-      // Get last 12 months
+      // Get last 24 months
       const months = [];
       const today = new Date();
       
-      for (let i = 11; i >= 0; i--) {
+      for (let i = 0; i < 24; i++) {
         const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
         const year = date.getFullYear();
         const month = date.getMonth() + 1;
@@ -153,6 +155,17 @@ export default function BudgetCategoryDetailPage() {
     ? monthsWithBudget.reduce((min, m) => m.spent < min.spent ? m : min, monthsWithBudget[0])
     : null;
 
+  // Pagination
+  const totalPages = Math.ceil(monthlyData.length / monthsPerPage);
+  const startIndex = (currentPage - 1) * monthsPerPage;
+  const endIndex = startIndex + monthsPerPage;
+  const currentMonths = monthlyData.slice(startIndex, endIndex);
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -191,7 +204,7 @@ export default function BudgetCategoryDetailPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{category.name}</h1>
-              <p className="text-sm text-gray-500">Budget history (Last 12 months)</p>
+              <p className="text-sm text-gray-500">Budget history (Last 24 months)</p>
             </div>
           </div>
 
@@ -249,17 +262,22 @@ export default function BudgetCategoryDetailPage() {
       {/* Monthly History */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <Calendar className="w-5 h-5" />
-            Monthly History
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <Calendar className="w-5 h-5" />
+              Monthly History
+            </h2>
+            <p className="text-sm text-gray-500">
+              Showing {startIndex + 1}-{Math.min(endIndex, monthlyData.length)} of {monthlyData.length}
+            </p>
+          </div>
         </div>
 
         <div className="divide-y divide-gray-200">
-          {monthlyData.map((monthData, index) => {
+          {currentMonths.map((monthData, index) => {
             const status = getStatusIcon(monthData.percentage);
             const StatusIcon = status.Icon;
-            const isCurrentMonth = index === monthlyData.length - 1;
+            const isCurrentMonth = startIndex + index === 0;
 
             return (
               <div
@@ -335,6 +353,45 @@ export default function BudgetCategoryDetailPage() {
             );
           })}
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="p-4 border-t border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+
+              <div className="flex items-center gap-2">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    onClick={() => handlePageChange(page)}
+                    className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                      currentPage === page
+                        ? 'bg-gray-900 text-white'
+                        : 'border border-gray-300 hover:bg-white'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Empty State */}

@@ -17,7 +17,6 @@ import {
   TrendingDown,
   AlertCircle,
   CheckCircle,
-  Calendar,
   Save,
   ChevronRight,
   Info
@@ -35,8 +34,10 @@ export default function BudgetsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  // Always use current month
+  const currentDate = new Date();
+  const selectedYear = currentDate.getFullYear();
+  const selectedMonth = currentDate.getMonth() + 1;
   
   // Budget inputs for each category
   const [budgetInputs, setBudgetInputs] = useState({});
@@ -46,7 +47,7 @@ export default function BudgetsPage() {
     if (user) {
       loadData();
     }
-  }, [user, selectedYear, selectedMonth]);
+  }, [user]);
 
   const loadData = async () => {
     setLoading(true);
@@ -155,6 +156,11 @@ export default function BudgetsPage() {
 
     try {
       const updates = [];
+      const nextMonthBudgets = [];
+
+      // Calculate next month
+      const nextMonth = selectedMonth === 12 ? 1 : selectedMonth + 1;
+      const nextYear = selectedMonth === 12 ? selectedYear + 1 : selectedYear;
 
       for (const category of categories) {
         const inputValue = budgetInputs[category.id];
@@ -165,7 +171,7 @@ export default function BudgetsPage() {
           continue;
         }
 
-        // Check if budget already exists for this category
+        // Check if budget already exists for this category (current month)
         const existingBudget = budgets.find(b => b.categoryId === category.id);
 
         const budgetData = {
@@ -185,6 +191,15 @@ export default function BudgetsPage() {
           // Create new
           updates.push(addBudget(user.uid, budgetData));
         }
+
+        // Prepare next month's budget (carry forward)
+        nextMonthBudgets.push({
+          categoryId: category.id,
+          categoryName: category.name,
+          amount: amount,
+          year: nextYear,
+          month: nextMonth
+        });
       }
 
       if (updates.length === 0) {
@@ -193,9 +208,37 @@ export default function BudgetsPage() {
         return;
       }
 
+      // Save current month budgets
       await Promise.all(updates);
+
+      // Now carry forward to next month
+      const nextMonthResult = await getBudgetsForMonth(user.uid, nextYear, nextMonth);
+      const existingNextMonthBudgets = nextMonthResult.success ? nextMonthResult.budgets : [];
+
+      const carryForwardUpdates = [];
+      for (const nextBudget of nextMonthBudgets) {
+        // Check if next month already has a budget for this category
+        const existingNextBudget = existingNextMonthBudgets.find(b => b.categoryId === nextBudget.categoryId);
+
+        if (existingNextBudget) {
+          // Update next month's budget with new amount
+          carryForwardUpdates.push(
+            updateBudget(user.uid, existingNextBudget.id, nextBudget)
+          );
+        } else {
+          // Create new budget for next month
+          carryForwardUpdates.push(
+            addBudget(user.uid, nextBudget)
+          );
+        }
+      }
+
+      // Execute carry forward
+      if (carryForwardUpdates.length > 0) {
+        await Promise.all(carryForwardUpdates);
+      }
       
-      showToast(`${updates.length} budget(s) saved successfully`, 'success');
+      showToast(`${updates.length} budget(s) saved and carried forward to next month`, 'success');
       setHasUnsavedChanges(false);
       await loadBudgets();
     } catch (error) {
@@ -260,7 +303,7 @@ export default function BudgetsPage() {
               Budget Management
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Set budgets for all categories at once
+              {getMonthName(selectedMonth)} {selectedYear} - Set your monthly budgets
             </p>
           </div>
           
@@ -284,34 +327,6 @@ export default function BudgetsPage() {
             </button>
           )}
         </div>
-
-        {/* Month Selector */}
-        <div className="flex items-center gap-3">
-          <Calendar className="w-5 h-5 text-gray-400" />
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-          >
-            {Array.from({ length: 12 }, (_, i) => i + 1).map(month => (
-              <option key={month} value={month}>
-                {getMonthName(month)}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-          >
-            {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(year => (
-              <option key={year} value={year}>
-                {year}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
       {/* Info Banner */}
@@ -321,11 +336,29 @@ export default function BudgetsPage() {
             <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-sm font-medium text-blue-900 mb-1">
-                Budgets auto-filled from previous month
+                Budgets auto-filled from last month
               </p>
               <p className="text-xs text-blue-700">
-                We've pre-filled budgets from {getMonthName(selectedMonth === 1 ? 12 : selectedMonth - 1)}. 
-                Adjust amounts as needed and click "Save All Budgets".
+                Your previous budgets have been carried forward. Adjust any amounts and save. 
+                Changes will automatically apply to future months.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Carry Forward Info */}
+      {budgets.length > 0 && (
+        <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex gap-3">
+            <Info className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-green-900 mb-1">
+                Auto Carry-Forward Active
+              </p>
+              <p className="text-xs text-green-700">
+                Your budgets automatically continue each month. Update any amount here and it will apply to all future months.
+                Click any category to see monthly history.
               </p>
             </div>
           </div>
@@ -393,10 +426,11 @@ export default function BudgetsPage() {
                   }
                 }}
               >
-                <div className="flex items-center gap-4">
+                {/* Desktop Layout */}
+                <div className="hidden sm:flex items-center gap-4">
                   {/* Category Name */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2">
                       <div
                         className="w-3 h-3 rounded-full flex-shrink-0"
                         style={{ backgroundColor: category.color }}
@@ -404,16 +438,6 @@ export default function BudgetsPage() {
                       <h3 className="text-sm font-semibold text-gray-900 truncate">
                         {category.name}
                       </h3>
-                    </div>
-                    
-                    {/* Stats on mobile */}
-                    <div className="flex items-center gap-3 text-xs text-gray-500 sm:hidden">
-                      <span>৳{spent.toLocaleString()} spent</span>
-                      {budgetAmount > 0 && (
-                        <span className={percentage >= 80 ? 'text-yellow-600 font-medium' : ''}>
-                          {percentage.toFixed(0)}%
-                        </span>
-                      )}
                     </div>
                   </div>
 
@@ -433,28 +457,29 @@ export default function BudgetsPage() {
                     </div>
                   </div>
 
-                  {/* Progress - Hidden on mobile */}
+                  {/* Progress */}
                   {budgetAmount > 0 && (
-                    <div className="hidden sm:block w-32 lg:w-48">
+                    <div className="w-32 lg:w-48">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-xs text-gray-600">
                           ৳{spent.toLocaleString()}
                         </span>
                         <StatusIcon className={`w-3 h-3 ${status.color}`} />
                       </div>
-                      <div className="relative">
-                        <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="relative mb-1">
+                        <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
                           <div
                             className={`h-full transition-all ${getProgressColor(percentage)}`}
                             style={{ width: `${Math.min(percentage, 100)}%` }}
                           ></div>
                         </div>
                       </div>
+                      <p className="text-xs text-gray-500">{percentage.toFixed(0)}% used</p>
                     </div>
                   )}
 
                   {/* Remaining */}
-                  <div className="hidden sm:block w-24 text-right">
+                  <div className="w-24 text-right">
                     {budgetAmount > 0 ? (
                       <p className={`text-sm font-semibold ${remaining >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                         ৳{remaining.toLocaleString()}
@@ -466,6 +491,77 @@ export default function BudgetsPage() {
 
                   {/* Arrow */}
                   <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                </div>
+
+                {/* Mobile Layout */}
+                <div className="sm:hidden">
+                  {/* Category Name and Input */}
+                  <div className="flex items-center gap-3 mb-3">
+                    {/* Category */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-3 h-3 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: category.color }}
+                        ></div>
+                        <h3 className="text-sm font-semibold text-gray-900 truncate">
+                          {category.name}
+                        </h3>
+                      </div>
+                    </div>
+
+                    {/* Budget Input */}
+                    <div className="w-28">
+                      <div className="relative">
+                        <span className="absolute left-2 top-2 text-xs text-gray-500">৳</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={budgetInputs[category.id] || ''}
+                          onChange={(e) => handleInputChange(category.id, e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full pl-6 pr-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Arrow */}
+                    <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  </div>
+
+                  {/* Progress Bar (Below category name) */}
+                  {budgetAmount > 0 && (
+                    <div className="pl-5">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs text-gray-600">
+                          ৳{spent.toLocaleString()} / ৳{budgetAmount.toLocaleString()}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <StatusIcon className={`w-3 h-3 ${status.color}`} />
+                          <span className="text-xs font-medium text-gray-600">{percentage.toFixed(0)}%</span>
+                        </div>
+                      </div>
+                      <div className="relative">
+                        <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full transition-all ${getProgressColor(percentage)}`}
+                            style={{ width: `${Math.min(percentage, 100)}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                      <p className={`text-xs mt-1 ${remaining >= 0 ? 'text-green-600' : 'text-red-600'} font-medium`}>
+                        Remaining: ৳{remaining.toLocaleString()}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* No Budget Message */}
+                  {budgetAmount === 0 && (
+                    <div className="pl-5">
+                      <p className="text-xs text-gray-400 italic">No budget set</p>
+                    </div>
+                  )}
                 </div>
               </div>
             );
