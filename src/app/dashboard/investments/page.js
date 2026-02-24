@@ -108,8 +108,7 @@ export default function InvestmentsPage() {
   };
 
   const handleInvestmentClick = (investment) => {
-    setEditingInvestment(investment);
-    setShowModal(true);
+    router.push(`/dashboard/investments/${investment.id}`);
   };
 
   const handleAddInvestment = () => {
