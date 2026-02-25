@@ -35,7 +35,7 @@ import {
   MapPin,
   FileText,
   Send,
-  Check,
+  BanknoteArrowDown,
   Eye,
   TrendingUp,
   Shield,
@@ -192,7 +192,6 @@ export default function LendingPage() {
         reminderMethods: ['whatsapp', 'sms'],
       };
 
-      // Add installment details if applicable
       if (lendingFormData.repaymentType === 'installments') {
         const installmentAmount = parseFloat(lendingFormData.installmentAmount);
         const totalInstallments = parseInt(lendingFormData.totalInstallments);
@@ -208,7 +207,6 @@ export default function LendingPage() {
         lendingData.nextPaymentDue = lendingFormData.dueDate;
       }
 
-      // Add witnesses
       if (lendingFormData.witness1Name) {
         lendingData.witnesses = [
           {
@@ -265,7 +263,6 @@ export default function LendingPage() {
     setSubmitting(true);
 
     try {
-      // Record payment
       await addDoc(collection(db, 'users', user.uid, 'lendingPayments'), {
         lendingId: selectedLending.id,
         amount,
@@ -278,7 +275,6 @@ export default function LendingPage() {
         createdAt: Timestamp.now(),
       });
 
-      // Update lending
       const newTotalRepaid = (selectedLending.totalRepaid || 0) + amount;
       const newRemainingBalance = selectedLending.principalAmount - newTotalRepaid;
       const newStatus = newRemainingBalance <= 0 ? 'completed' : 'active';
@@ -292,7 +288,6 @@ export default function LendingPage() {
         updatedAt: Timestamp.now(),
       };
 
-      // Calculate next payment due if installments
       if (selectedLending.repaymentType === 'installments' && newStatus === 'active') {
         updateData.nextPaymentDue = calculateNextPaymentDate(
           paymentFormData.paymentDate,
@@ -340,8 +335,6 @@ export default function LendingPage() {
     }
 
     try {
-      // Here you would integrate with WhatsApp/SMS API
-      // For now, we'll just log the reminder
       await addDoc(collection(db, 'users', user.uid, 'lendingReminders'), {
         lendingId: selectedLending.id,
         borrowerName: selectedLending.borrowerName,
@@ -350,7 +343,6 @@ export default function LendingPage() {
         sentAt: Timestamp.now(),
       });
 
-      // Update last reminder sent
       await updateDoc(doc(db, 'users', user.uid, 'lendings', selectedLending.id), {
         lastReminderSent: new Date().toISOString().split('T')[0],
       });
@@ -482,81 +474,81 @@ export default function LendingPage() {
   const overdueLendings = lendings.filter((l) => calculateLendingStatus(l).isOverdue).length;
 
   return (
-    <div className="max-w-7xl mx-auto space-y-5 pb-6">
+    <div className="max-w-7xl mx-auto space-y-4 pb-6 px-2 sm:px-0">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Lending Management</h1>
-          <p className="text-sm text-gray-500 mt-1">Track money lent to others (Qard Hasan & Conventional)</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Lending Management</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Track money lent to others (Qard Hasan & Conventional)</p>
         </div>
         <button
           onClick={() => openLendingModal()}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 text-sm font-medium"
+          className="flex items-center gap-1.5 px-3 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 text-xs sm:text-sm font-medium whitespace-nowrap flex-shrink-0"
         >
-          <Plus size={16} />
-          New Lending
+          <Plus size={15} />
+          <span className="hidden xs:inline">New </span>Lending
         </button>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+      {/* Summary Cards — 3 cols on mobile, 6 on md */}
+      <div className="grid grid-cols-3 md:grid-cols-6 gap-2 sm:gap-4">
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-medium text-gray-500 uppercase">Total Lent</p>
-            <TrendingUp size={14} className="text-blue-600" />
+            <p className="text-[10px] sm:text-xs font-medium text-gray-500 uppercase leading-tight">Total Lent</p>
+            <TrendingUp size={12} className="text-blue-600 flex-shrink-0" />
           </div>
-          <p className="text-xl font-bold text-blue-600">৳{totalLent.toLocaleString()}</p>
+          <p className="text-sm sm:text-xl font-bold text-blue-600 truncate">৳{totalLent.toLocaleString()}</p>
         </div>
 
-        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-medium text-gray-500 uppercase">Repaid</p>
-            <CheckCircle2 size={14} className="text-green-600" />
+            <p className="text-[10px] sm:text-xs font-medium text-gray-500 uppercase leading-tight">Repaid</p>
+            <CheckCircle2 size={12} className="text-green-600 flex-shrink-0" />
           </div>
-          <p className="text-xl font-bold text-green-600">৳{totalRepaid.toLocaleString()}</p>
+          <p className="text-sm sm:text-xl font-bold text-green-600 truncate">৳{totalRepaid.toLocaleString()}</p>
         </div>
 
-        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-medium text-gray-500 uppercase">Outstanding</p>
-            <DollarSign size={14} className="text-red-600" />
+            <p className="text-[10px] sm:text-xs font-medium text-gray-500 uppercase leading-tight">Outstanding</p>
+            <DollarSign size={12} className="text-red-600 flex-shrink-0" />
           </div>
-          <p className="text-xl font-bold text-red-600">৳{totalOutstanding.toLocaleString()}</p>
+          <p className="text-sm sm:text-xl font-bold text-red-600 truncate">৳{totalOutstanding.toLocaleString()}</p>
         </div>
 
-        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-medium text-gray-500 uppercase">Active</p>
-            <Clock size={14} className="text-orange-600" />
+            <p className="text-[10px] sm:text-xs font-medium text-gray-500 uppercase leading-tight">Active</p>
+            <Clock size={12} className="text-orange-600 flex-shrink-0" />
           </div>
-          <p className="text-xl font-bold text-orange-600">{activeLendings}</p>
+          <p className="text-sm sm:text-xl font-bold text-orange-600">{activeLendings}</p>
         </div>
 
-        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-medium text-gray-500 uppercase">Completed</p>
-            <CheckCircle2 size={14} className="text-emerald-600" />
+            <p className="text-[10px] sm:text-xs font-medium text-gray-500 uppercase leading-tight">Completed</p>
+            <CheckCircle2 size={12} className="text-emerald-600 flex-shrink-0" />
           </div>
-          <p className="text-xl font-bold text-emerald-600">{completedLendings}</p>
+          <p className="text-sm sm:text-xl font-bold text-emerald-600">{completedLendings}</p>
         </div>
 
-        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-medium text-gray-500 uppercase">Overdue</p>
-            <AlertTriangle size={14} className="text-red-600" />
+            <p className="text-[10px] sm:text-xs font-medium text-gray-500 uppercase leading-tight">Overdue</p>
+            <AlertTriangle size={12} className="text-red-600 flex-shrink-0" />
           </div>
-          <p className="text-xl font-bold text-red-600">{overdueLendings}</p>
+          <p className="text-sm sm:text-xl font-bold text-red-600">{overdueLendings}</p>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm p-4 border border-gray-200">
-        <div className="flex gap-2">
+      <div className="bg-white rounded-lg shadow-sm p-3 sm:p-4 border border-gray-200">
+        <div className="flex gap-1.5 sm:gap-2 flex-wrap">
           {['all', 'active', 'completed', 'overdue'].map((status) => (
             <button
               key={status}
               onClick={() => setFilterStatus(status)}
-              className={`px-4 py-2 text-xs font-medium rounded-lg transition ${
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition ${
                 filterStatus === status
                   ? 'bg-gray-900 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -593,7 +585,7 @@ export default function LendingPage() {
             return (
               <div
                 key={lending.id}
-                className={`bg-white rounded-lg shadow-sm p-5 border-l-4 hover:shadow-md transition-all ${
+                className={`bg-white rounded-lg shadow-sm p-4 sm:p-5 border-l-4 hover:shadow-md transition-all ${
                   lendingStatus.isOverdue
                     ? 'border-red-500 bg-red-50'
                     : lending.status === 'completed'
@@ -601,97 +593,101 @@ export default function LendingPage() {
                     : 'border-blue-500'
                 }`}
               >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-start gap-3 flex-1">
-                    <div
-                      className={`w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-sm ${
-                        lending.lendingType === 'qard-hasan' ? 'bg-emerald-600' : 'bg-blue-600'
-                      }`}
-                    >
-                      <Shield size={24} />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="text-lg font-bold text-gray-900">{lending.borrowerName}</h3>
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                            lending.lendingType === 'qard-hasan'
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : 'bg-blue-100 text-blue-700'
-                          }`}
-                        >
-                          {lending.lendingType === 'qard-hasan' ? 'Qard Hasan' : 'Conventional'}
+                {/* Card Top: icon + name/contact + action buttons */}
+                <div className="flex items-start gap-3 mb-3">
+                  {/* Icon */}
+                  <div
+                    className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-white shadow-sm flex-shrink-0 ${
+                      lending.lendingType === 'qard-hasan' ? 'bg-emerald-600' : 'bg-blue-600'
+                    }`}
+                  >
+                    <Shield size={20} className="sm:hidden" />
+                    <Shield size={24} className="hidden sm:block" />
+                  </div>
+
+                  {/* Name + badges */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                      <h3 className="text-base sm:text-lg font-bold text-gray-900 truncate">{lending.borrowerName}</h3>
+                      <span
+                        className={`px-1.5 py-0.5 rounded-full text-[10px] sm:text-xs font-medium flex-shrink-0 ${
+                          lending.lendingType === 'qard-hasan'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-blue-100 text-blue-700'
+                        }`}
+                      >
+                        {lending.lendingType === 'qard-hasan' ? 'Qard Hasan' : 'Conventional'}
+                      </span>
+                      {lending.status === 'completed' && (
+                        <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] sm:text-xs font-medium flex items-center gap-0.5 flex-shrink-0">
+                          <CheckCircle2 size={10} /> Paid Off
                         </span>
-                        {lending.status === 'completed' && (
-                          <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium flex items-center gap-1">
-                            <CheckCircle2 size={12} /> Paid Off
-                          </span>
-                        )}
-                        {lendingStatus.isOverdue && (
-                          <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium flex items-center gap-1 animate-pulse">
-                            <AlertTriangle size={12} /> {lendingStatus.daysOverdue}d Overdue
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-4 text-sm text-gray-600">
-                        {lending.borrowerContact?.phone && (
-                          <span className="flex items-center gap-1">
-                            <Phone size={14} />
-                            {lending.borrowerContact.phone}
-                          </span>
-                        )}
-                        {lending.borrowerContact?.email && (
-                          <span className="flex items-center gap-1">
-                            <Mail size={14} />
-                            {lending.borrowerContact.email}
-                          </span>
-                        )}
-                      </div>
+                      )}
+                      {lendingStatus.isOverdue && (
+                        <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded-full text-[10px] sm:text-xs font-medium flex items-center gap-0.5 animate-pulse flex-shrink-0">
+                          <AlertTriangle size={10} /> {lendingStatus.daysOverdue}d Overdue
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-600">
+                      {lending.borrowerContact?.phone && (
+                        <span className="flex items-center gap-1">
+                          <Phone size={12} />
+                          {lending.borrowerContact.phone}
+                        </span>
+                      )}
+                      {lending.borrowerContact?.email && (
+                        <span className="flex items-center gap-1 truncate max-w-[160px]">
+                          <Mail size={12} />
+                          {lending.borrowerContact.email}
+                        </span>
+                      )}
                     </div>
                   </div>
 
-                  <div className="flex gap-1">
+                  {/* Action Buttons — compact on mobile */}
+                  <div className="flex gap-0.5 sm:gap-1 flex-shrink-0">
                     {lending.status === 'active' && (
                       <>
                         <button
                           onClick={() => openPaymentModal(lending)}
-                          className="p-2 hover:bg-green-50 rounded-lg"
+                          className="p-1.5 sm:p-2 hover:bg-green-50 rounded-lg"
                           title="Record Payment"
                         >
-                          <Check size={18} className="text-green-600" />
+                          <BanknoteArrowDown size={16} className="text-green-600" />
                         </button>
                         <button
                           onClick={() => openReminderModal(lending)}
-                          className="p-2 hover:bg-blue-50 rounded-lg"
+                          className="p-1.5 sm:p-2 hover:bg-blue-50 rounded-lg"
                           title="Send Reminder"
                         >
-                          <Send size={18} className="text-blue-600" />
+                          <Send size={16} className="text-blue-600" />
                         </button>
                       </>
                     )}
                     <button
                       onClick={() => router.push(`/dashboard/lendings/${lending.id}`)}
-                      className="p-2 hover:bg-gray-100 rounded-lg"
+                      className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg"
                       title="View Details"
                     >
-                      <Eye size={18} className="text-gray-600" />
+                      <Eye size={16} className="text-gray-600" />
                     </button>
                     <button
                       onClick={() => openLendingModal(lending)}
-                      className="p-2 hover:bg-gray-100 rounded-lg"
+                      className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg"
                       title="Edit"
                     >
-                      <Edit2 size={18} className="text-gray-600" />
+                      <Edit2 size={16} className="text-gray-600" />
                     </button>
                     <button
                       onClick={() => {
                         setLendingToDelete(lending);
                         setShowDeleteModal(true);
                       }}
-                      className="p-2 hover:bg-red-50 rounded-lg"
+                      className="p-1.5 sm:p-2 hover:bg-red-50 rounded-lg"
                       title="Delete"
                     >
-                      <Trash2 size={18} className="text-gray-600" />
+                      <Trash2 size={16} className="text-gray-600" />
                     </button>
                   </div>
                 </div>
@@ -702,11 +698,11 @@ export default function LendingPage() {
                     <span className="text-gray-600">
                       ৳{(lending.totalRepaid || 0).toLocaleString()} / ৳{lending.principalAmount.toLocaleString()}
                     </span>
-                    <span className="font-medium text-gray-900">{lendingStatus.percentagePaid}% Repaid</span>
+                    <span className="font-medium text-gray-900">{lendingStatus.percentagePaid}%</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-3">
+                  <div className="w-full bg-gray-200 rounded-full h-2.5 sm:h-3">
                     <div
-                      className={`h-3 rounded-full transition-all ${
+                      className={`h-2.5 sm:h-3 rounded-full transition-all ${
                         lending.status === 'completed' ? 'bg-green-600' : 'bg-blue-600'
                       }`}
                       style={{ width: `${Math.min(lendingStatus.percentagePaid, 100)}%` }}
@@ -714,34 +710,34 @@ export default function LendingPage() {
                   </div>
                 </div>
 
-                {/* Details */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                {/* Details Grid — 2 cols on mobile, 5 on md */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-3 text-xs sm:text-sm">
                   <div>
-                    <p className="text-xs text-gray-500">Principal</p>
+                    <p className="text-[10px] sm:text-xs text-gray-500">Principal</p>
                     <p className="font-semibold text-gray-900">৳{lending.principalAmount.toLocaleString()}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Remaining</p>
+                    <p className="text-[10px] sm:text-xs text-gray-500">Remaining</p>
                     <p className="font-semibold text-red-600">৳{lendingStatus.remainingBalance.toLocaleString()}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Payments</p>
+                    <p className="text-[10px] sm:text-xs text-gray-500">Payments</p>
                     <p className="font-semibold text-gray-900">
                       {lending.paymentsReceived || 0}
                       {lending.totalInstallments ? ` / ${lending.totalInstallments}` : ''}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Next Due</p>
+                    <p className="text-[10px] sm:text-xs text-gray-500">Next Due</p>
                     <p className="font-semibold text-gray-900">
                       {lending.nextPaymentDue
                         ? new Date(lending.nextPaymentDue).toLocaleDateString()
                         : new Date(lending.dueDate).toLocaleDateString()}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Repayment</p>
-                    <p className="font-semibold text-gray-900">
+                  <div className="col-span-2 sm:col-span-1">
+                    <p className="text-[10px] sm:text-xs text-gray-500">Repayment</p>
+                    <p className="font-semibold text-gray-900 truncate">
                       {lending.repaymentType === 'installments'
                         ? `৳${lending.installmentAmount?.toLocaleString()}/${lending.installmentFrequency}`
                         : 'Full Payment'}
@@ -752,8 +748,8 @@ export default function LendingPage() {
                 {/* Witnesses */}
                 {lending.witnesses && lending.witnesses.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-gray-200">
-                    <p className="text-xs text-gray-500 mb-1">Witnesses:</p>
-                    <div className="flex gap-4">
+                    <p className="text-[10px] sm:text-xs text-gray-500 mb-1">Witnesses:</p>
+                    <div className="flex flex-wrap gap-3">
                       {lending.witnesses.map((witness, idx) => (
                         <span key={idx} className="text-xs text-gray-700 flex items-center gap-1">
                           <Users size={12} />
@@ -772,27 +768,27 @@ export default function LendingPage() {
 
       {/* Create/Edit Lending Modal */}
       {showLendingModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-lg w-full max-w-3xl my-8 shadow-2xl">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 z-10 rounded-t-lg">
+        <div className="fixed inset-0 bg-black/60 flex items-start sm:items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg w-full max-w-3xl my-4 sm:my-8 shadow-2xl">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-4 z-10 rounded-t-lg">
               <div className="flex justify-between items-center">
-                <h2 className="text-lg font-bold text-gray-900">
+                <h2 className="text-base sm:text-lg font-bold text-gray-900">
                   {editingLending ? 'Edit Lending Record' : 'New Lending Record'}
                 </h2>
-                <button onClick={closeLendingModal} className="text-gray-400 hover:text-gray-600">
+                <button onClick={closeLendingModal} className="text-gray-400 hover:text-gray-600 p-1">
                   <X size={20} />
                 </button>
               </div>
             </div>
 
-            <form onSubmit={handleLendingSubmit} className="p-6 space-y-6 max-h-[calc(90vh-120px)] overflow-y-auto">
+            <form onSubmit={handleLendingSubmit} className="p-4 sm:p-6 space-y-6 max-h-[calc(90vh-120px)] overflow-y-auto">
               {/* Borrower Information */}
               <div>
                 <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
                   <User size={16} />
                   Borrower Information
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
                     <input
@@ -850,7 +846,7 @@ export default function LendingPage() {
                   <DollarSign size={16} />
                   Lending Details
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Lending Type *</label>
                     <select
@@ -949,7 +945,7 @@ export default function LendingPage() {
                       <button
                         type="button"
                         onClick={() => setLendingFormData((p) => ({ ...p, repaymentType: 'full-payment' }))}
-                        className={`p-3 rounded-lg border-2 transition text-sm ${
+                        className={`p-2.5 sm:p-3 rounded-lg border-2 transition text-xs sm:text-sm ${
                           lendingFormData.repaymentType === 'full-payment'
                             ? 'border-blue-600 bg-blue-50'
                             : 'border-gray-200'
@@ -960,7 +956,7 @@ export default function LendingPage() {
                       <button
                         type="button"
                         onClick={() => setLendingFormData((p) => ({ ...p, repaymentType: 'installments' }))}
-                        className={`p-3 rounded-lg border-2 transition text-sm ${
+                        className={`p-2.5 sm:p-3 rounded-lg border-2 transition text-xs sm:text-sm ${
                           lendingFormData.repaymentType === 'installments'
                             ? 'border-blue-600 bg-blue-50'
                             : 'border-gray-200'
@@ -972,7 +968,7 @@ export default function LendingPage() {
                   </div>
 
                   {lendingFormData.repaymentType === 'installments' && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Installment Amount (৳)</label>
                         <input
@@ -1015,13 +1011,13 @@ export default function LendingPage() {
                 </div>
               </div>
 
-              {/* Witnesses (Islamic Requirement) */}
+              {/* Witnesses */}
               <div>
                 <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
                   <Users size={16} />
                   Witnesses (Islamic Requirement)
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Witness 1 Name</label>
                     <input
@@ -1128,14 +1124,14 @@ export default function LendingPage() {
                 <button
                   type="button"
                   onClick={closeLendingModal}
-                  className="flex-1 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+                  className="flex-1 py-2.5 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
                   disabled={submitting}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2 bg-gray-900 text-white rounded-lg text-sm hover:bg-gray-800 disabled:opacity-50"
+                  className="flex-1 py-2.5 bg-gray-900 text-white rounded-lg text-sm hover:bg-gray-800 disabled:opacity-50"
                   disabled={submitting}
                 >
                   {submitting ? 'Saving...' : editingLending ? 'Update Record' : 'Create Record'}
@@ -1148,11 +1144,11 @@ export default function LendingPage() {
 
       {/* Payment Modal */}
       {showPaymentModal && selectedLending && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-md p-6 shadow-2xl">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-bold text-gray-900">Record Payment</h2>
-              <button onClick={closePaymentModal} className="text-gray-400 hover:text-gray-600">
+        <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+          <div className="bg-white rounded-t-2xl sm:rounded-lg w-full sm:max-w-md p-5 sm:p-6 shadow-2xl">
+            <div className="flex justify-between items-center mb-5">
+              <h2 className="text-base sm:text-lg font-bold text-gray-900">Record Payment</h2>
+              <button onClick={closePaymentModal} className="text-gray-400 hover:text-gray-600 p-1">
                 <X size={20} />
               </button>
             </div>
@@ -1230,14 +1226,14 @@ export default function LendingPage() {
                 <button
                   type="button"
                   onClick={closePaymentModal}
-                  className="flex-1 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+                  className="flex-1 py-2.5 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
                   disabled={submitting}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
+                  className="flex-1 py-2.5 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
                   disabled={submitting}
                 >
                   {submitting ? 'Recording...' : 'Record Payment'}
@@ -1250,11 +1246,11 @@ export default function LendingPage() {
 
       {/* Reminder Modal */}
       {showReminderModal && selectedLending && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-lg p-6 shadow-2xl">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-bold text-gray-900">Send Payment Reminder</h2>
-              <button onClick={() => setShowReminderModal(false)} className="text-gray-400 hover:text-gray-600">
+        <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+          <div className="bg-white rounded-t-2xl sm:rounded-lg w-full sm:max-w-lg p-5 sm:p-6 shadow-2xl">
+            <div className="flex justify-between items-center mb-5">
+              <h2 className="text-base sm:text-lg font-bold text-gray-900">Send Payment Reminder</h2>
+              <button onClick={() => setShowReminderModal(false)} className="text-gray-400 hover:text-gray-600 p-1">
                 <X size={20} />
               </button>
             </div>
@@ -1287,13 +1283,13 @@ export default function LendingPage() {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowReminderModal(false)}
-                className="flex-1 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+                className="flex-1 py-2.5 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
                 onClick={sendReminder}
-                className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 flex items-center justify-center gap-2"
+                className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 flex items-center justify-center gap-2"
               >
                 <Send size={16} />
                 Send Reminder
@@ -1316,13 +1312,13 @@ export default function LendingPage() {
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowDeleteModal(false)}
-                  className="flex-1 py-2 border rounded text-sm hover:bg-gray-50"
+                  className="flex-1 py-2.5 border rounded text-sm hover:bg-gray-50"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleDeleteLending}
-                  className="flex-1 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+                  className="flex-1 py-2.5 bg-red-600 text-white rounded text-sm hover:bg-red-700"
                 >
                   Delete
                 </button>
