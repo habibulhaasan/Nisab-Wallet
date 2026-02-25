@@ -38,6 +38,7 @@ import {
   Building2, Smartphone, Coins, HandCoins, TrendingUp, Target,
   Minus, ArrowRight, Check,
 } from 'lucide-react';
+import NisabSettingsModal from '@/components/zakat/NisabSettingsModal';
 
 export default function ZakatPage() {
   const { user } = useAuth();
@@ -55,6 +56,9 @@ export default function ZakatPage() {
   const [silverPricePerGram,  setSilverPricePerGram]  = useState(0);
   const [silverPricePerVori,  setSilverPricePerVori]  = useState(0);
   const [priceUnit,           setPriceUnit]           = useState('gram');
+  const [goldPricePerGram,    setGoldPricePerGram]    = useState(0);
+  const [goldPricePerVori,    setGoldPricePerVori]    = useState(0);
+  const [applyDeduction,      setApplyDeduction]      = useState(false);
 
   // ── Zakat cycle state ────────────────────────────────────────────────────
   const [activeCycle,     setActiveCycle]     = useState(null);
@@ -126,7 +130,10 @@ export default function ZakatPage() {
         if (data.nisabThreshold    !== undefined) setNisabThreshold(data.nisabThreshold);
         if (data.silverPricePerGram !== undefined) setSilverPricePerGram(data.silverPricePerGram);
         if (data.silverPricePerVori !== undefined) setSilverPricePerVori(data.silverPricePerVori);
-        if (data.priceUnit           !== undefined) setPriceUnit(data.priceUnit);
+        if (data.goldPricePerGram   !== undefined) setGoldPricePerGram(data.goldPricePerGram);
+        if (data.goldPricePerVori   !== undefined) setGoldPricePerVori(data.goldPricePerVori);
+        if (data.priceUnit          !== undefined) setPriceUnit(data.priceUnit);
+        if (data.applyDeduction     !== undefined) setApplyDeduction(data.applyDeduction);
       });
     } catch (err) {
       console.error('Error loading nisab settings:', err);
@@ -164,14 +171,19 @@ export default function ZakatPage() {
     return silverPricePerVori * NISAB_SILVER_VORI;
   };
 
-  const saveNisabSettings = async () => {
+  const saveNisabSettings = async (payload) => {
+    // payload comes directly from NisabSettingsModal
     try {
-      const calculated = calculateNisabFromPrice();
       const settingsData = {
-        nisabThreshold:     calculated,
-        silverPricePerGram: parseFloat(silverPricePerGram) || 0,
-        silverPricePerVori: parseFloat(silverPricePerVori) || 0,
-        priceUnit,
+        nisabThreshold:     payload.nisabThreshold,
+        silverPricePerGram: payload.silverPricePerGram || 0,
+        silverPricePerVori: payload.silverPricePerVori || 0,
+        goldPricePerGram:   payload.goldPricePerGram   || 0,
+        goldPricePerVori:   payload.goldPricePerVori   || 0,
+        priceUnit:          payload.priceUnit           || 'gram',
+        priceSource:        payload.priceSource         || 'manual',
+        lastFetched:        payload.lastFetched         || null,
+        usdToBdt:           payload.usdToBdt            || null,
         updatedAt:          serverTimestamp(),
       };
       const settingsRef = collection(db, 'users', user.uid, 'settings');
@@ -181,10 +193,17 @@ export default function ZakatPage() {
       } else {
         await updateDoc(doc(db, 'users', user.uid, 'settings', snap.docs[0].id), settingsData);
       }
-      setNisabThreshold(calculated);
+      // Update local state
+      setNisabThreshold(payload.nisabThreshold);
+      setSilverPricePerGram(payload.silverPricePerGram || 0);
+      setSilverPricePerVori(payload.silverPricePerVori || 0);
+      setGoldPricePerGram(payload.goldPricePerGram || 0);
+      setGoldPricePerVori(payload.goldPricePerVori || 0);
+      setPriceUnit(payload.priceUnit || 'gram');
+      setApplyDeduction(payload.applyDeduction || false);
       setShowSettingsModal(false);
       showToast('Nisab settings saved!', 'success');
-      await checkAndStartCycle(calculated);
+      await checkAndStartCycle(payload.nisabThreshold);
     } catch (err) {
       showToast('Error saving settings: ' + err.message, 'error');
     }
@@ -570,16 +589,15 @@ export default function ZakatPage() {
       {/* ══════ NISAB SETTINGS MODAL ══════ */}
       {showSettingsModal && (
         <NisabSettingsModal
-          priceUnit={priceUnit}
-          setPriceUnit={setPriceUnit}
-          silverPricePerGram={silverPricePerGram}
-          setSilverPricePerGram={setSilverPricePerGram}
-          silverPricePerVori={silverPricePerVori}
-          setSilverPricePerVori={setSilverPricePerVori}
-          calculatedNisab={calculateNisabFromPrice()}
+          initialSilverPerGram={silverPricePerGram}
+          initialSilverPerVori={silverPricePerVori}
+          initialGoldPerGram={goldPricePerGram}
+          initialGoldPerVori={goldPricePerVori}
+          initialPriceUnit={priceUnit}
+          initialNisab={nisabThreshold}
+          initialApplyDeduction={applyDeduction}
           onSave={saveNisabSettings}
           onClose={() => setShowSettingsModal(false)}
-          NISAB_SILVER_GRAMS={NISAB_SILVER_GRAMS}
         />
       )}
     </div>
@@ -1222,87 +1240,6 @@ function ZakatHistoryTab({ cycleHistory, expandedCycleId, setExpandedCycleId, fm
               </div>
             );
           })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// NISAB SETTINGS MODAL (unchanged from original, just extracted)
-// ─────────────────────────────────────────────────────────────────────────────
-
-function NisabSettingsModal({
-  priceUnit, setPriceUnit, silverPricePerGram, setSilverPricePerGram,
-  silverPricePerVori, setSilverPricePerVori, calculatedNisab, onSave, onClose, NISAB_SILVER_GRAMS,
-}) {
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-900">Nisab Calculator</h2>
-          <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
-        </div>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Calculate Nisab Using</label>
-            <div className="grid grid-cols-2 gap-2">
-              {[['gram', 'Per Gram'], ['vori', 'Per Vori (Tola)']].map(([val, label]) => (
-                <button key={val} type="button" onClick={() => setPriceUnit(val)}
-                  className={`px-4 py-2.5 text-sm font-medium rounded-lg transition-colors ${
-                    priceUnit === val ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {priceUnit === 'gram' ? (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Silver Price per Gram (৳)</label>
-              <input type="number" step="0.01" value={silverPricePerGram}
-                onChange={(e) => setSilverPricePerGram(e.target.value)}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
-                placeholder="Enter price per gram" />
-              <p className="text-xs text-gray-500 mt-1">Current silver price per gram in BDT</p>
-            </div>
-          ) : (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Silver Price per Vori/Tola (৳)</label>
-              <input type="number" step="0.01" value={silverPricePerVori}
-                onChange={(e) => setSilverPricePerVori(e.target.value)}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
-                placeholder="Enter price per vori" />
-              <p className="text-xs text-gray-500 mt-1">Current silver price per Vori (11.664g) in BDT</p>
-            </div>
-          )}
-
-          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Calculator className="w-4 h-4 text-emerald-600" />
-              <p className="text-xs font-semibold text-emerald-600 uppercase">Calculated Nisab</p>
-            </div>
-            <p className="text-2xl font-bold text-gray-900">৳{calculatedNisab.toLocaleString()}</p>
-            <p className="text-xs text-gray-600 mt-1">
-              {priceUnit === 'gram'
-                ? `612.36 grams × ৳${silverPricePerGram}/gram`
-                : `52.5 Vori × ৳${silverPricePerVori}/Vori`}
-            </p>
-          </div>
-
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <p className="text-xs text-blue-800 leading-relaxed">
-              <strong>Note:</strong> Nisab = 52.5 Tola (Vori) or 612.36 grams of silver.
-              Check current prices at <a href="https://bajuslive.com/" target="_blank" rel="noopener noreferrer" className="underline">bajuslive.com</a>.
-            </p>
-          </div>
-
-          <div className="flex gap-3 pt-2">
-            <button onClick={onClose} className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium">Cancel</button>
-            <button onClick={onSave}  className="flex-1 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 text-sm font-medium">Save & Calculate</button>
-          </div>
         </div>
       </div>
     </div>
