@@ -1,5 +1,5 @@
 // src/lib/zakatUtils.js
-import HijriDate, { toHijri, toGregorian } from 'hijri-converter';
+import { toHijri, toGregorian } from 'hijri-converter';
 
 // Convert Gregorian date to Hijri
 export const gregorianToHijri = (gregorianDate) => {
@@ -23,11 +23,7 @@ export const hijriToGregorian = (hijriYear, hijriMonth, hijriDay) => {
 export const addOneHijriYear = (gregorianDate) => {
   const date = new Date(gregorianDate);
   const hijri = toHijri(date.getFullYear(), date.getMonth() + 1, date.getDate());
-  
-  // Add 1 to Hijri year
   const nextHijriYear = hijri.hy + 1;
-  
-  // Convert back to Gregorian
   return hijriToGregorian(nextHijriYear, hijri.hm, hijri.hd);
 };
 
@@ -63,30 +59,13 @@ export const ZAKAT_STATUS = {
 
 // Determine Zakat status based on wealth and nisab
 export const determineZakatStatus = (totalWealth, nisabThreshold, activeCycle) => {
-  if (nisabThreshold === 0) {
-    return ZAKAT_STATUS.NOT_MANDATORY;
-  }
-
-  if (totalWealth < nisabThreshold) {
-    return ZAKAT_STATUS.NOT_MANDATORY;
-  }
-
-  if (!activeCycle) {
-    return ZAKAT_STATUS.MONITORING; // Should start a cycle
-  }
-
-  if (activeCycle.status === 'paid') {
-    return ZAKAT_STATUS.PAID;
-  }
-
+  if (nisabThreshold === 0) return ZAKAT_STATUS.NOT_MANDATORY;
+  if (totalWealth < nisabThreshold) return ZAKAT_STATUS.NOT_MANDATORY;
+  if (!activeCycle) return ZAKAT_STATUS.MONITORING;
+  if (activeCycle.status === 'paid') return ZAKAT_STATUS.PAID;
   if (hasOneHijriYearPassed(activeCycle.startDate)) {
-    if (totalWealth >= nisabThreshold) {
-      return ZAKAT_STATUS.DUE;
-    } else {
-      return ZAKAT_STATUS.EXEMPT;
-    }
+    return totalWealth >= nisabThreshold ? ZAKAT_STATUS.DUE : ZAKAT_STATUS.EXEMPT;
   }
-
   return ZAKAT_STATUS.MONITORING;
 };
 
@@ -94,8 +73,8 @@ export const determineZakatStatus = (totalWealth, nisabThreshold, activeCycle) =
 export const getHijriMonthName = (monthNumber) => {
   const months = [
     'Muharram', 'Safar', 'Rabi al-Awwal', 'Rabi al-Thani',
-    'Jumada al-Awwal', 'Jumada al-Thani', 'Rajab', 'Sha\'ban',
-    'Ramadan', 'Shawwal', 'Dhul-Qi\'dah', 'Dhul-Hijjah'
+    'Jumada al-Awwal', 'Jumada al-Thani', 'Rajab', "Sha'ban",
+    'Ramadan', 'Shawwal', "Dhul-Qi'dah", 'Dhul-Hijjah'
   ];
   return months[monthNumber - 1] || '';
 };
@@ -104,4 +83,127 @@ export const getHijriMonthName = (monthNumber) => {
 export const formatHijriDate = (hijriDate) => {
   if (!hijriDate) return '';
   return `${hijriDate.day} ${getHijriMonthName(hijriDate.month)} ${hijriDate.year} AH`;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UPDATED: Comprehensive Zakatable Wealth Calculation
+// Now includes: Accounts, Lendings (receivables), Investments, Goals
+// Deducts: Loans (liabilities)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Calculate total zakatable wealth from ALL sources.
+ *
+ * Zakatable sources (included):
+ *   - Accounts: cash, bank, mobile_banking, gold, silver
+ *   - Lendings: money the user lent to others (receivable = still owner's wealth)
+ *   - Investments: current market value of active investments
+ *   - Goals (financialGoals): savings earmarked for goals (user still owns it)
+ *
+ * Deducted (liabilities):
+ *   - Loans: outstanding amounts the user owes to others
+ *
+ * @param {Object} params
+ * @param {Array}  params.accounts     - from Firestore users/{uid}/accounts
+ * @param {Array}  params.lendings     - from Firestore users/{uid}/lendings
+ * @param {Array}  params.loans        - from Firestore users/{uid}/loans
+ * @param {Array}  params.investments  - from Firestore users/{uid}/investments
+ * @param {Array}  params.goals        - from Firestore users/{uid}/financialGoals
+ * @returns {Object} wealth breakdown and net zakatable wealth
+ */
+export const calculateZakatableWealth = ({
+  accounts = [],
+  lendings = [],
+  loans = [],
+  investments = [],
+  goals = [],
+}) => {
+  const breakdown = {
+    accountsTotal: 0,      // sum of all account balances
+    lendingsTotal: 0,      // money lent to others (receivable)
+    investmentsTotal: 0,   // current value of active investments
+    goalsTotal: 0,         // savings in active financial goals
+    totalAssets: 0,
+    loansTotal: 0,         // outstanding loans (liability — deducted)
+    netZakatableWealth: 0,
+    // Per-category breakdown for display
+    accountBreakdown: {},
+  };
+
+  // ── Accounts ───────────────────────────────────────────────────────────
+  accounts.forEach((acc) => {
+    const bal = Number(acc.balance) || 0;
+    if (bal <= 0) return;
+    breakdown.accountsTotal += bal;
+    const type = acc.type || 'other';
+    breakdown.accountBreakdown[type] = (breakdown.accountBreakdown[type] || 0) + bal;
+  });
+
+  // ── Lendings (Receivables) ─────────────────────────────────────────────
+  // Only count active lendings (money still outstanding/owed to user)
+  // Field: remainingBalance (from lending page: principalAmount - totalRepaid)
+  lendings.forEach((lending) => {
+    if (lending.status !== 'active') return;
+    const outstanding = Number(lending.remainingBalance) || Number(lending.principalAmount) || 0;
+    breakdown.lendingsTotal += outstanding;
+  });
+
+  // ── Loans (Liabilities — to be deducted) ──────────────────────────────
+  // Field: remainingBalance from loan page
+  loans.forEach((loan) => {
+    if (loan.status !== 'active') return;
+    const outstanding = Number(loan.remainingBalance) || Number(loan.principalAmount) || 0;
+    breakdown.loansTotal += outstanding;
+  });
+
+  // ── Investments ────────────────────────────────────────────────────────
+  // Use currentValue * quantity if available, else purchasePrice * quantity
+  // Matches investmentCollections.js calculateReturns logic
+  investments.forEach((inv) => {
+    if (inv.status !== 'active') return;
+    const qty = Number(inv.quantity) || 1;
+    const currentVal = Number(inv.currentValue) || Number(inv.purchasePrice) || 0;
+    breakdown.investmentsTotal += currentVal * qty;
+  });
+
+  // ── Financial Goals ────────────────────────────────────────────────────
+  // Collection: financialGoals — field: currentAmount
+  // Only active goals (not completed/cancelled)
+  goals.forEach((goal) => {
+    if (goal.status !== 'active') return;
+    const saved = Number(goal.currentAmount) || 0;
+    breakdown.goalsTotal += saved;
+  });
+
+  // ── Totals ────────────────────────────────────────────────────────────
+  breakdown.totalAssets =
+    breakdown.accountsTotal +
+    breakdown.lendingsTotal +
+    breakdown.investmentsTotal +
+    breakdown.goalsTotal;
+
+  // Net = Assets − Liabilities (never negative for Zakat purposes)
+  breakdown.netZakatableWealth = Math.max(
+    0,
+    breakdown.totalAssets - breakdown.loansTotal
+  );
+
+  return breakdown;
+};
+
+// Generate installment schedule
+export const generateInstallmentSchedule = (totalZakat, numberOfInstallments, startDate = new Date()) => {
+  const perInstallment = totalZakat / numberOfInstallments;
+  return Array.from({ length: numberOfInstallments }, (_, i) => {
+    const dueDate = new Date(startDate);
+    dueDate.setMonth(dueDate.getMonth() + i);
+    return {
+      installmentNumber: i + 1,
+      amount: Math.round(perInstallment * 100) / 100,
+      dueDate: dueDate.toISOString().split('T')[0],
+      status: 'pending', // pending | paid
+      paidDate: null,
+      paidAmount: null,
+    };
+  });
 };

@@ -15,7 +15,8 @@ import {
   hasOneHijriYearPassed,
   calculateZakat,
   formatHijriDate,
-  ZAKAT_STATUS 
+  ZAKAT_STATUS,
+  calculateZakatableWealth,
 } from '@/lib/zakatUtils';
 import { 
   Wallet, 
@@ -40,12 +41,16 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const router = useRouter();
   const settings = useSettings();
-  const [accounts, setAccounts] = useState([]);
-  const [loans, setLoans] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [nisabThreshold, setNisabThreshold] = useState(0);
-  const [activeCycle, setActiveCycle] = useState(null);
-  const [thisMonthIncome, setThisMonthIncome] = useState(0);
+  const [accounts,         setAccounts]         = useState([]);
+  const [loans,            setLoans]            = useState([]);
+  const [lendings,         setLendings]         = useState([]);
+  const [investments,      setInvestments]      = useState([]);
+  const [goals,            setGoals]            = useState([]);
+  const [wealthBreakdown,  setWealthBreakdown]  = useState(null);
+  const [loading,          setLoading]          = useState(true);
+  const [nisabThreshold,   setNisabThreshold]   = useState(0);
+  const [activeCycle,      setActiveCycle]      = useState(null);
+  const [thisMonthIncome,  setThisMonthIncome]  = useState(0);
   const [thisMonthExpense, setThisMonthExpense] = useState(0);
   const [recentTransactions, setRecentTransactions] = useState([]);
 
@@ -62,6 +67,7 @@ export default function DashboardPage() {
     await Promise.all([
       loadAccounts(),
       loadLoans(),
+      loadLendingsInvestmentsGoals(),
       loadNisabSettings(),
       loadActiveCycle(),
       loadTransactions(),
@@ -87,6 +93,24 @@ export default function DashboardPage() {
       setLoans(loansData);
     } catch (error) {
       console.error('Error loading loans:', error);
+    }
+  };
+
+  const loadLendingsInvestmentsGoals = async () => {
+    try {
+      const [lendSnap, invSnap, goalSnap] = await Promise.all([
+        getDocs(collection(db, 'users', user.uid, 'lendings')),
+        getDocs(collection(db, 'users', user.uid, 'investments')),
+        getDocs(collection(db, 'users', user.uid, 'financialGoals')),
+      ]);
+      const lends = lendSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const invs  = invSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const gls   = goalSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setLendings(lends);
+      setInvestments(invs);
+      setGoals(gls);
+    } catch (err) {
+      console.error('Error loading lendings/investments/goals:', err);
     }
   };
 
@@ -204,7 +228,10 @@ export default function DashboardPage() {
     }
   };
 
-  const totalBalance = accounts.reduce((sum, account) => sum + account.balance, 0);
+  // Comprehensive zakatable wealth (includes lendings, investments, goals; deducts loans)
+  const computedBreakdown = calculateZakatableWealth({ accounts, lendings, loans, investments, goals });
+  const totalBalance = computedBreakdown.netZakatableWealth;
+  const accountsBalance = accounts.reduce((sum, a) => sum + a.balance, 0); // for display cards
   const accountsCount = accounts.length;
 
   // Loan calculations
