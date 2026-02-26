@@ -9,14 +9,14 @@ import { db } from '@/lib/firebase';
 import { updateAccount } from '@/lib/firestoreCollections';
 
 // ─── Weight system constants ───────────────────────────────────────────────
-// 1 Vori = 16 Ana = 96 Roti = 576 Point = 11.664 grams
+// 1 Vori = 16 Ana = 96 Roti = 960 Point = 11.664 grams
 export const WEIGHT = {
   GRAMS_PER_VORI:  11.664,
   ANA_PER_VORI:    16,
   ROTI_PER_ANA:    6,
-  POINT_PER_ROTI:  6,
+  POINT_PER_ROTI:  10,
   ROTI_PER_VORI:   96,
-  POINT_PER_VORI:  576,
+  POINT_PER_VORI:  960,
 };
 
 export const KARAT_PURITY = {

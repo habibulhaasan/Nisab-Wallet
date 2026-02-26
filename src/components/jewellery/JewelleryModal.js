@@ -293,7 +293,7 @@ export default function JewelleryModal({ item, accounts = [], onSave, onClose })
                 { label: 'Vori', val: wVori, set: setWVori, max: 999 },
                 { label: 'Ana',  val: wAna,  set: setWAna,  max: 15  },
                 { label: 'Roti', val: wRoti, set: setWRoti, max: 5   },
-                { label: 'Point',val: wPoint,set: setWPoint,max: 5   },
+                { label: 'Point',val: wPoint,set: setWPoint,max: 9   },
               ].map(({ label, val, set, max }) => (
                 <div key={label}>
                   <label className="label-sm text-center block">{label}</label>
