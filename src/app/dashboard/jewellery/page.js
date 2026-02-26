@@ -5,88 +5,162 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import {
   getJewellery, addJewellery, updateJewellery, deleteJewellery,
-  addPriceSnapshot, getPriceHistory,
+  addPriceSnapshot, getPriceHistory, recordJewelleryPurchase, sellJewellery,
   totalJewelleryZakatValue, fmtBDT, formatWeight, weightToGrams,
+  ACQUISITION_LABELS,
 } from '@/lib/jewelleryCollections';
+import { getAccounts } from '@/lib/firestoreCollections';
 import { showToast } from '@/components/Toast';
 import JewelleryModal from '@/components/jewellery/JewelleryModal';
 import JewelleryPriceModal from '@/components/jewellery/JewelleryPriceModal';
+import SellJewelleryModal from '@/components/jewellery/SellJewelleryModal';
 import {
-  Gem, Plus, TrendingUp, Scale, Trash2, Edit3, RefreshCw,
-  History, Search, Filter, ChevronDown, Star, Loader2,
-  AlertCircle, ArrowUpRight, Package, Coins,
+  Gem, Plus, TrendingUp, Scale, Trash2, Edit3,
+  Search, ChevronDown, Star, Loader2,
+  AlertCircle, Package, Coins, Tag, Gift,
+  CheckCircle2, History, FileText, ShoppingBag,
+  ArrowUpRight, DollarSign, Eye, EyeOff,
 } from 'lucide-react';
 
 const METAL_COLORS = {
-  Gold:   { bg: 'bg-amber-50',   border: 'border-amber-200', dot: 'bg-amber-400', text: 'text-amber-700',  badge: 'bg-amber-100 text-amber-800'  },
-  Silver: { bg: 'bg-slate-50',   border: 'border-slate-200', dot: 'bg-slate-400', text: 'text-slate-700',  badge: 'bg-slate-100 text-slate-800'  },
+  Gold:   { bg: 'bg-amber-50',  border: 'border-amber-200', text: 'text-amber-700',  badge: 'bg-amber-100 text-amber-800'  },
+  Silver: { bg: 'bg-slate-50',  border: 'border-slate-200', text: 'text-slate-700',  badge: 'bg-slate-100 text-slate-800'  },
+};
+
+const ACQUISITION_ICONS = {
+  purchased: ShoppingBag,
+  gift:      Gift,
+  inherited: FileText,
+  other:     Tag,
 };
 
 export default function JewelleryPage() {
   const { user } = useAuth();
 
-  const [items,          setItems]          = useState([]);
-  const [filtered,       setFiltered]       = useState([]);
-  const [loading,        setLoading]        = useState(true);
-  const [searchQuery,    setSearchQuery]    = useState('');
-  const [filterMetal,    setFilterMetal]    = useState('all');
-  const [filterKarat,    setFilterKarat]    = useState('all');
-  const [sortBy,         setSortBy]         = useState('newest');
+  const [items,         setItems]         = useState([]);
+  const [accounts,      setAccounts]      = useState([]);
+  const [filtered,      setFiltered]      = useState([]);
+  const [loading,       setLoading]       = useState(true);
+  const [searchQuery,   setSearchQuery]   = useState('');
+  const [filterMetal,   setFilterMetal]   = useState('all');
+  const [filterStatus,  setFilterStatus]  = useState('active'); // 'all' | 'active' | 'sold'
+  const [sortBy,        setSortBy]        = useState('newest');
 
   // Modals
-  const [showAddModal,    setShowAddModal]   = useState(false);
-  const [editItem,        setEditItem]       = useState(null);
-  const [priceItem,       setPriceItem]      = useState(null);
-  const [priceHistory,    setPriceHistory]   = useState([]);
-  const [loadingHistory,  setLoadingHistory] = useState(false);
-  const [confirmDelete,   setConfirmDelete]  = useState(null);
+  const [showAddModal,   setShowAddModal]  = useState(false);
+  const [editItem,       setEditItem]      = useState(null);
+  const [priceItem,      setPriceItem]     = useState(null);
+  const [priceHistory,   setPriceHistory]  = useState([]);
+  const [loadingHistory, setLoadingHistory]= useState(false);
+  const [sellItem,       setSellItem]      = useState(null);
+  const [confirmDelete,  setConfirmDelete] = useState(null);
 
-  // ── Load ────────────────────────────────────────────────────────────────
-  useEffect(() => { if (user) loadItems(); }, [user]);
+  // ── Load ─────────────────────────────────────────────────────────────────
+  useEffect(() => { if (user) loadAll(); }, [user]);
 
-  useEffect(() => {
-    let list = [...items];
-    if (searchQuery)        list = list.filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()) || i.category?.toLowerCase().includes(searchQuery.toLowerCase()));
-    if (filterMetal !== 'all') list = list.filter(i => i.metal === filterMetal);
-    if (filterKarat !== 'all') list = list.filter(i => i.karat === filterKarat);
-    list.sort((a, b) => {
-      if (sortBy === 'newest')   return (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0);
-      if (sortBy === 'value')    return (b.currentZakatValue||0) - (a.currentZakatValue||0);
-      if (sortBy === 'weight')   return (b.weightGrams||0) - (a.weightGrams||0);
-      if (sortBy === 'name')     return a.name.localeCompare(b.name);
-      return 0;
-    });
-    setFiltered(list);
-  }, [items, searchQuery, filterMetal, filterKarat, sortBy]);
-
-  const loadItems = async () => {
+  const loadAll = async () => {
     setLoading(true);
-    const result = await getJewellery(user.uid);
-    if (result.success) setItems(result.items);
+    const [jewResult, accResult] = await Promise.all([
+      getJewellery(user.uid),
+      getAccounts(user.uid),
+    ]);
+    if (jewResult.success) setItems(jewResult.items);
     else showToast('Failed to load jewellery', 'error');
+    if (accResult.success) setAccounts(accResult.accounts);
     setLoading(false);
   };
 
-  // ── CRUD ─────────────────────────────────────────────────────────────────
+  // ── Filter & sort ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    let list = [...items];
+
+    // Status filter
+    if (filterStatus === 'active') list = list.filter(i => i.status !== 'sold');
+    if (filterStatus === 'sold')   list = list.filter(i => i.status === 'sold');
+
+    // Search
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(i =>
+        i.name.toLowerCase().includes(q) ||
+        i.category?.toLowerCase().includes(q) ||
+        i.notes?.toLowerCase().includes(q)
+      );
+    }
+
+    // Metal filter
+    if (filterMetal !== 'all') list = list.filter(i => i.metal === filterMetal);
+
+    // Sort
+    list.sort((a, b) => {
+      if (sortBy === 'newest') return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+      if (sortBy === 'value')  return (b.currentZakatValue || 0) - (a.currentZakatValue || 0);
+      if (sortBy === 'weight') return (b.weightGrams || 0) - (a.weightGrams || 0);
+      if (sortBy === 'name')   return a.name.localeCompare(b.name);
+      return 0;
+    });
+
+    setFiltered(list);
+  }, [items, searchQuery, filterMetal, filterStatus, sortBy]);
+
+  // ── CRUD ──────────────────────────────────────────────────────────────────
   const handleAdd = async (data) => {
-    const result = await addJewellery(user.uid, data);
-    if (result.success) { showToast('Jewellery added!', 'success'); setShowAddModal(false); loadItems(); }
-    else showToast('Failed to add', 'error');
+    // Extract transaction flags before saving to Firestore
+    const { _recordTransaction, _txAccountId, _txAccountBalance, _txAccountName, ...cleanData } = data;
+
+    const result = await addJewellery(user.uid, { ...cleanData, status: 'active' });
+    if (!result.success) { showToast('Failed to add jewellery', 'error'); return; }
+
+    // If user opted to record as transaction
+    if (_recordTransaction && _txAccountId && cleanData.purchaseTotal) {
+      const txResult = await recordJewelleryPurchase(user.uid, result.id, {
+        amount:         cleanData.purchaseTotal,
+        accountId:      _txAccountId,
+        accountBalance: _txAccountBalance,
+        accountName:    _txAccountName,
+        date:           cleanData.purchaseDate,
+        itemName:       cleanData.name,
+      });
+      if (txResult.success) {
+        showToast('Jewellery added & expense recorded!', 'success');
+      } else {
+        showToast('Jewellery added, but failed to record transaction', 'error');
+      }
+    } else {
+      showToast('Jewellery added!', 'success');
+    }
+
+    setShowAddModal(false);
+    loadAll();
   };
 
   const handleEdit = async (data) => {
-    const result = await updateJewellery(user.uid, editItem.id, data);
-    if (result.success) { showToast('Updated!', 'success'); setEditItem(null); loadItems(); }
+    // Strip internal flags when editing
+    const { _recordTransaction, _txAccountId, _txAccountBalance, _txAccountName, ...cleanData } = data;
+    const result = await updateJewellery(user.uid, editItem.id, cleanData);
+    if (result.success) { showToast('Updated!', 'success'); setEditItem(null); loadAll(); }
     else showToast('Failed to update', 'error');
   };
 
   const handleDelete = async (item) => {
     const result = await deleteJewellery(user.uid, item.id);
-    if (result.success) { showToast('Deleted', 'success'); setConfirmDelete(null); loadItems(); }
+    if (result.success) { showToast('Deleted', 'success'); setConfirmDelete(null); loadAll(); }
     else showToast('Failed to delete', 'error');
   };
 
-  // ── Price check & snapshot ────────────────────────────────────────────────
+  // ── Sell ──────────────────────────────────────────────────────────────────
+  const handleSell = async (sellData) => {
+    const result = await sellJewellery(user.uid, sellItem.id, sellData);
+    if (result.success) {
+      showToast(`${sellItem.name} sold! Income of ${fmtBDT(sellData.saleAmount)} added.`, 'success');
+      setSellItem(null);
+      loadAll();
+    } else {
+      showToast('Failed to process sale', 'error');
+    }
+  };
+
+  // ── Price snapshot ────────────────────────────────────────────────────────
   const openPriceModal = async (item) => {
     setPriceItem(item);
     setLoadingHistory(true);
@@ -97,9 +171,7 @@ export default function JewelleryPage() {
 
   const handleSaveSnapshot = async (snapshot) => {
     if (!priceItem) return;
-    // Save snapshot to history
     await addPriceSnapshot(user.uid, priceItem.id, snapshot);
-    // Update the piece's current value fields
     await updateJewellery(user.uid, priceItem.id, {
       currentMarketValue:    snapshot.marketValue,
       currentDeductedValue:  snapshot.deductedValue,
@@ -107,11 +179,9 @@ export default function JewelleryPage() {
       currentPriceCheckedAt: new Date().toISOString(),
     });
     showToast('Price snapshot saved!', 'success');
-    loadItems();
-    // Reload history
+    loadAll();
     const result = await getPriceHistory(user.uid, priceItem.id);
     setPriceHistory(result.success ? result.history : []);
-    // Update priceItem with latest data
     setPriceItem(prev => ({
       ...prev,
       currentMarketValue:   snapshot.marketValue,
@@ -121,10 +191,13 @@ export default function JewelleryPage() {
   };
 
   // ── Summary stats ─────────────────────────────────────────────────────────
-  const totalZakat    = totalJewelleryZakatValue(items);
-  const priced        = items.filter(i => i.currentZakatValue > 0);
-  const totalGold     = items.filter(i => i.metal === 'Gold').reduce((s, i) => s + (i.weightGrams||0), 0);
-  const totalSilver   = items.filter(i => i.metal === 'Silver').reduce((s, i) => s + (i.weightGrams||0), 0);
+  const activeItems  = items.filter(i => i.status !== 'sold');
+  const soldItems    = items.filter(i => i.status === 'sold');
+  const totalZakat   = totalJewelleryZakatValue(activeItems);
+  const priced       = activeItems.filter(i => i.currentZakatValue > 0);
+  const totalGold    = activeItems.filter(i => i.metal === 'Gold').reduce((s, i) => s + (i.weightGrams || 0), 0);
+  const totalSilver  = activeItems.filter(i => i.metal === 'Silver').reduce((s, i) => s + (i.weightGrams || 0), 0);
+  const totalSoldRevenue = soldItems.reduce((s, i) => s + (i.soldPrice || 0), 0);
 
   const fmtGrams = (g) => g >= 11.664
     ? `${(g / 11.664).toFixed(2)} Vori (${g.toFixed(2)}g)`
@@ -140,10 +213,12 @@ export default function JewelleryPage() {
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <Gem className="w-6 h-6 text-amber-500" /> Jewellery Tracker
           </h1>
-          <p className="text-sm text-gray-500 mt-0.5">Track gold & silver — monitor value for Zakat</p>
+          <p className="text-sm text-gray-500 mt-0.5">Track gold &amp; silver — monitor value for Zakat</p>
         </div>
-        <button onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-semibold text-sm transition-colors shadow-sm">
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-semibold text-sm transition-colors shadow-sm"
+        >
           <Plus className="w-4 h-4" /> Add Jewellery
         </button>
       </div>
@@ -155,14 +230,14 @@ export default function JewelleryPage() {
             icon={<Star className="w-4 h-4 text-emerald-600" />}
             label="Total Zakat Value"
             value={fmtBDT(totalZakat)}
-            sub={`${priced.length}/${items.length} priced`}
+            sub={`${priced.length}/${activeItems.length} priced`}
             accent="emerald"
           />
           <SummaryCard
             icon={<Package className="w-4 h-4 text-amber-600" />}
-            label="Total Items"
-            value={items.length}
-            sub={`${items.filter(i=>i.metal==='Gold').length} gold, ${items.filter(i=>i.metal==='Silver').length} silver`}
+            label="Active Items"
+            value={activeItems.length}
+            sub={soldItems.length > 0 ? `${soldItems.length} sold` : `${activeItems.filter(i=>i.metal==='Gold').length} gold, ${activeItems.filter(i=>i.metal==='Silver').length} silver`}
             accent="amber"
           />
           {totalGold > 0 && (
@@ -181,25 +256,52 @@ export default function JewelleryPage() {
               accent="slate"
             />
           )}
+          {soldItems.length > 0 && totalGold === 0 && totalSilver === 0 && (
+            <SummaryCard
+              icon={<DollarSign className="w-4 h-4 text-blue-500" />}
+              label="Total Sold"
+              value={fmtBDT(totalSoldRevenue)}
+              sub={`${soldItems.length} item${soldItems.length > 1 ? 's' : ''}`}
+              accent="blue"
+            />
+          )}
+        </div>
+      )}
+
+      {/* ── Unpriced nudge ── */}
+      {activeItems.length > 0 && priced.length < activeItems.length && (
+        <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+          <p className="text-sm text-amber-800">
+            <strong>{activeItems.length - priced.length} item{activeItems.length - priced.length > 1 ? 's' : ''}</strong> not priced yet —
+            tap <strong>Check Price</strong> to fetch BAJUS rates and include them in your Zakat total.
+          </p>
         </div>
       )}
 
       {/* ── Filters & search ── */}
       {items.length > 0 && (
         <div className="flex flex-col sm:flex-row gap-2">
-          {/* Search */}
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+            <input
+              value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search jewellery…"
-              className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:border-gray-400 transition-colors" />
+              className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:border-gray-400 transition-colors"
+            />
           </div>
-          {/* Metal filter */}
-          <FilterSelect value={filterMetal} onChange={setFilterMetal}
-            options={[['all','All Metals'],['Gold','Gold'],['Silver','Silver']]} />
-          {/* Sort */}
-          <FilterSelect value={sortBy} onChange={setSortBy}
-            options={[['newest','Newest'],['value','By Value'],['weight','By Weight'],['name','By Name']]} />
+          <FilterSelect
+            value={filterStatus} onChange={setFilterStatus}
+            options={[['active','Active'],['sold','Sold'],['all','All Items']]}
+          />
+          <FilterSelect
+            value={filterMetal} onChange={setFilterMetal}
+            options={[['all','All Metals'],['Gold','Gold'],['Silver','Silver']]}
+          />
+          <FilterSelect
+            value={sortBy} onChange={setSortBy}
+            options={[['newest','Newest'],['value','By Value'],['weight','By Weight'],['name','By Name']]}
+          />
         </div>
       )}
 
@@ -221,10 +323,13 @@ export default function JewelleryPage() {
             <h3 className="font-bold text-gray-900 text-lg">No jewellery added yet</h3>
             <p className="text-gray-500 text-sm mt-1 max-w-xs">
               Add your gold and silver jewellery to track their value and calculate Zakat.
+              Whether purchased, gifted, or inherited — all items count.
             </p>
           </div>
-          <button onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-5 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-sm transition-colors">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-2 px-5 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-sm transition-colors"
+          >
             <Plus className="w-4 h-4" /> Add First Item
           </button>
         </div>
@@ -240,24 +345,45 @@ export default function JewelleryPage() {
               onEdit={() => setEditItem(item)}
               onDelete={() => setConfirmDelete(item)}
               onCheckPrice={() => openPriceModal(item)}
+              onSell={() => setSellItem(item)}
             />
           ))}
+        </div>
+      )}
+
+      {/* Sold section header (when viewing all or sold filter) */}
+      {!loading && filterStatus === 'all' && soldItems.length > 0 && (
+        <div className="flex items-center gap-2 pt-2">
+          <div className="flex-1 h-px bg-gray-200" />
+          <span className="text-xs text-gray-400 font-semibold px-2">SOLD ITEMS ({soldItems.length})</span>
+          <div className="flex-1 h-px bg-gray-200" />
         </div>
       )}
 
       {/* No results from filter */}
       {!loading && items.length > 0 && filtered.length === 0 && (
         <div className="text-center py-10 text-gray-500 text-sm">
-          No items match your filters.
+          {filterStatus === 'sold'
+            ? 'No sold items yet.'
+            : 'No items match your filters.'}
         </div>
       )}
 
       {/* ── Modals ── */}
       {showAddModal && (
-        <JewelleryModal onSave={handleAdd} onClose={() => setShowAddModal(false)} />
+        <JewelleryModal
+          accounts={accounts}
+          onSave={handleAdd}
+          onClose={() => setShowAddModal(false)}
+        />
       )}
       {editItem && (
-        <JewelleryModal item={editItem} onSave={handleEdit} onClose={() => setEditItem(null)} />
+        <JewelleryModal
+          item={editItem}
+          accounts={accounts}
+          onSave={handleEdit}
+          onClose={() => setEditItem(null)}
+        />
       )}
       {priceItem && (
         <JewelleryPriceModal
@@ -265,6 +391,14 @@ export default function JewelleryPage() {
           priceHistory={priceHistory}
           onSaveSnapshot={handleSaveSnapshot}
           onClose={() => { setPriceItem(null); setPriceHistory([]); }}
+        />
+      )}
+      {sellItem && (
+        <SellJewelleryModal
+          item={sellItem}
+          accounts={accounts}
+          onSell={handleSell}
+          onClose={() => setSellItem(null)}
         />
       )}
 
@@ -278,15 +412,20 @@ export default function JewelleryPage() {
             </div>
             <h3 className="font-bold text-gray-900 text-center text-lg mb-1">Delete Jewellery?</h3>
             <p className="text-gray-500 text-sm text-center mb-5">
-              "<strong>{confirmDelete.name}</strong>" and all its price history will be permanently deleted.
+              &ldquo;<strong>{confirmDelete.name}</strong>&rdquo; and all its price history will be permanently deleted.
+              This cannot be undone.
             </p>
             <div className="flex gap-3">
-              <button onClick={() => setConfirmDelete(null)}
-                className="flex-1 py-2.5 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold text-sm">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="flex-1 py-2.5 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold text-sm"
+              >
                 Cancel
               </button>
-              <button onClick={() => handleDelete(confirmDelete)}
-                className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-sm transition-colors">
+              <button
+                onClick={() => handleDelete(confirmDelete)}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-sm transition-colors"
+              >
                 Delete
               </button>
             </div>
@@ -298,9 +437,11 @@ export default function JewelleryPage() {
 }
 
 // ─── JewelleryCard ─────────────────────────────────────────────────────────
-function JewelleryCard({ item, onEdit, onDelete, onCheckPrice }) {
-  const c = METAL_COLORS[item.metal] || METAL_COLORS.Gold;
-  const w = formatWeight(item.weightVori, item.weightAna, item.weightRoti, item.weightPoint);
+function JewelleryCard({ item, onEdit, onDelete, onCheckPrice, onSell }) {
+  const c       = METAL_COLORS[item.metal] || METAL_COLORS.Gold;
+  const w       = formatWeight(item.weightVori, item.weightAna, item.weightRoti, item.weightPoint);
+  const isSold  = item.status === 'sold';
+  const AcqIcon = ACQUISITION_ICONS[item.acquisitionType] || ShoppingBag;
 
   const fmtDate = (iso) => {
     if (!iso) return '—';
@@ -308,22 +449,30 @@ function JewelleryCard({ item, onEdit, onDelete, onCheckPrice }) {
     return d.toLocaleDateString('en-BD', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
-  const hasValue    = item.currentZakatValue > 0;
-  const hasHistory  = item.currentPriceCheckedAt;
+  const hasValue   = item.currentZakatValue > 0;
+  const hasHistory = item.currentPriceCheckedAt;
 
   return (
-    <div className={`bg-white border rounded-2xl p-4 hover:shadow-md transition-shadow`}>
+    <div className={`bg-white border rounded-2xl p-4 transition-all ${
+      isSold
+        ? 'border-gray-200 opacity-75'
+        : 'border-gray-200 hover:shadow-md'
+    }`}>
       <div className="flex items-start justify-between gap-3">
+
         {/* Left — info */}
         <div className="flex items-start gap-3 flex-1 min-w-0">
-          {/* Metal dot */}
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${c.bg} border ${c.border}`}>
+          {/* Metal icon */}
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${c.bg} border ${c.border} ${isSold ? 'opacity-60' : ''}`}>
             <Gem className={`w-5 h-5 ${c.text}`} />
           </div>
 
           <div className="flex-1 min-w-0">
+            {/* Name + badges */}
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-bold text-gray-900 text-sm">{item.name}</h3>
+              <h3 className={`font-bold text-sm ${isSold ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                {item.name}
+              </h3>
               <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${c.badge}`}>
                 {item.karat} {item.metal}
               </span>
@@ -332,75 +481,155 @@ function JewelleryCard({ item, onEdit, onDelete, onCheckPrice }) {
                   {item.category}
                 </span>
               )}
+              {/* Acquisition type badge */}
+              {item.acquisitionType && item.acquisitionType !== 'purchased' && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs text-purple-700 bg-purple-50 border border-purple-100">
+                  <AcqIcon className="w-2.5 h-2.5" />
+                  {ACQUISITION_LABELS[item.acquisitionType] || item.acquisitionType}
+                </span>
+              )}
+              {/* Sold badge */}
+              {isSold && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs text-blue-700 bg-blue-50 border border-blue-100 font-bold">
+                  <CheckCircle2 className="w-2.5 h-2.5" /> Sold
+                </span>
+              )}
             </div>
 
             {/* Weight */}
             <div className="flex items-center gap-1.5 mt-1.5">
               <Scale className="w-3 h-3 text-gray-400 flex-shrink-0" />
               <span className="text-xs text-gray-600 font-medium">{w || '—'}</span>
-              <span className="text-xs text-gray-400">({(item.weightGrams||0).toFixed(4)}g)</span>
+              <span className="text-xs text-gray-400">({(item.weightGrams || 0).toFixed(4)}g)</span>
             </div>
 
-            {/* Value */}
-            {hasValue ? (
-              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                <span className="text-sm font-bold text-emerald-700">{fmtBDT(item.currentZakatValue)}</span>
-                <span className="text-xs text-gray-400">Zakat value (−15%)</span>
-                {hasHistory && (
-                  <span className="text-xs text-gray-400">· {fmtDate(item.currentPriceCheckedAt)}</span>
+            {/* Sold details */}
+            {isSold ? (
+              <div className="mt-1.5 space-y-0.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-bold text-blue-700">{fmtBDT(item.soldPrice)}</span>
+                  <span className="text-xs text-gray-400">Sold on {fmtDate(item.soldAt)}</span>
+                </div>
+                {item.soldNotes && (
+                  <p className="text-xs text-gray-400 italic">{item.soldNotes}</p>
                 )}
               </div>
             ) : (
-              <p className="text-xs text-gray-400 mt-1.5 italic">Price not checked yet</p>
-            )}
+              <>
+                {/* Zakat value */}
+                {hasValue ? (
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    <span className="text-sm font-bold text-emerald-700">{fmtBDT(item.currentZakatValue)}</span>
+                    <span className="text-xs text-gray-400">Zakat value (−15%)</span>
+                    {hasHistory && (
+                      <span className="text-xs text-gray-400">· {fmtDate(item.currentPriceCheckedAt)}</span>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-orange-400 mt-1.5 font-medium">⚠ Price not checked yet</p>
+                )}
 
-            {/* Purchase info */}
-            {item.purchaseTotal > 0 && (
-              <p className="text-xs text-gray-400 mt-1">
-                Purchased: {fmtBDT(item.purchaseTotal)} · {fmtDate(item.purchaseDate)}
-              </p>
+                {/* Purchase info */}
+                {item.purchaseTotal > 0 && item.acquisitionType === 'purchased' && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    Paid: {fmtBDT(item.purchaseTotal)} · {fmtDate(item.purchaseDate)}
+                    {item.purchaseTransactionRecorded && (
+                      <span className="ml-1.5 text-emerald-500">✓ expensed</span>
+                    )}
+                  </p>
+                )}
+                {/* Gift/inherited date */}
+                {item.acquisitionType !== 'purchased' && item.purchaseDate && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    Acquired: {fmtDate(item.purchaseDate)}
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>
 
         {/* Right — actions */}
         <div className="flex flex-col gap-1.5 flex-shrink-0">
-          <button onClick={onCheckPrice}
-            className="flex items-center gap-1.5 px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-colors whitespace-nowrap">
-            <TrendingUp className="w-3.5 h-3.5" />
-            {hasValue ? 'Update Price' : 'Check Price'}
-          </button>
-          <div className="flex gap-1.5">
-            <button onClick={onEdit}
-              className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-medium transition-colors">
-              <Edit3 className="w-3 h-3" /> Edit
-            </button>
-            <button onClick={onDelete}
-              className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-red-50 hover:bg-red-100 text-red-500 rounded-lg text-xs font-medium transition-colors">
-              <Trash2 className="w-3 h-3" /> Delete
-            </button>
-          </div>
+          {isSold ? (
+            /* Sold — only show delete + edit (to update notes) */
+            <div className="flex gap-1.5">
+              <button
+                onClick={onEdit}
+                className="flex items-center justify-center gap-1 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl text-xs font-medium transition-colors"
+              >
+                <Edit3 className="w-3 h-3" /> Edit
+              </button>
+              <button
+                onClick={onDelete}
+                className="flex items-center justify-center gap-1 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl text-xs font-medium transition-colors"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Check / Update price */}
+              <button
+                onClick={onCheckPrice}
+                className="flex items-center gap-1.5 px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-colors whitespace-nowrap"
+              >
+                <TrendingUp className="w-3.5 h-3.5" />
+                {hasValue ? 'Update Price' : 'Check Price'}
+              </button>
+
+              {/* Sell button */}
+              <button
+                onClick={onSell}
+                className="flex items-center gap-1.5 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-bold transition-colors whitespace-nowrap"
+              >
+                <ArrowUpRight className="w-3.5 h-3.5" /> Sell
+              </button>
+
+              {/* Edit + Delete */}
+              <div className="flex gap-1.5">
+                <button
+                  onClick={onEdit}
+                  className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-medium transition-colors"
+                >
+                  <Edit3 className="w-3 h-3" /> Edit
+                </button>
+                <button
+                  onClick={onDelete}
+                  className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-red-50 hover:bg-red-100 text-red-500 rounded-lg text-xs font-medium transition-colors"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
       {/* Notes */}
       {item.notes && (
-        <p className="text-xs text-gray-400 mt-3 pt-3 border-t border-gray-100 italic">{item.notes}</p>
+        <p className="text-xs text-gray-400 mt-3 pt-3 border-t border-gray-100 italic">
+          📝 {item.notes}
+        </p>
       )}
     </div>
   );
 }
 
-// ── Small helpers ──────────────────────────────────────────────────────────
+// ── Small helpers ────────────────────────────────────────────────────────
 function SummaryCard({ icon, label, value, sub, accent }) {
   const colors = {
     emerald: 'bg-emerald-50 border-emerald-100',
     amber:   'bg-amber-50 border-amber-100',
     slate:   'bg-slate-50 border-slate-100',
+    blue:    'bg-blue-50 border-blue-100',
   };
   return (
-    <div className={`rounded-2xl border p-4 ${colors[accent]}`}>
-      <div className="flex items-center gap-2 mb-2">{icon}<span className="text-xs text-gray-500 font-medium">{label}</span></div>
+    <div className={`rounded-2xl border p-4 ${colors[accent] || colors.amber}`}>
+      <div className="flex items-center gap-2 mb-2">
+        {icon}
+        <span className="text-xs text-gray-500 font-medium">{label}</span>
+      </div>
       <p className="font-bold text-gray-900 text-lg leading-tight">{value}</p>
       {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
     </div>
@@ -410,8 +639,10 @@ function SummaryCard({ icon, label, value, sub, accent }) {
 function FilterSelect({ value, onChange, options }) {
   return (
     <div className="relative">
-      <select value={value} onChange={e => onChange(e.target.value)}
-        className="appearance-none pl-3 pr-8 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 outline-none focus:border-gray-400 cursor-pointer">
+      <select
+        value={value} onChange={e => onChange(e.target.value)}
+        className="appearance-none pl-3 pr-8 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 outline-none focus:border-gray-400 cursor-pointer"
+      >
         {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
       <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />

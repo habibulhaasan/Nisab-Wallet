@@ -3,9 +3,10 @@
 
 import {
   collection, addDoc, getDocs, updateDoc, deleteDoc,
-  doc, query, orderBy, serverTimestamp, getDoc,
+  doc, query, orderBy, serverTimestamp, getDoc, Timestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { updateAccount } from '@/lib/firestoreCollections';
 
 // ─── Weight system constants ───────────────────────────────────────────────
 // Bangladesh / South-Asian gold weight standard:
@@ -36,16 +37,23 @@ export const KARAT_OPTIONS = ['22K', '21K', '18K', 'Traditional', '24K'];
 // Metal types
 export const METAL_OPTIONS = ['Gold', 'Silver'];
 
+// Acquisition types
+export const ACQUISITION_TYPES = {
+  PURCHASED: 'purchased',
+  GIFT:      'gift',
+  INHERITED: 'inherited',
+  OTHER:     'other',
+};
+
+export const ACQUISITION_LABELS = {
+  purchased: 'Purchased',
+  gift:      'Gift',
+  inherited: 'Inherited',
+  other:     'Other',
+};
+
 // ─── Weight conversion helpers ─────────────────────────────────────────────
 
-/**
- * Convert Vori/Ana/Roti/Point → total grams
- * @param {number} vori
- * @param {number} ana
- * @param {number} roti
- * @param {number} point
- * @returns {number} grams (rounded to 4 decimal places)
- */
 export function weightToGrams(vori = 0, ana = 0, roti = 0, point = 0) {
   const totalPoints =
     (Number(vori)  || 0) * WEIGHT.POINT_PER_VORI +
@@ -55,9 +63,6 @@ export function weightToGrams(vori = 0, ana = 0, roti = 0, point = 0) {
   return parseFloat((totalPoints / WEIGHT.POINT_PER_VORI * WEIGHT.GRAMS_PER_VORI).toFixed(4));
 }
 
-/**
- * Convert total grams → { vori, ana, roti, point }
- */
 export function gramsToWeight(grams) {
   const totalPoints = Math.round((grams / WEIGHT.GRAMS_PER_VORI) * WEIGHT.POINT_PER_VORI);
   const vori  = Math.floor(totalPoints / WEIGHT.POINT_PER_VORI);
@@ -69,9 +74,6 @@ export function gramsToWeight(grams) {
   return { vori, ana, roti, point };
 }
 
-/**
- * Format weight as human-readable string e.g. "2 Vori 4 Ana 2 Roti 3 Point"
- */
 export function formatWeight(vori = 0, ana = 0, roti = 0, point = 0) {
   const parts = [];
   if (vori)  parts.push(`${vori} Vori`);
@@ -81,26 +83,12 @@ export function formatWeight(vori = 0, ana = 0, roti = 0, point = 0) {
   return parts.length ? parts.join(' ') : '0';
 }
 
-/**
- * Format total grams → "X.XXXX g (Y Vori Z Ana ...)"
- */
 export function formatGrams(grams) {
-  const w = gramsToWeight(grams);
   return `${grams.toFixed(4)}g`;
 }
 
 // ─── Price calculation ─────────────────────────────────────────────────────
 
-/**
- * Calculate raw market value of a jewellery piece from current metal prices.
- * Uses purity-adjusted price per gram × actual weight in grams.
- *
- * @param {number} grams       - total weight in grams
- * @param {string} karat       - e.g. '22K'
- * @param {string} metal       - 'Gold' | 'Silver'
- * @param {object} prices      - { gold: { karat22: { perGram }, ... }, silver: { ... } }
- * @returns {number} market value in BDT (before deductions)
- */
 export function calcMarketValue(grams, karat, metal, prices) {
   if (!grams || !prices) return 0;
   let pricePerGram = 0;
@@ -108,7 +96,6 @@ export function calcMarketValue(grams, karat, metal, prices) {
   if (metal === 'Gold') {
     const map = { '22K': prices.gold?.karat22, '21K': prices.gold?.karat21, '18K': prices.gold?.karat18, 'Traditional': prices.gold?.traditional, '24K': prices.gold?.karat22 };
     pricePerGram = map[karat]?.perGram || prices.gold?.karat22?.perGram || 0;
-    // For 24K, extrapolate from 22K
     if (karat === '24K' && prices.gold?.karat22?.perGram) {
       pricePerGram = Math.round(prices.gold.karat22.perGram / 0.9167);
     }
@@ -120,47 +107,28 @@ export function calcMarketValue(grams, karat, metal, prices) {
   return Math.round(pricePerGram * grams);
 }
 
-/**
- * Apply BAJUS deduction (default 15% per Ulama; 17% official BAJUS)
- * Returns the resale / sell value after deduction.
- */
 export function applyDeduction(value, pct = 15) {
   return Math.round(value * (1 - pct / 100));
 }
 
-/**
- * Calculate full price breakdown for a jewellery piece.
- * @returns {{
- *   marketValue: number,        raw market value
- *   deductedValue: number,      after BAJUS resale deduction
- *   zakatValue: number,         value used for Zakat (deductedValue by default)
- *   deductionPct: number,
- * }}
- */
 export function calcPriceBreakdown(grams, karat, metal, prices, deductionPct = 15) {
   const marketValue   = calcMarketValue(grams, karat, metal, prices);
   const deductedValue = applyDeduction(marketValue, deductionPct);
-  return {
-    marketValue,
-    deductedValue,
-    zakatValue: deductedValue,
-    deductionPct,
-  };
+  return { marketValue, deductedValue, zakatValue: deductedValue, deductionPct };
 }
 
-// ─── Firestore CRUD ────────────────────────────────────────────────────────
+// ─── Firestore refs ────────────────────────────────────────────────────────
 
-const jewelleryRef = (uid) => collection(db, 'users', uid, 'jewellery');
+const jewelleryRef = (uid)     => collection(db, 'users', uid, 'jewellery');
 const pieceRef     = (uid, id) => doc(db, 'users', uid, 'jewellery', id);
 const historyRef   = (uid, id) => collection(db, 'users', uid, 'jewellery', id, 'priceHistory');
 
-/**
- * Load all jewellery pieces for a user.
- */
+// ─── CRUD ──────────────────────────────────────────────────────────────────
+
 export async function getJewellery(uid) {
   try {
-    const q    = query(jewelleryRef(uid), orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
+    const q     = query(jewelleryRef(uid), orderBy('createdAt', 'desc'));
+    const snap  = await getDocs(q);
     const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     return { success: true, items };
   } catch (err) {
@@ -168,15 +136,11 @@ export async function getJewellery(uid) {
   }
 }
 
-/**
- * Add a new jewellery piece.
- * @param {string} uid
- * @param {object} data - see schema below
- */
 export async function addJewellery(uid, data) {
   try {
     const ref = await addDoc(jewelleryRef(uid), {
       ...data,
+      status:    data.status    || 'active', // 'active' | 'sold'
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -186,9 +150,6 @@ export async function addJewellery(uid, data) {
   }
 }
 
-/**
- * Update a jewellery piece.
- */
 export async function updateJewellery(uid, id, data) {
   try {
     await updateDoc(pieceRef(uid, id), { ...data, updatedAt: serverTimestamp() });
@@ -198,12 +159,8 @@ export async function updateJewellery(uid, id, data) {
   }
 }
 
-/**
- * Delete a jewellery piece (and its price history subcollection).
- */
 export async function deleteJewellery(uid, id) {
   try {
-    // Delete history subcollection first
     const hSnap = await getDocs(historyRef(uid, id));
     await Promise.all(hSnap.docs.map((d) => deleteDoc(d.ref)));
     await deleteDoc(pieceRef(uid, id));
@@ -213,12 +170,94 @@ export async function deleteJewellery(uid, id) {
   }
 }
 
-// ─── Price history subcollection ───────────────────────────────────────────
-
+// ─── Sell jewellery ────────────────────────────────────────────────────────
 /**
- * Add a price snapshot to a jewellery piece's history.
- * @param {object} snapshot - { marketValue, deductedValue, deductionPct, priceSource, goldPricePerGram, ... }
+ * Mark a jewellery piece as sold, create an Income transaction, and
+ * credit the chosen account balance — all in one call.
+ *
+ * @param {string} uid
+ * @param {string} jewelleryId   - Firestore doc ID of the piece
+ * @param {object} sellData      - { saleAmount, saleDate, accountId, accountBalance, accountName, notes }
  */
+export async function sellJewellery(uid, jewelleryId, sellData) {
+  try {
+    const { saleAmount, saleDate, accountId, accountBalance, accountName, notes, itemName } = sellData;
+
+    // 1. Mark piece as sold
+    await updateDoc(pieceRef(uid, jewelleryId), {
+      status:    'sold',
+      soldAt:    saleDate,
+      soldPrice: saleAmount,
+      soldNotes: notes || '',
+      soldToAccountId:   accountId   || null,
+      soldToAccountName: accountName || null,
+      updatedAt: serverTimestamp(),
+    });
+
+    // 2. Record income transaction (same schema as transactions page)
+    if (accountId && saleAmount > 0) {
+      await addDoc(collection(db, 'users', uid, 'transactions'), {
+        type:        'Income',
+        amount:      parseFloat(saleAmount),
+        accountId,
+        categoryId:  '',
+        description: `Sold jewellery: ${itemName || 'Item'}`,
+        date:        saleDate,
+        source:      'jewellery_sale',
+        jewelleryId,
+        createdAt:   Timestamp.now(),
+      });
+
+      // 3. Credit account balance
+      const newBalance = (Number(accountBalance) || 0) + parseFloat(saleAmount);
+      await updateAccount(uid, accountId, { balance: newBalance });
+    }
+
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ─── Record purchase as transaction ───────────────────────────────────────
+/**
+ * After adding a jewellery piece, optionally record it as an Expense
+ * transaction and deduct the amount from the chosen account.
+ *
+ * @param {string} uid
+ * @param {object} txData - { amount, accountId, accountBalance, accountName, date, itemName }
+ */
+export async function recordJewelleryPurchase(uid, jewelleryId, txData) {
+  try {
+    const { amount, accountId, accountBalance, accountName, date, itemName } = txData;
+
+    if (!accountId || !amount || amount <= 0) return { success: true }; // nothing to do
+
+    // Create expense transaction
+    await addDoc(collection(db, 'users', uid, 'transactions'), {
+      type:        'Expense',
+      amount:      parseFloat(amount),
+      accountId,
+      categoryId:  '',
+      description: `Purchased jewellery: ${itemName || 'Item'}`,
+      date:        date || new Date().toISOString().split('T')[0],
+      source:      'jewellery_purchase',
+      jewelleryId,
+      createdAt:   Timestamp.now(),
+    });
+
+    // Deduct from account
+    const newBalance = (Number(accountBalance) || 0) - parseFloat(amount);
+    await updateAccount(uid, accountId, { balance: newBalance });
+
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ─── Price history ─────────────────────────────────────────────────────────
+
 export async function addPriceSnapshot(uid, jewelleryId, snapshot) {
   try {
     await addDoc(historyRef(uid, jewelleryId), {
@@ -231,13 +270,10 @@ export async function addPriceSnapshot(uid, jewelleryId, snapshot) {
   }
 }
 
-/**
- * Load price history for a jewellery piece (newest first).
- */
 export async function getPriceHistory(uid, jewelleryId) {
   try {
-    const q    = query(historyRef(uid, jewelleryId), orderBy('recordedAt', 'desc'));
-    const snap = await getDocs(q);
+    const q       = query(historyRef(uid, jewelleryId), orderBy('recordedAt', 'desc'));
+    const snap    = await getDocs(q);
     const history = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     return { success: true, history };
   } catch (err) {
@@ -247,17 +283,13 @@ export async function getPriceHistory(uid, jewelleryId) {
 
 // ─── Aggregation helpers ───────────────────────────────────────────────────
 
-/**
- * Sum total Zakat value across all active jewellery pieces.
- * @param {Array} items  - jewellery items each with { currentZakatValue }
- */
+/** Sum total Zakat value — only active (unsold) pieces */
 export function totalJewelleryZakatValue(items) {
-  return items.reduce((sum, item) => sum + (item.currentZakatValue || 0), 0);
+  return items
+    .filter((i) => i.status !== 'sold')
+    .reduce((sum, item) => sum + (item.currentZakatValue || 0), 0);
 }
 
-/**
- * Format BDT currency
- */
 export function fmtBDT(n) {
   if (!n && n !== 0) return '—';
   return '৳' + Number(n).toLocaleString('en-BD', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
