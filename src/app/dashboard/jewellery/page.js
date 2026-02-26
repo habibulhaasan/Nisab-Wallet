@@ -19,7 +19,7 @@ import {
   Search, ChevronDown, Star, Loader2,
   AlertCircle, Package, Coins, Tag, Gift,
   CheckCircle2, History, FileText, ShoppingBag,
-  ArrowUpRight, DollarSign, Eye, EyeOff,
+  ArrowUpRight, DollarSign, RotateCcw,
 } from 'lucide-react';
 
 const METAL_COLORS = {
@@ -37,23 +37,23 @@ const ACQUISITION_ICONS = {
 export default function JewelleryPage() {
   const { user } = useAuth();
 
-  const [items,         setItems]         = useState([]);
-  const [accounts,      setAccounts]      = useState([]);
-  const [filtered,      setFiltered]      = useState([]);
-  const [loading,       setLoading]       = useState(true);
-  const [searchQuery,   setSearchQuery]   = useState('');
-  const [filterMetal,   setFilterMetal]   = useState('all');
-  const [filterStatus,  setFilterStatus]  = useState('active'); // 'all' | 'active' | 'sold'
-  const [sortBy,        setSortBy]        = useState('newest');
+  const [items,          setItems]          = useState([]);
+  const [accounts,       setAccounts]       = useState([]);
+  const [filtered,       setFiltered]       = useState([]);
+  const [loading,        setLoading]        = useState(true);
+  const [searchQuery,    setSearchQuery]    = useState('');
+  const [filterMetal,    setFilterMetal]    = useState('all');
+  const [filterStatus,   setFilterStatus]   = useState('active');
+  const [sortBy,         setSortBy]         = useState('newest');
 
   // Modals
-  const [showAddModal,   setShowAddModal]  = useState(false);
-  const [editItem,       setEditItem]      = useState(null);
-  const [priceItem,      setPriceItem]     = useState(null);
-  const [priceHistory,   setPriceHistory]  = useState([]);
-  const [loadingHistory, setLoadingHistory]= useState(false);
-  const [sellItem,       setSellItem]      = useState(null);
-  const [confirmDelete,  setConfirmDelete] = useState(null);
+  const [showAddModal,    setShowAddModal]   = useState(false);
+  const [editItem,        setEditItem]       = useState(null);
+  const [priceItem,       setPriceItem]      = useState(null);
+  const [priceHistory,    setPriceHistory]   = useState([]);
+  const [loadingHistory,  setLoadingHistory] = useState(false);
+  const [sellItem,        setSellItem]       = useState(null);
+  const [confirmDelete,   setConfirmDelete]  = useState(null);
 
   // ── Load ─────────────────────────────────────────────────────────────────
   useEffect(() => { if (user) loadAll(); }, [user]);
@@ -74,11 +74,9 @@ export default function JewelleryPage() {
   useEffect(() => {
     let list = [...items];
 
-    // Status filter
     if (filterStatus === 'active') list = list.filter(i => i.status !== 'sold');
     if (filterStatus === 'sold')   list = list.filter(i => i.status === 'sold');
 
-    // Search
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       list = list.filter(i =>
@@ -88,10 +86,8 @@ export default function JewelleryPage() {
       );
     }
 
-    // Metal filter
     if (filterMetal !== 'all') list = list.filter(i => i.metal === filterMetal);
 
-    // Sort
     list.sort((a, b) => {
       if (sortBy === 'newest') return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
       if (sortBy === 'value')  return (b.currentZakatValue || 0) - (a.currentZakatValue || 0);
@@ -105,13 +101,11 @@ export default function JewelleryPage() {
 
   // ── CRUD ──────────────────────────────────────────────────────────────────
   const handleAdd = async (data) => {
-    // Extract transaction flags before saving to Firestore
     const { _recordTransaction, _txAccountId, _txAccountBalance, _txAccountName, ...cleanData } = data;
 
     const result = await addJewellery(user.uid, { ...cleanData, status: 'active' });
     if (!result.success) { showToast('Failed to add jewellery', 'error'); return; }
 
-    // If user opted to record as transaction
     if (_recordTransaction && _txAccountId && cleanData.purchaseTotal) {
       const txResult = await recordJewelleryPurchase(user.uid, result.id, {
         amount:         cleanData.purchaseTotal,
@@ -121,11 +115,7 @@ export default function JewelleryPage() {
         date:           cleanData.purchaseDate,
         itemName:       cleanData.name,
       });
-      if (txResult.success) {
-        showToast('Jewellery added & expense recorded!', 'success');
-      } else {
-        showToast('Jewellery added, but failed to record transaction', 'error');
-      }
+      showToast(txResult.success ? 'Jewellery added & expense recorded!' : 'Added, but failed to record transaction', txResult.success ? 'success' : 'error');
     } else {
       showToast('Jewellery added!', 'success');
     }
@@ -135,7 +125,6 @@ export default function JewelleryPage() {
   };
 
   const handleEdit = async (data) => {
-    // Strip internal flags when editing
     const { _recordTransaction, _txAccountId, _txAccountBalance, _txAccountName, ...cleanData } = data;
     const result = await updateJewellery(user.uid, editItem.id, cleanData);
     if (result.success) { showToast('Updated!', 'success'); setEditItem(null); loadAll(); }
@@ -152,7 +141,7 @@ export default function JewelleryPage() {
   const handleSell = async (sellData) => {
     const result = await sellJewellery(user.uid, sellItem.id, sellData);
     if (result.success) {
-      showToast(`${sellItem.name} sold! Income of ${fmtBDT(sellData.saleAmount)} added.`, 'success');
+      showToast(`${sellItem.name} sold! ${fmtBDT(sellData.saleAmount)} added to account.`, 'success');
       setSellItem(null);
       loadAll();
     } else {
@@ -191,23 +180,32 @@ export default function JewelleryPage() {
   };
 
   // ── Summary stats ─────────────────────────────────────────────────────────
-  const activeItems  = items.filter(i => i.status !== 'sold');
-  const soldItems    = items.filter(i => i.status === 'sold');
-  const totalZakat   = totalJewelleryZakatValue(activeItems);
-  const priced       = activeItems.filter(i => i.currentZakatValue > 0);
-  const totalGold    = activeItems.filter(i => i.metal === 'Gold').reduce((s, i) => s + (i.weightGrams || 0), 0);
-  const totalSilver  = activeItems.filter(i => i.metal === 'Silver').reduce((s, i) => s + (i.weightGrams || 0), 0);
+  const activeItems      = items.filter(i => i.status !== 'sold');
+  const soldItems        = items.filter(i => i.status === 'sold');
+  const totalZakat       = totalJewelleryZakatValue(activeItems);
+  const priced           = activeItems.filter(i => i.currentZakatValue > 0);
+  const totalGold        = activeItems.filter(i => i.metal === 'Gold').reduce((s, i) => s + (i.weightGrams || 0), 0);
+  const totalSilver      = activeItems.filter(i => i.metal === 'Silver').reduce((s, i) => s + (i.weightGrams || 0), 0);
   const totalSoldRevenue = soldItems.reduce((s, i) => s + (i.soldPrice || 0), 0);
 
-  const fmtGrams = (g) => g >= 11.664
-    ? `${(g / 11.664).toFixed(2)} Vori (${g.toFixed(2)}g)`
-    : `${g.toFixed(4)}g`;
+  // Format weight in Vori for summary cards
+  const fmtVori = (g) => {
+    if (!g) return '0g';
+    const vori  = Math.floor(g / 11.664);
+    const rem   = g - vori * 11.664;
+    const ana   = Math.floor(rem / (11.664 / 16));
+    const parts = [];
+    if (vori) parts.push(`${vori}V`);
+    if (ana)  parts.push(`${ana}A`);
+    if (!parts.length) parts.push(`${g.toFixed(2)}g`);
+    return parts.join(' ') + ` (${g.toFixed(2)}g)`;
+  };
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="max-w-4xl mx-auto space-y-6">
 
-      {/* ── Page header ── */}
+      {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -237,14 +235,14 @@ export default function JewelleryPage() {
             icon={<Package className="w-4 h-4 text-amber-600" />}
             label="Active Items"
             value={activeItems.length}
-            sub={soldItems.length > 0 ? `${soldItems.length} sold` : `${activeItems.filter(i=>i.metal==='Gold').length} gold, ${activeItems.filter(i=>i.metal==='Silver').length} silver`}
+            sub={soldItems.length > 0 ? `${soldItems.length} sold` : `${activeItems.filter(i => i.metal === 'Gold').length} gold · ${activeItems.filter(i => i.metal === 'Silver').length} silver`}
             accent="amber"
           />
           {totalGold > 0 && (
             <SummaryCard
               icon={<Coins className="w-4 h-4 text-amber-600" />}
               label="Total Gold"
-              value={fmtGrams(totalGold)}
+              value={fmtVori(totalGold)}
               accent="amber"
             />
           )}
@@ -252,7 +250,7 @@ export default function JewelleryPage() {
             <SummaryCard
               icon={<Coins className="w-4 h-4 text-slate-500" />}
               label="Total Silver"
-              value={fmtGrams(totalSilver)}
+              value={fmtVori(totalSilver)}
               accent="slate"
             />
           )}
@@ -279,7 +277,7 @@ export default function JewelleryPage() {
         </div>
       )}
 
-      {/* ── Filters & search ── */}
+      {/* ── Filters ── */}
       {items.length > 0 && (
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1">
@@ -290,18 +288,12 @@ export default function JewelleryPage() {
               className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:border-gray-400 transition-colors"
             />
           </div>
-          <FilterSelect
-            value={filterStatus} onChange={setFilterStatus}
-            options={[['active','Active'],['sold','Sold'],['all','All Items']]}
-          />
-          <FilterSelect
-            value={filterMetal} onChange={setFilterMetal}
-            options={[['all','All Metals'],['Gold','Gold'],['Silver','Silver']]}
-          />
-          <FilterSelect
-            value={sortBy} onChange={setSortBy}
-            options={[['newest','Newest'],['value','By Value'],['weight','By Weight'],['name','By Name']]}
-          />
+          <FilterSelect value={filterStatus} onChange={setFilterStatus}
+            options={[['active','Active'],['sold','Sold'],['all','All Items']]} />
+          <FilterSelect value={filterMetal} onChange={setFilterMetal}
+            options={[['all','All Metals'],['Gold','Gold'],['Silver','Silver']]} />
+          <FilterSelect value={sortBy} onChange={setSortBy}
+            options={[['newest','Newest'],['value','By Value'],['weight','By Weight'],['name','By Name']]} />
         </div>
       )}
 
@@ -323,7 +315,7 @@ export default function JewelleryPage() {
             <h3 className="font-bold text-gray-900 text-lg">No jewellery added yet</h3>
             <p className="text-gray-500 text-sm mt-1 max-w-xs">
               Add your gold and silver jewellery to track their value and calculate Zakat.
-              Whether purchased, gifted, or inherited — all items count.
+              Works for purchased, gifted, or inherited pieces.
             </p>
           </div>
           <button
@@ -335,7 +327,7 @@ export default function JewelleryPage() {
         </div>
       )}
 
-      {/* ── Jewellery list ── */}
+      {/* ── List ── */}
       {!loading && filtered.length > 0 && (
         <div className="space-y-3">
           {filtered.map(item => (
@@ -345,45 +337,25 @@ export default function JewelleryPage() {
               onEdit={() => setEditItem(item)}
               onDelete={() => setConfirmDelete(item)}
               onCheckPrice={() => openPriceModal(item)}
+              onViewHistory={() => openPriceModal(item)}
               onSell={() => setSellItem(item)}
             />
           ))}
         </div>
       )}
 
-      {/* Sold section header (when viewing all or sold filter) */}
-      {!loading && filterStatus === 'all' && soldItems.length > 0 && (
-        <div className="flex items-center gap-2 pt-2">
-          <div className="flex-1 h-px bg-gray-200" />
-          <span className="text-xs text-gray-400 font-semibold px-2">SOLD ITEMS ({soldItems.length})</span>
-          <div className="flex-1 h-px bg-gray-200" />
-        </div>
-      )}
-
-      {/* No results from filter */}
       {!loading && items.length > 0 && filtered.length === 0 && (
         <div className="text-center py-10 text-gray-500 text-sm">
-          {filterStatus === 'sold'
-            ? 'No sold items yet.'
-            : 'No items match your filters.'}
+          {filterStatus === 'sold' ? 'No sold items yet.' : 'No items match your filters.'}
         </div>
       )}
 
       {/* ── Modals ── */}
       {showAddModal && (
-        <JewelleryModal
-          accounts={accounts}
-          onSave={handleAdd}
-          onClose={() => setShowAddModal(false)}
-        />
+        <JewelleryModal accounts={accounts} onSave={handleAdd} onClose={() => setShowAddModal(false)} />
       )}
       {editItem && (
-        <JewelleryModal
-          item={editItem}
-          accounts={accounts}
-          onSave={handleEdit}
-          onClose={() => setEditItem(null)}
-        />
+        <JewelleryModal item={editItem} accounts={accounts} onSave={handleEdit} onClose={() => setEditItem(null)} />
       )}
       {priceItem && (
         <JewelleryPriceModal
@@ -413,19 +385,14 @@ export default function JewelleryPage() {
             <h3 className="font-bold text-gray-900 text-center text-lg mb-1">Delete Jewellery?</h3>
             <p className="text-gray-500 text-sm text-center mb-5">
               &ldquo;<strong>{confirmDelete.name}</strong>&rdquo; and all its price history will be permanently deleted.
-              This cannot be undone.
             </p>
             <div className="flex gap-3">
-              <button
-                onClick={() => setConfirmDelete(null)}
-                className="flex-1 py-2.5 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold text-sm"
-              >
+              <button onClick={() => setConfirmDelete(null)}
+                className="flex-1 py-2.5 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold text-sm">
                 Cancel
               </button>
-              <button
-                onClick={() => handleDelete(confirmDelete)}
-                className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-sm transition-colors"
-              >
+              <button onClick={() => handleDelete(confirmDelete)}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-sm transition-colors">
                 Delete
               </button>
             </div>
@@ -437,9 +404,8 @@ export default function JewelleryPage() {
 }
 
 // ─── JewelleryCard ─────────────────────────────────────────────────────────
-function JewelleryCard({ item, onEdit, onDelete, onCheckPrice, onSell }) {
+function JewelleryCard({ item, onEdit, onDelete, onCheckPrice, onViewHistory, onSell }) {
   const c       = METAL_COLORS[item.metal] || METAL_COLORS.Gold;
-  const w       = formatWeight(item.weightVori, item.weightAna, item.weightRoti, item.weightPoint);
   const isSold  = item.status === 'sold';
   const AcqIcon = ACQUISITION_ICONS[item.acquisitionType] || ShoppingBag;
 
@@ -449,174 +415,228 @@ function JewelleryCard({ item, onEdit, onDelete, onCheckPrice, onSell }) {
     return d.toLocaleDateString('en-BD', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
-  const hasValue   = item.currentZakatValue > 0;
-  const hasHistory = item.currentPriceCheckedAt;
+  // ── Primary weight display: Vori Ana Roti Point · Xg ──────────────────
+  const wParts = [];
+  if (item.weightVori)  wParts.push(`${item.weightVori} Vori`);
+  if (item.weightAna)   wParts.push(`${item.weightAna} Ana`);
+  if (item.weightRoti)  wParts.push(`${item.weightRoti} Roti`);
+  if (item.weightPoint) wParts.push(`${item.weightPoint} Point`);
+  const weightLabel  = wParts.length ? wParts.join(' ') : '—';
+  const weightGrams  = (item.weightGrams || 0).toFixed(4);
+
+  const hasValue   = (item.currentZakatValue || 0) > 0;
+  const hasHistory = !!item.currentPriceCheckedAt;
+
+  // Acquisition price line
+  const hasPurchasePrice = (item.purchaseTotal || 0) > 0;
+  const isPurchased      = item.acquisitionType === 'purchased' || !item.acquisitionType;
 
   return (
-    <div className={`bg-white border rounded-2xl p-4 transition-all ${
-      isSold
-        ? 'border-gray-200 opacity-75'
-        : 'border-gray-200 hover:shadow-md'
+    <div className={`bg-white border rounded-2xl overflow-hidden transition-all ${
+      isSold ? 'border-blue-100' : 'border-gray-200 hover:shadow-md'
     }`}>
-      <div className="flex items-start justify-between gap-3">
-
-        {/* Left — info */}
-        <div className="flex items-start gap-3 flex-1 min-w-0">
-          {/* Metal icon */}
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${c.bg} border ${c.border} ${isSold ? 'opacity-60' : ''}`}>
-            <Gem className={`w-5 h-5 ${c.text}`} />
+      {/* Sold banner */}
+      {isSold && (
+        <div className="bg-blue-50 border-b border-blue-100 px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-3.5 h-3.5 text-blue-500" />
+            <span className="text-xs font-bold text-blue-700">SOLD</span>
+            <span className="text-xs text-blue-500">on {fmtDate(item.soldAt)}</span>
           </div>
+          <span className="text-sm font-bold text-blue-700">{fmtBDT(item.soldPrice)}</span>
+        </div>
+      )}
 
-          <div className="flex-1 min-w-0">
-            {/* Name + badges */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className={`font-bold text-sm ${isSold ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                {item.name}
-              </h3>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${c.badge}`}>
-                {item.karat} {item.metal}
-              </span>
-              {item.category && (
-                <span className="px-2 py-0.5 rounded-full text-xs text-gray-500 bg-gray-100">
-                  {item.category}
-                </span>
-              )}
-              {/* Acquisition type badge */}
-              {item.acquisitionType && item.acquisitionType !== 'purchased' && (
-                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs text-purple-700 bg-purple-50 border border-purple-100">
-                  <AcqIcon className="w-2.5 h-2.5" />
-                  {ACQUISITION_LABELS[item.acquisitionType] || item.acquisitionType}
-                </span>
-              )}
-              {/* Sold badge */}
-              {isSold && (
-                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs text-blue-700 bg-blue-50 border border-blue-100 font-bold">
-                  <CheckCircle2 className="w-2.5 h-2.5" /> Sold
-                </span>
-              )}
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-3">
+
+          {/* ── Left — info ── */}
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${c.bg} border ${c.border} ${isSold ? 'opacity-60' : ''}`}>
+              <Gem className={`w-5 h-5 ${c.text}`} />
             </div>
 
-            {/* Weight */}
-            <div className="flex items-center gap-1.5 mt-1.5">
-              <Scale className="w-3 h-3 text-gray-400 flex-shrink-0" />
-              <span className="text-xs text-gray-600 font-medium">{w || '—'}</span>
-              <span className="text-xs text-gray-400">({(item.weightGrams || 0).toFixed(4)}g)</span>
-            </div>
-
-            {/* Sold details */}
-            {isSold ? (
-              <div className="mt-1.5 space-y-0.5">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-bold text-blue-700">{fmtBDT(item.soldPrice)}</span>
-                  <span className="text-xs text-gray-400">Sold on {fmtDate(item.soldAt)}</span>
-                </div>
-                {item.soldNotes && (
-                  <p className="text-xs text-gray-400 italic">{item.soldNotes}</p>
+            <div className="flex-1 min-w-0">
+              {/* Name + badges */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className={`font-bold text-sm ${isSold ? 'text-gray-500' : 'text-gray-900'}`}>
+                  {item.name}
+                </h3>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${c.badge}`}>
+                  {item.karat} {item.metal}
+                </span>
+                {item.category && (
+                  <span className="px-2 py-0.5 rounded-full text-xs text-gray-500 bg-gray-100">
+                    {item.category}
+                  </span>
+                )}
+                {item.acquisitionType && item.acquisitionType !== 'purchased' && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs text-purple-700 bg-purple-50 border border-purple-100">
+                    <AcqIcon className="w-2.5 h-2.5" />
+                    {ACQUISITION_LABELS[item.acquisitionType] || item.acquisitionType}
+                  </span>
                 )}
               </div>
+
+              {/* Weight — PRIMARY: Vori Ana Roti Point · grams */}
+              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                <Scale className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                <span className="text-xs font-semibold text-gray-700">{weightLabel}</span>
+                <span className="text-xs text-gray-400">·&nbsp;{weightGrams}g</span>
+              </div>
+
+              {/* ── Active item details ── */}
+              {!isSold && (
+                <div className="mt-2 space-y-1">
+                  {/* Zakat value */}
+                  {hasValue ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-bold text-emerald-700">{fmtBDT(item.currentZakatValue)}</span>
+                      <span className="text-xs text-gray-400">Zakat value (−15%)</span>
+                      {hasHistory && (
+                        <span className="text-xs text-gray-400">· {fmtDate(item.currentPriceCheckedAt)}</span>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-orange-400 font-medium">⚠ Price not checked yet — tap Check Price</p>
+                  )}
+
+                  {/* Acquisition / purchase price */}
+                  {hasPurchasePrice && isPurchased && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-gray-500">Paid:</span>
+                      <span className="text-xs font-semibold text-gray-700">{fmtBDT(item.purchaseTotal)}</span>
+                      <span className="text-xs text-gray-400">on {fmtDate(item.purchaseDate)}</span>
+                      {item.purchaseTransactionId && (
+                        <span className="text-xs text-emerald-500">✓ expensed</span>
+                      )}
+                    </div>
+                  )}
+                  {!isPurchased && item.purchaseDate && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-gray-400">
+                        {ACQUISITION_LABELS[item.acquisitionType] || 'Acquired'}: {fmtDate(item.purchaseDate)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Sold item details ── */}
+              {isSold && (
+                <div className="mt-2 space-y-1">
+                  {/* Original acquisition price */}
+                  {hasPurchasePrice && isPurchased && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-gray-500">Bought for:</span>
+                      <span className="text-xs font-semibold text-gray-600">{fmtBDT(item.purchaseTotal)}</span>
+                      <span className="text-xs text-gray-400">on {fmtDate(item.purchaseDate)}</span>
+                    </div>
+                  )}
+                  {/* Profit/loss if both known */}
+                  {hasPurchasePrice && isPurchased && item.soldPrice && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-gray-500">
+                        {item.soldPrice >= item.purchaseTotal ? '📈 Profit:' : '📉 Loss:'}
+                      </span>
+                      <span className={`text-xs font-bold ${
+                        item.soldPrice >= item.purchaseTotal ? 'text-emerald-600' : 'text-red-500'
+                      }`}>
+                        {fmtBDT(Math.abs(item.soldPrice - item.purchaseTotal))}
+                      </span>
+                    </div>
+                  )}
+                  {/* Last known Zakat value */}
+                  {hasValue && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-gray-400">Last Zakat value:</span>
+                      <span className="text-xs text-gray-500 font-semibold">{fmtBDT(item.currentZakatValue)}</span>
+                    </div>
+                  )}
+                  {/* Sold notes */}
+                  {item.soldNotes && (
+                    <p className="text-xs text-gray-400 italic">{item.soldNotes}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Right — actions ── */}
+          <div className="flex flex-col gap-1.5 flex-shrink-0">
+            {isSold ? (
+              <>
+                {/* Price history — always visible for sold items */}
+                <button
+                  onClick={onViewHistory}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap"
+                >
+                  <History className="w-3.5 h-3.5" /> History
+                </button>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={onEdit}
+                    className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-medium transition-colors"
+                  >
+                    <Edit3 className="w-3 h-3" /> Edit
+                  </button>
+                  <button
+                    onClick={onDelete}
+                    className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-red-50 hover:bg-red-100 text-red-500 rounded-lg text-xs font-medium transition-colors"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              </>
             ) : (
               <>
-                {/* Zakat value */}
-                {hasValue ? (
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span className="text-sm font-bold text-emerald-700">{fmtBDT(item.currentZakatValue)}</span>
-                    <span className="text-xs text-gray-400">Zakat value (−15%)</span>
-                    {hasHistory && (
-                      <span className="text-xs text-gray-400">· {fmtDate(item.currentPriceCheckedAt)}</span>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-xs text-orange-400 mt-1.5 font-medium">⚠ Price not checked yet</p>
-                )}
-
-                {/* Purchase info */}
-                {item.purchaseTotal > 0 && item.acquisitionType === 'purchased' && (
-                  <p className="text-xs text-gray-400 mt-1">
-                    Paid: {fmtBDT(item.purchaseTotal)} · {fmtDate(item.purchaseDate)}
-                    {item.purchaseTransactionRecorded && (
-                      <span className="ml-1.5 text-emerald-500">✓ expensed</span>
-                    )}
-                  </p>
-                )}
-                {/* Gift/inherited date */}
-                {item.acquisitionType !== 'purchased' && item.purchaseDate && (
-                  <p className="text-xs text-gray-400 mt-1">
-                    Acquired: {fmtDate(item.purchaseDate)}
-                  </p>
-                )}
+                {/* Check / Update price */}
+                <button
+                  onClick={onCheckPrice}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-colors whitespace-nowrap"
+                >
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  {hasValue ? 'Update Price' : 'Check Price'}
+                </button>
+                {/* Sell */}
+                <button
+                  onClick={onSell}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-bold transition-colors whitespace-nowrap"
+                >
+                  <ArrowUpRight className="w-3.5 h-3.5" /> Sell
+                </button>
+                {/* Edit + Delete */}
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={onEdit}
+                    className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-medium transition-colors"
+                  >
+                    <Edit3 className="w-3 h-3" /> Edit
+                  </button>
+                  <button
+                    onClick={onDelete}
+                    className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-red-50 hover:bg-red-100 text-red-500 rounded-lg text-xs font-medium transition-colors"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
               </>
             )}
           </div>
         </div>
 
-        {/* Right — actions */}
-        <div className="flex flex-col gap-1.5 flex-shrink-0">
-          {isSold ? (
-            /* Sold — only show delete + edit (to update notes) */
-            <div className="flex gap-1.5">
-              <button
-                onClick={onEdit}
-                className="flex items-center justify-center gap-1 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl text-xs font-medium transition-colors"
-              >
-                <Edit3 className="w-3 h-3" /> Edit
-              </button>
-              <button
-                onClick={onDelete}
-                className="flex items-center justify-center gap-1 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl text-xs font-medium transition-colors"
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
-            </div>
-          ) : (
-            <>
-              {/* Check / Update price */}
-              <button
-                onClick={onCheckPrice}
-                className="flex items-center gap-1.5 px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-colors whitespace-nowrap"
-              >
-                <TrendingUp className="w-3.5 h-3.5" />
-                {hasValue ? 'Update Price' : 'Check Price'}
-              </button>
-
-              {/* Sell button */}
-              <button
-                onClick={onSell}
-                className="flex items-center gap-1.5 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-bold transition-colors whitespace-nowrap"
-              >
-                <ArrowUpRight className="w-3.5 h-3.5" /> Sell
-              </button>
-
-              {/* Edit + Delete */}
-              <div className="flex gap-1.5">
-                <button
-                  onClick={onEdit}
-                  className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-medium transition-colors"
-                >
-                  <Edit3 className="w-3 h-3" /> Edit
-                </button>
-                <button
-                  onClick={onDelete}
-                  className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-red-50 hover:bg-red-100 text-red-500 rounded-lg text-xs font-medium transition-colors"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+        {/* Notes */}
+        {item.notes && (
+          <p className="text-xs text-gray-400 mt-3 pt-3 border-t border-gray-100 italic">
+            📝 {item.notes}
+          </p>
+        )}
       </div>
-
-      {/* Notes */}
-      {item.notes && (
-        <p className="text-xs text-gray-400 mt-3 pt-3 border-t border-gray-100 italic">
-          📝 {item.notes}
-        </p>
-      )}
     </div>
   );
 }
 
-// ── Small helpers ────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────
 function SummaryCard({ icon, label, value, sub, accent }) {
   const colors = {
     emerald: 'bg-emerald-50 border-emerald-100',
@@ -630,7 +650,7 @@ function SummaryCard({ icon, label, value, sub, accent }) {
         {icon}
         <span className="text-xs text-gray-500 font-medium">{label}</span>
       </div>
-      <p className="font-bold text-gray-900 text-lg leading-tight">{value}</p>
+      <p className="font-bold text-gray-900 text-base leading-tight">{value}</p>
       {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
     </div>
   );

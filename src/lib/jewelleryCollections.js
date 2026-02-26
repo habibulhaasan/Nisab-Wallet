@@ -3,41 +3,33 @@
 
 import {
   collection, addDoc, getDocs, updateDoc, deleteDoc,
-  doc, query, orderBy, serverTimestamp, getDoc, Timestamp,
+  doc, query, orderBy, serverTimestamp, where, Timestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { updateAccount } from '@/lib/firestoreCollections';
 
 // ─── Weight system constants ───────────────────────────────────────────────
-// Bangladesh / South-Asian gold weight standard:
-// 1 Vori = 16 Ana
-// 1 Ana  = 6  Roti
-// 1 Roti = 6  Point
-// 1 Vori = 96 Roti = 576 Point = 11.664 grams
+// 1 Vori = 16 Ana = 96 Roti = 576 Point = 11.664 grams
 export const WEIGHT = {
   GRAMS_PER_VORI:  11.664,
   ANA_PER_VORI:    16,
   ROTI_PER_ANA:    6,
   POINT_PER_ROTI:  6,
-  ROTI_PER_VORI:   96,   // 16 × 6
-  POINT_PER_VORI:  576,  // 16 × 6 × 6
+  ROTI_PER_VORI:   96,
+  POINT_PER_VORI:  576,
 };
 
-// Karat → purity multiplier (relative to pure 24K)
 export const KARAT_PURITY = {
-  '24K': 1.0000,
-  '22K': 0.9167,
-  '21K': 0.8750,
-  '18K': 0.7500,
-  'Traditional': 0.7083, // ~17K, common sanaton standard in BD
+  '24K':         1.0000,
+  '22K':         0.9167,
+  '21K':         0.8750,
+  '18K':         0.7500,
+  'Traditional': 0.7083,
 };
 
 export const KARAT_OPTIONS = ['22K', '21K', '18K', 'Traditional', '24K'];
-
-// Metal types
 export const METAL_OPTIONS = ['Gold', 'Silver'];
 
-// Acquisition types
 export const ACQUISITION_TYPES = {
   PURCHASED: 'purchased',
   GIFT:      'gift',
@@ -52,7 +44,7 @@ export const ACQUISITION_LABELS = {
   other:     'Other',
 };
 
-// ─── Weight conversion helpers ─────────────────────────────────────────────
+// ─── Weight helpers ────────────────────────────────────────────────────────
 
 export function weightToGrams(vori = 0, ana = 0, roti = 0, point = 0) {
   const totalPoints =
@@ -74,6 +66,7 @@ export function gramsToWeight(grams) {
   return { vori, ana, roti, point };
 }
 
+/** "2 Vori 4 Ana 3 Roti 2 Point" */
 export function formatWeight(vori = 0, ana = 0, roti = 0, point = 0) {
   const parts = [];
   if (vori)  parts.push(`${vori} Vori`);
@@ -84,7 +77,7 @@ export function formatWeight(vori = 0, ana = 0, roti = 0, point = 0) {
 }
 
 export function formatGrams(grams) {
-  return `${grams.toFixed(4)}g`;
+  return `${Number(grams).toFixed(4)}g`;
 }
 
 // ─── Price calculation ─────────────────────────────────────────────────────
@@ -92,18 +85,27 @@ export function formatGrams(grams) {
 export function calcMarketValue(grams, karat, metal, prices) {
   if (!grams || !prices) return 0;
   let pricePerGram = 0;
-
   if (metal === 'Gold') {
-    const map = { '22K': prices.gold?.karat22, '21K': prices.gold?.karat21, '18K': prices.gold?.karat18, 'Traditional': prices.gold?.traditional, '24K': prices.gold?.karat22 };
+    const map = {
+      '22K':         prices.gold?.karat22,
+      '21K':         prices.gold?.karat21,
+      '18K':         prices.gold?.karat18,
+      'Traditional': prices.gold?.traditional,
+      '24K':         prices.gold?.karat22,
+    };
     pricePerGram = map[karat]?.perGram || prices.gold?.karat22?.perGram || 0;
     if (karat === '24K' && prices.gold?.karat22?.perGram) {
       pricePerGram = Math.round(prices.gold.karat22.perGram / 0.9167);
     }
   } else {
-    const map = { '22K': prices.silver?.karat22, '21K': prices.silver?.karat21, '18K': prices.silver?.karat18, 'Traditional': prices.silver?.traditional };
+    const map = {
+      '22K':         prices.silver?.karat22,
+      '21K':         prices.silver?.karat21,
+      '18K':         prices.silver?.karat18,
+      'Traditional': prices.silver?.traditional,
+    };
     pricePerGram = map[karat]?.perGram || prices.silver?.karat22?.perGram || 0;
   }
-
   return Math.round(pricePerGram * grams);
 }
 
@@ -119,9 +121,39 @@ export function calcPriceBreakdown(grams, karat, metal, prices, deductionPct = 1
 
 // ─── Firestore refs ────────────────────────────────────────────────────────
 
-const jewelleryRef = (uid)     => collection(db, 'users', uid, 'jewellery');
-const pieceRef     = (uid, id) => doc(db, 'users', uid, 'jewellery', id);
-const historyRef   = (uid, id) => collection(db, 'users', uid, 'jewellery', id, 'priceHistory');
+const jewelleryRef  = (uid)     => collection(db, 'users', uid, 'jewellery');
+const pieceRef      = (uid, id) => doc(db, 'users', uid, 'jewellery', id);
+const historyRef    = (uid, id) => collection(db, 'users', uid, 'jewellery', id, 'priceHistory');
+const categoriesRef = (uid)     => collection(db, 'users', uid, 'categories');
+
+// ─── Redemption category ───────────────────────────────────────────────────
+/**
+ * Find (or create) the "Jewellery Redemption" category for this user.
+ * Returns the Firestore doc ID — used as categoryId on jewellery transactions
+ * so they show up properly in the transactions page with a named category.
+ */
+export async function getOrCreateRedemptionCategory(uid) {
+  try {
+    const q    = query(categoriesRef(uid), where('name', '==', 'Jewellery Redemption'));
+    const snap = await getDocs(q);
+
+    if (!snap.empty) return snap.docs[0].id;
+
+    // Create it
+    const ref = await addDoc(categoriesRef(uid), {
+      name:      'Jewellery Redemption',
+      type:      'Both',           // applies to income (sale) and expense (purchase)
+      color:     '#F59E0B',        // amber
+      icon:      'gem',
+      createdAt: serverTimestamp(),
+    });
+    // Write back its own ID (matches existing categoryId field pattern)
+    await updateDoc(ref, { categoryId: ref.id });
+    return ref.id;
+  } catch {
+    return '';
+  }
+}
 
 // ─── CRUD ──────────────────────────────────────────────────────────────────
 
@@ -140,7 +172,7 @@ export async function addJewellery(uid, data) {
   try {
     const ref = await addDoc(jewelleryRef(uid), {
       ...data,
-      status:    data.status    || 'active', // 'active' | 'sold'
+      status:    data.status || 'active',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -172,46 +204,49 @@ export async function deleteJewellery(uid, id) {
 
 // ─── Sell jewellery ────────────────────────────────────────────────────────
 /**
- * Mark a jewellery piece as sold, create an Income transaction, and
- * credit the chosen account balance — all in one call.
- *
- * @param {string} uid
- * @param {string} jewelleryId   - Firestore doc ID of the piece
- * @param {object} sellData      - { saleAmount, saleDate, accountId, accountBalance, accountName, notes }
+ * Mark jewellery as sold, create Income transaction (Jewellery Redemption
+ * category), credit account. Stores saleTransactionId on the piece so
+ * the sale can be fully undone if that transaction is deleted.
  */
 export async function sellJewellery(uid, jewelleryId, sellData) {
   try {
     const { saleAmount, saleDate, accountId, accountBalance, accountName, notes, itemName } = sellData;
 
-    // 1. Mark piece as sold
-    await updateDoc(pieceRef(uid, jewelleryId), {
-      status:    'sold',
-      soldAt:    saleDate,
-      soldPrice: saleAmount,
-      soldNotes: notes || '',
-      soldToAccountId:   accountId   || null,
-      soldToAccountName: accountName || null,
-      updatedAt: serverTimestamp(),
-    });
+    // Get/create category
+    const categoryId = await getOrCreateRedemptionCategory(uid);
 
-    // 2. Record income transaction (same schema as transactions page)
+    // Create income transaction
+    let saleTransactionId = null;
     if (accountId && saleAmount > 0) {
-      await addDoc(collection(db, 'users', uid, 'transactions'), {
+      const txRef = await addDoc(collection(db, 'users', uid, 'transactions'), {
         type:        'Income',
         amount:      parseFloat(saleAmount),
         accountId,
-        categoryId:  '',
-        description: `Sold jewellery: ${itemName || 'Item'}`,
+        categoryId,
+        description: `Jewellery sold: ${itemName || 'Item'}`,
         date:        saleDate,
-        source:      'jewellery_sale',
-        jewelleryId,
+        source:      'jewellery_sale',  // sentinel for undo detection
+        jewelleryId,                    // back-reference for undo
         createdAt:   Timestamp.now(),
       });
+      saleTransactionId = txRef.id;
 
-      // 3. Credit account balance
+      // Credit account
       const newBalance = (Number(accountBalance) || 0) + parseFloat(saleAmount);
       await updateAccount(uid, accountId, { balance: newBalance });
     }
+
+    // Mark piece sold — keep saleTransactionId for undo
+    await updateDoc(pieceRef(uid, jewelleryId), {
+      status:            'sold',
+      soldAt:            saleDate,
+      soldPrice:         parseFloat(saleAmount),
+      soldNotes:         notes || '',
+      soldToAccountId:   accountId   || null,
+      soldToAccountName: accountName || null,
+      saleTransactionId,             // used by unmarkSold
+      updatedAt:         serverTimestamp(),
+    });
 
     return { success: true };
   } catch (err) {
@@ -219,34 +254,60 @@ export async function sellJewellery(uid, jewelleryId, sellData) {
   }
 }
 
-// ─── Record purchase as transaction ───────────────────────────────────────
+// ─── Undo sale ────────────────────────────────────────────────────────────
 /**
- * After adding a jewellery piece, optionally record it as an Expense
- * transaction and deduct the amount from the chosen account.
- *
- * @param {string} uid
- * @param {object} txData - { amount, accountId, accountBalance, accountName, date, itemName }
+ * Revert a jewellery piece back to "active".
+ * Called by the transactions page when a jewellery_sale transaction is deleted.
+ */
+export async function unmarkSold(uid, jewelleryId) {
+  try {
+    await updateDoc(pieceRef(uid, jewelleryId), {
+      status:            'active',
+      soldAt:            null,
+      soldPrice:         null,
+      soldNotes:         null,
+      soldToAccountId:   null,
+      soldToAccountName: null,
+      saleTransactionId: null,
+      updatedAt:         serverTimestamp(),
+    });
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ─── Record purchase as expense transaction ────────────────────────────────
+/**
+ * Optionally called after addJewellery when user wants to record the cost.
+ * Uses "Jewellery Redemption" category and debits chosen account.
  */
 export async function recordJewelleryPurchase(uid, jewelleryId, txData) {
   try {
-    const { amount, accountId, accountBalance, accountName, date, itemName } = txData;
+    const { amount, accountId, accountBalance, date, itemName } = txData;
+    if (!accountId || !amount || amount <= 0) return { success: true };
 
-    if (!accountId || !amount || amount <= 0) return { success: true }; // nothing to do
+    const categoryId = await getOrCreateRedemptionCategory(uid);
 
-    // Create expense transaction
-    await addDoc(collection(db, 'users', uid, 'transactions'), {
+    const txRef = await addDoc(collection(db, 'users', uid, 'transactions'), {
       type:        'Expense',
       amount:      parseFloat(amount),
       accountId,
-      categoryId:  '',
-      description: `Purchased jewellery: ${itemName || 'Item'}`,
+      categoryId,
+      description: `Jewellery purchased: ${itemName || 'Item'}`,
       date:        date || new Date().toISOString().split('T')[0],
       source:      'jewellery_purchase',
       jewelleryId,
       createdAt:   Timestamp.now(),
     });
 
-    // Deduct from account
+    // Store reference on the piece
+    await updateDoc(pieceRef(uid, jewelleryId), {
+      purchaseTransactionId: txRef.id,
+      updatedAt: serverTimestamp(),
+    });
+
+    // Debit account
     const newBalance = (Number(accountBalance) || 0) - parseFloat(amount);
     await updateAccount(uid, accountId, { balance: newBalance });
 
@@ -281,9 +342,8 @@ export async function getPriceHistory(uid, jewelleryId) {
   }
 }
 
-// ─── Aggregation helpers ───────────────────────────────────────────────────
+// ─── Aggregation ───────────────────────────────────────────────────────────
 
-/** Sum total Zakat value — only active (unsold) pieces */
 export function totalJewelleryZakatValue(items) {
   return items
     .filter((i) => i.status !== 'sold')

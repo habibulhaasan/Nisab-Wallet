@@ -16,6 +16,7 @@ import {
 import { db } from '@/lib/firebase';
 import { getAccounts, updateAccount } from '@/lib/firestoreCollections';
 import { getAvailableBalance } from '@/lib/goalUtils';
+import { unmarkSold } from '@/lib/jewelleryCollections';
 import {
   Plus,
   Edit2,
@@ -654,6 +655,11 @@ export default function TransactionsPage() {
         }
 
         await deleteDoc(doc(db, 'users', user.uid, 'transactions', transactionToDelete.id));
+
+        // Jewellery undo: if this was a jewellery_sale, revert the piece back to active.
+        if (transactionToDelete.source === 'jewellery_sale' && transactionToDelete.jewelleryId) {
+          await unmarkSold(user.uid, transactionToDelete.jewelleryId);
+        }
       }
 
       showToast('Deleted successfully', 'success');
