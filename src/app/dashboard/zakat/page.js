@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { getAccounts } from '@/lib/firestoreCollections';
+import { getJewellery, totalJewelleryZakatValue } from '@/lib/jewelleryCollections';
 import {
   collection, addDoc, getDocs, updateDoc, doc,
   query, orderBy, serverTimestamp, where, getDoc
@@ -32,7 +33,7 @@ import {
 import { useSettings, formatAmount } from '@/hooks/useSettings';
 import { showToast } from '@/components/Toast';
 import {
-  Star, Wallet, Calendar, Clock, CheckCircle2, AlertCircle,
+  Star, Wallet, Calendar, Clock, CheckCircle2, AlertCircle, Gem,
   Settings, History, Calculator, ChevronDown, ChevronUp,
   CreditCard, CalendarDays, X, Loader2, Info, Banknote,
   Building2, Smartphone, Coins, HandCoins, TrendingUp, Target,
@@ -50,6 +51,7 @@ export default function ZakatPage() {
   const [loans,           setLoans]           = useState([]);
   const [investments,     setInvestments]     = useState([]);
   const [goals,           setGoals]           = useState([]);
+  const [jewellery,       setJewellery]       = useState([]);
 
   // ── Nisab settings ───────────────────────────────────────────────────────
   const [nisabThreshold,      setNisabThreshold]      = useState(0);
@@ -93,15 +95,17 @@ export default function ZakatPage() {
 
   const loadAllAssets = async () => {
     try {
-      const [accResult, lendSnap, loanSnap, invSnap, goalSnap] = await Promise.all([
+      const [accResult, lendSnap, loanSnap, invSnap, goalSnap, jewResult] = await Promise.all([
         getAccounts(user.uid),
         getDocs(collection(db, 'users', user.uid, 'lendings')),
         getDocs(collection(db, 'users', user.uid, 'loans')),
         getDocs(collection(db, 'users', user.uid, 'investments')),
         getDocs(collection(db, 'users', user.uid, 'financialGoals')),
+        getJewellery(user.uid),   // jewellery pieces with currentZakatValue
       ]);
 
-      const accs = accResult.success ? accResult.accounts : [];
+      const accs  = accResult.success  ? accResult.accounts  : [];
+      const jws   = jewResult.success  ? jewResult.items     : [];
       const lends = lendSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
       const lns   = loanSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
       const invs  = invSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -112,9 +116,11 @@ export default function ZakatPage() {
       setLoans(lns);
       setInvestments(invs);
       setGoals(gls);
+      setJewellery(jws);
 
       const breakdown = calculateZakatableWealth({
-        accounts: accs, lendings: lends, loans: lns, investments: invs, goals: gls,
+        accounts: accs, lendings: lends, loans: lns,
+        investments: invs, goals: gls, jewellery: jws,
       });
       setWealthBreakdown(breakdown);
     } catch (err) {
@@ -539,6 +545,7 @@ export default function ZakatPage() {
             loans={loans}
             investments={investments}
             goals={goals}
+            jewellery={jewellery}
             nisabThreshold={nisabThreshold}
             fmt={fmt}
           />
@@ -549,12 +556,36 @@ export default function ZakatPage() {
               <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
               <div className="text-sm text-blue-800 space-y-1">
                 <p className="font-semibold">How Your Zakat is Calculated</p>
-                <p><strong>Included:</strong> Cash, Bank, Mobile Banking, Gold, Silver accounts + Money lent to others (receivables) + Active investments + Financial goal savings.</p>
+                <p><strong>Included:</strong> Cash, Bank, Mobile Banking, Gold, Silver accounts + Money lent to others (receivables) + Active investments + Financial goal savings + Jewellery (resale value after 15% deduction).</p>
                 <p><strong>Deducted:</strong> Outstanding loan amounts you owe to others.</p>
                 <p><strong>Rate:</strong> 2.5% of net zakatable wealth, once per Hijri year if wealth stays ≥ Nisab.</p>
               </div>
             </div>
           </div>
+
+          {/* Jewellery nudge — shown when jewellery exists but some are unpriced */}
+          {jewellery.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <Gem className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-900">
+                    {jewellery.filter(j => j.currentZakatValue > 0).length} of {jewellery.length} jewellery item{jewellery.length > 1 ? 's' : ''} priced
+                  </p>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    {jewellery.filter(j => !j.currentZakatValue).length > 0
+                      ? `${jewellery.filter(j => !j.currentZakatValue).length} item${jewellery.filter(j => !j.currentZakatValue).length > 1 ? 's' : ''} need a price check to be included in your Zakat total.`
+                      : 'All jewellery items are included in your Zakat total.'
+                    }
+                  </p>
+                </div>
+              </div>
+              <a href="/dashboard/jewellery"
+                className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-colors whitespace-nowrap">
+                <Gem className="w-3.5 h-3.5" /> Jewellery Tracker
+              </a>
+            </div>
+          )}
         </>
       )}
 
@@ -664,7 +695,7 @@ function ActionBlock({ icon, title, body, action }) {
 // WEALTH BREAKDOWN CARD
 // ─────────────────────────────────────────────────────────────────────────────
 
-function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments, goals, nisabThreshold, fmt }) {
+function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments, goals, jewellery = [], nisabThreshold, fmt }) {
   if (!breakdown) return null;
 
   const rows = [
@@ -677,8 +708,19 @@ function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments
     { label: 'Lendings (Receivable)', value: breakdown.lendingsTotal,                        icon: <HandCoins className="w-4 h-4 text-cyan-600" />,        type: 'asset' },
     { label: 'Investments',           value: breakdown.investmentsTotal,                     icon: <TrendingUp className="w-4 h-4 text-pink-600" />,       type: 'asset' },
     { label: 'Savings Goals',         value: breakdown.goalsTotal,                           icon: <Target className="w-4 h-4 text-orange-500" />,         type: 'asset' },
+    {
+      label: breakdown.jewelleryCount > 0
+        ? `Jewellery (${breakdown.jewelleryCount} item${breakdown.jewelleryCount > 1 ? 's' : ''}, −15%)`
+        : 'Jewellery',
+      value: breakdown.jewelleryTotal,
+      icon: <Gem className="w-4 h-4 text-amber-400" />,
+      type: 'asset',
+      note: breakdown.jewelleryCount === 0 && jewellery.length > 0
+        ? `${jewellery.length} item${jewellery.length > 1 ? 's' : ''} not yet priced`
+        : null,
+    },
     { label: 'Loans (Liability)',     value: breakdown.loansTotal,                           icon: <Minus className="w-4 h-4 text-red-500" />,             type: 'liability' },
-  ].filter((r) => r.value > 0);
+  ].filter((r) => r.value > 0 || r.note);
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
@@ -701,10 +743,17 @@ function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments
               <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0">{row.icon}</div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-gray-700">{row.label}</p>
+                {row.note && (
+                  <p className="text-xs text-amber-600 font-medium mt-0.5">⚠ {row.note} — check price in Jewellery Tracker</p>
+                )}
               </div>
-              <p className={`font-semibold text-sm ${row.type === 'liability' ? 'text-red-600' : 'text-gray-800'}`}>
-                {row.type === 'liability' ? '−' : '+'} {fmt(row.value)}
-              </p>
+              {row.value > 0 ? (
+                <p className={`font-semibold text-sm ${row.type === 'liability' ? 'text-red-600' : 'text-gray-800'}`}>
+                  {row.type === 'liability' ? '−' : '+'} {fmt(row.value)}
+                </p>
+              ) : (
+                <p className="text-xs text-gray-400 italic">Not priced</p>
+              )}
             </div>
           ))
         )}
