@@ -270,10 +270,11 @@ export default function NisabSettingsModal({
                   deducted={applyDeduction}
                 />
                 <PriceCard
-                  label="Silver (22K)" color="slate"
+                  label="Silver (Traditional)" color="slate"
                   perGram={autoSilverGram} perVori={autoSilverVori}
                   rawPerGram={apiData.primarySilver.perGram}
                   deducted={applyDeduction}
+                  note="★ Used for Nisab calculation"
                 />
               </div>
 
@@ -466,7 +467,7 @@ function NisabResultCard({ nisab, deducted }) {
         </div>
         <p className="text-3xl font-bold tracking-tight">{fmtBDT(nisab)}</p>
         <p className="text-emerald-200 text-xs mt-1.5">
-          52.5 Tola (612.36g) of 22K silver{deducted ? ' × 0.85' : ''}
+          52.5 Tola (612.36g) × Traditional silver{deducted ? ' × 0.85 (−15%)' : ''}
         </p>
       </div>
     </div>
@@ -476,7 +477,7 @@ function NisabResultCard({ nisab, deducted }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // PriceCard
 // ─────────────────────────────────────────────────────────────────────────────
-function PriceCard({ label, color, perGram, perVori, rawPerGram, deducted }) {
+function PriceCard({ label, color, perGram, perVori, rawPerGram, deducted, note }) {
   const s = {
     amber: { bg: 'bg-amber-50', border: 'border-amber-100', dot: 'bg-amber-400', text: 'text-amber-700' },
     slate: { bg: 'bg-slate-50', border: 'border-slate-100', dot: 'bg-slate-400', text: 'text-slate-600' },
@@ -497,6 +498,7 @@ function PriceCard({ label, color, perGram, perVori, rawPerGram, deducted }) {
           <p className="text-xs text-gray-400 mb-0.5">Per vori</p>
           <p className="font-bold text-gray-900">{fmtBDT(perVori)}</p>
         </div>
+        {note && <p className="text-xs text-emerald-600 font-medium pt-0.5">{note}</p>}
       </div>
     </div>
   );
@@ -509,7 +511,7 @@ function AllKaratsTable({ data, applyDeduction }) {
   const adj = (n) => n ? (applyDeduction ? Math.round(n * 0.85) : n) : null;
 
   const goldRows   = [['22K', data.gold.karat22], ['21K', data.gold.karat21], ['18K', data.gold.karat18], ['Traditional', data.gold.traditional]];
-  const silverRows = [['22K', data.silver.karat22], ['21K', data.silver.karat21], ['18K', data.silver.karat18]];
+  const silverRows = [['22K', data.silver.karat22], ['21K', data.silver.karat21], ['18K', data.silver.karat18], ['Traditional ★', data.silver.traditional]];
 
   return (
     <div className="space-y-3">
@@ -537,13 +539,16 @@ function AllKaratsTable({ data, applyDeduction }) {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(([k, p]) => (
-                  <tr key={k} className={`border-b ${s.row} last:border-0`}>
-                    <td className="px-4 py-2.5 font-medium text-gray-700">{k}</td>
-                    <td className="px-4 py-2.5 text-right font-semibold text-gray-800">{fmtBDT(adj(p?.perGram))}</td>
-                    <td className="px-4 py-2.5 text-right font-semibold text-gray-800">{fmtBDT(adj(p?.perVori))}</td>
-                  </tr>
-                ))}
+                {rows.map(([k, p]) => {
+                  const isNisabRow = k === 'Traditional ★';
+                  return (
+                    <tr key={k} className={`border-b ${s.row} last:border-0 ${isNisabRow ? 'bg-emerald-50' : ''}`}>
+                      <td className={`px-4 py-2.5 font-medium ${isNisabRow ? 'text-emerald-700' : 'text-gray-700'}`}>{k}</td>
+                      <td className={`px-4 py-2.5 text-right font-semibold ${isNisabRow ? 'text-emerald-800' : 'text-gray-800'}`}>{fmtBDT(adj(p?.perGram))}</td>
+                      <td className={`px-4 py-2.5 text-right font-semibold ${isNisabRow ? 'text-emerald-800' : 'text-gray-800'}`}>{fmtBDT(adj(p?.perVori))}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
