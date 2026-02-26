@@ -163,12 +163,22 @@ export async function GET() {
     }
   }
 
-  const s22g = data.silver.karat22.perGram;
-  const s22v = data.silver.karat22.perVori;
-  const g22g = data.gold.karat22.perGram;
-  const g22v = data.gold.karat22.perVori;
+  const g22g  = data.gold.karat22.perGram;
+  const g22v  = data.gold.karat22.perVori;
 
-  const nisabFull    = Math.round(s22g * NISAB_SILVER_GRAMS);
+  // Nisab is always calculated from Traditional (Sanaton) silver —
+  // the standard Islamic reference is pure silver equivalent, not jewellery grade.
+  // Traditional silver is the closest to raw silver price in BAJUS pricing.
+  const stg   = data.silver.traditional.perGram;  // Traditional silver per gram
+  const stv   = data.silver.traditional.perVori;  // Traditional silver per vori
+
+  // Fallback: if Traditional silver not fetched, use lowest available karat
+  const nisabBase = stg
+    ?? data.silver.karat18?.perGram
+    ?? data.silver.karat21?.perGram
+    ?? data.silver.karat22?.perGram;
+
+  const nisabFull    = Math.round(nisabBase * NISAB_SILVER_GRAMS);
   const nisabMinus15 = Math.round(nisabFull * 0.85);
 
   return Response.json({
@@ -188,18 +198,20 @@ export async function GET() {
       perGramMinus15: Math.round(g22g * 0.85),
       perVoriMinus15: Math.round(g22v * 0.85),
     },
+    // primarySilver = Traditional silver (used for Nisab calculation)
     primarySilver: {
-      perGram:        s22g,
-      perVori:        s22v,
-      perGramMinus15: Math.round(s22g * 0.85),
-      perVoriMinus15: Math.round(s22v * 0.85),
+      perGram:        stg,
+      perVori:        stv,
+      perGramMinus15: stg ? Math.round(stg * 0.85) : null,
+      perVoriMinus15: stv ? Math.round(stv * 0.85) : null,
     },
     nisab: {
       full:         nisabFull,
       withMinus15:  nisabMinus15,
       silverGrams:  NISAB_SILVER_GRAMS,
       silverVori:   52.5,
-      silverKarat:  '22K',
+      silverKarat:  'Traditional',
+      basePricePerGram: nisabBase,
     },
   });
 }
