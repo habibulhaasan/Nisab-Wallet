@@ -10,7 +10,7 @@ import {
   LogOut, Menu, X, ArrowRightLeft, Settings, 
   Users, Package, DollarSign, Globe, Sprout,
   HandCoins, MessageCircleQuestion, Goal, Blend, MessageSquareMore,
-  Home, Repeat, FileText, ShoppingBag, PiggyBank, Gem,
+  Home, Repeat ,FileText, ShoppingBag, PiggyBank, AlertTriangle
 } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
 import { checkIsAdmin } from '@/lib/adminUtils';
@@ -56,11 +56,11 @@ export default function DashboardNav() {
       { name: 'Lend', href: '/dashboard/lendings', icon: Blend },
       { name: 'Goals', href: '/dashboard/goals', icon: Goal },
       { name: 'Investments', href: '/dashboard/investments', icon: Sprout },
-      { name: 'Zakat',        href: '/dashboard/zakat',      icon: Star },
-      { name: 'Jewellery',    href: '/dashboard/jewellery',  icon: Gem  },
+      { name: 'Zakat', href: '/dashboard/zakat', icon: Star },
       { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
       { name: 'Recurring', href: '/dashboard/recurring', icon: Repeat},
-      { name: 'Tax File', href: '/dashboard/tax', icon: FileText}
+      { name: 'Tax File', href: '/dashboard/tax', icon: FileText},
+      { name: 'Riba Tracker', href: '/dashboard/riba', icon: AlertTriangle },
 
     ],
     other: [

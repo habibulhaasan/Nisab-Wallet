@@ -13,7 +13,8 @@ import { showToast } from '@/components/Toast';
 const DEFAULT_INCOME_CATEGORIES = [
   { name: 'Salary', type: 'Income', color: '#10B981', isDefault: true },
   { name: 'Bonus', type: 'Income', color: '#3B82F6', isDefault: true },
-  { name: 'Loan', type: 'Income', color: '#F59E0B', isDefault: true }
+  { name: 'Loan', type: 'Income', color: '#F59E0B', isDefault: true },
+  { name: 'Interest / Riba', type: 'Income', color: '#F59E0B', isDefault: true, isRiba: true },
 ];
 
 const DEFAULT_EXPENSE_CATEGORIES = [
@@ -287,7 +288,12 @@ export default function CategoriesPage() {
                       <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: category.color + '20' }}>
                         <div className="w-3 h-3 rounded-full" style={{ backgroundColor: category.color }}></div>
                       </div>
-                      <span className="text-sm font-medium text-gray-900">{category.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-900">{category.name}</span>
+                        {category.isRiba && (
+                          <span className="px-1.5 py-0.5 text-[9px] font-bold bg-amber-100 text-amber-700 rounded-full border border-amber-200">RIBA</span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center space-x-1">
                       <button onClick={() => handleEdit(category)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded">
