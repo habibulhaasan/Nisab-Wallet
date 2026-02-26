@@ -117,12 +117,15 @@ export const calculateZakatableWealth = ({
   loans = [],
   investments = [],
   goals = [],
+  jewellery = [],   // jewellery pieces with currentZakatValue (after 15% deduction)
 }) => {
   const breakdown = {
     accountsTotal: 0,      // sum of all account balances
     lendingsTotal: 0,      // money lent to others (receivable)
     investmentsTotal: 0,   // current value of active investments
     goalsTotal: 0,         // savings in active financial goals
+    jewelleryTotal: 0,     // jewellery resale value (after BAJUS deduction)
+    jewelleryCount: 0,     // number of pieces with a priced value
     totalAssets: 0,
     loansTotal: 0,         // outstanding loans (liability — deducted)
     netZakatableWealth: 0,
@@ -131,12 +134,22 @@ export const calculateZakatableWealth = ({
   };
 
   // ── Accounts ───────────────────────────────────────────────────────────
+  // Normalize account type to lowercase key so the breakdown card keys match.
+  // Firestore stores types like 'Cash', 'Bank', 'Mobile Banking', 'Gold', 'Silver'
+  // but breakdown keys must be 'cash', 'bank', 'mobile_banking', 'gold', 'silver'.
+  const normalizeType = (raw) => {
+    if (!raw) return 'other';
+    const t = raw.trim();
+    if (t === 'Mobile Banking' || t === 'mobile_banking' || t === 'mobile banking') return 'mobile_banking';
+    return t.toLowerCase().replace(/\s+/g, '_');
+  };
+
   accounts.forEach((acc) => {
     const bal = Number(acc.balance) || 0;
     if (bal <= 0) return;
     breakdown.accountsTotal += bal;
-    const type = acc.type || 'other';
-    breakdown.accountBreakdown[type] = (breakdown.accountBreakdown[type] || 0) + bal;
+    const typeKey = normalizeType(acc.type);
+    breakdown.accountBreakdown[typeKey] = (breakdown.accountBreakdown[typeKey] || 0) + bal;
   });
 
   // ── Lendings (Receivables) ─────────────────────────────────────────────
@@ -175,12 +188,23 @@ export const calculateZakatableWealth = ({
     breakdown.goalsTotal += saved;
   });
 
+  // ── Jewellery ─────────────────────────────────────────────────────────
+  // currentZakatValue = deducted resale value saved in the last price snapshot
+  // Only count pieces that have been priced (currentZakatValue > 0)
+  jewellery.forEach((piece) => {
+    const val = Number(piece.currentZakatValue) || 0;
+    if (val <= 0) return;
+    breakdown.jewelleryTotal += val;
+    breakdown.jewelleryCount += 1;
+  });
+
   // ── Totals ────────────────────────────────────────────────────────────
   breakdown.totalAssets =
     breakdown.accountsTotal +
     breakdown.lendingsTotal +
     breakdown.investmentsTotal +
-    breakdown.goalsTotal;
+    breakdown.goalsTotal +
+    breakdown.jewelleryTotal;
 
   // Net = Assets − Liabilities (never negative for Zakat purposes)
   breakdown.netZakatableWealth = Math.max(
