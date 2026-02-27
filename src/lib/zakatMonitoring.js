@@ -1,409 +1,471 @@
 // src/lib/zakatMonitoring.js
-// Updated to use calculateZakatableWealth for comprehensive wealth calculation
 import {
   collection, addDoc, getDocs, updateDoc, doc,
-  query, where, orderBy, serverTimestamp, writeBatch, getDoc
+  query, where, orderBy, serverTimestamp, getDoc,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { generateId } from './firestoreCollections';
+import { generateId, updateAccount } from './firestoreCollections';
 import {
-  gregorianToHijri, hasOneHijriYearPassed, addOneHijriYear,
-  calculateZakatableWealth
+  gregorianToHijri,
+  hasOneHijriYearPassed,
+  generateInstallmentSchedule,
 } from './zakatUtils';
 
-/**
- * Fetch all wealth data for a user and compute zakatable wealth.
- * Used both for cycle management and for display.
- */
-export const fetchAndCalculateWealth = async (userId) => {
+// ─────────────────────────────────────────────────────────────────────────────
+// INTERNAL HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Get or auto-create the "Zakat Payment" expense category. Returns its doc ID. */
+const getOrCreateZakatCategory = async (userId) => {
   try {
-    const [accountsSnap, lendingsSnap, loansSnap, investmentsSnap, goalsSnap] =
-      await Promise.all([
-        getDocs(collection(db, 'users', userId, 'accounts')),
-        getDocs(collection(db, 'users', userId, 'lendings')),
-        getDocs(collection(db, 'users', userId, 'loans')),
-        getDocs(collection(db, 'users', userId, 'investments')),
-        getDocs(collection(db, 'users', userId, 'financialGoals')),
-      ]);
-
-    const accounts    = accountsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    const lendings    = lendingsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    const loans       = loansSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    const investments = investmentsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    const goals       = goalsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-    const breakdown = calculateZakatableWealth({ accounts, lendings, loans, investments, goals });
-
-    return { success: true, breakdown, accounts, lendings, loans, investments, goals };
-  } catch (error) {
-    console.error('Error fetching wealth data:', error);
-    return { success: false, breakdown: null, error: error.message };
+    const ref  = collection(db, 'users', userId, 'categories');
+    const snap = await getDocs(query(ref, where('name', '==', 'Zakat Payment')));
+    if (!snap.empty) return snap.docs[0].id;
+    const d = await addDoc(ref, {
+      name:       'Zakat Payment',
+      type:       'Expense',
+      color:      '#10B981',
+      categoryId: generateId(),
+      isSystem:   true,
+      createdAt:  serverTimestamp(),
+    });
+    return d.id;
+  } catch (err) {
+    console.error('getOrCreateZakatCategory:', err);
+    return null;
   }
 };
 
-/**
- * Check if we should start a new Zakat cycle.
- * Now uses comprehensive zakatable wealth (not just account balances).
- */
-export const checkAndStartZakatCycle = async (userId, nisabThreshold, checkDate) => {
-  if (!nisabThreshold || nisabThreshold === 0) return { cycleStarted: false };
+// ─────────────────────────────────────────────────────────────────────────────
+// CYCLE MANAGEMENT
+// ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Start a new active Zakat cycle if none exists.
+ * Silently skips if an active cycle already exists.
+ */
+export const checkAndStartZakatCycle = async (userId, totalWealth, nisabThreshold, checkDate) => {
+  if (!nisabThreshold || totalWealth < nisabThreshold) return { cycleStarted: false };
   try {
-    // Check if active cycle exists
     const cyclesRef = collection(db, 'users', userId, 'zakatCycles');
-    const activeSnap = await getDocs(query(cyclesRef, where('status', '==', 'active')));
-    if (!activeSnap.empty) return { cycleStarted: false, reason: 'Active cycle exists' };
+    const snap      = await getDocs(query(cyclesRef, where('status', '==', 'active')));
+    if (!snap.empty) return { cycleStarted: false, reason: 'Active cycle exists' };
 
-    // Calculate comprehensive wealth
-    const { breakdown } = await fetchAndCalculateWealth(userId);
-    if (!breakdown || breakdown.netZakatableWealth < nisabThreshold) {
-      return { cycleStarted: false, reason: 'Wealth below Nisab' };
-    }
-
-    // Start new cycle
-    const dateToCheck = checkDate || new Date().toISOString().split('T')[0];
-    const hijriDate   = gregorianToHijri(dateToCheck);
-    const cycleId     = generateId();
-
-    const newCycle = {
-      cycleId,
-      status:          'active',
-      startDate:       dateToCheck,
-      startDateHijri:  hijriDate,
-      startWealth:     breakdown.netZakatableWealth,
-      startBreakdown:  breakdown,
-      nisabAtStart:    nisabThreshold,
-      createdAt:       serverTimestamp(),
-    };
-
-    await addDoc(cyclesRef, newCycle);
-    return { cycleStarted: true, cycle: newCycle, wealth: breakdown.netZakatableWealth };
-  } catch (error) {
-    console.error('Error starting cycle:', error);
-    return { cycleStarted: false, error: error.message };
-  }
-};
-
-/**
- * Check if active cycle should be completed (Hijri year ended).
- */
-export const checkCycleCompletion = async (userId, activeCycle, nisabThreshold) => {
-  if (!activeCycle || activeCycle.status !== 'active') return { completed: false };
-  if (!hasOneHijriYearPassed(activeCycle.startDate)) return { completed: false };
-
-  try {
-    const { breakdown } = await fetchAndCalculateWealth(userId);
-    const currentWealth = breakdown?.netZakatableWealth || 0;
-    const isDue         = currentWealth >= nisabThreshold;
-    const newStatus     = isDue ? 'due' : 'exempt';
-    const dateToCheck   = new Date().toISOString().split('T')[0];
-    const hijriDate     = gregorianToHijri(dateToCheck);
-
-    await updateDoc(doc(db, 'users', userId, 'zakatCycles', activeCycle.id), {
-      status:            newStatus,
-      endDate:           dateToCheck,
-      endDateHijri:      hijriDate,
-      endWealth:         currentWealth,
-      endBreakdown:      breakdown,
-      zakatDue:          isDue ? currentWealth * 0.025 : 0,
-      yearCompletedAt:   serverTimestamp(),
-    });
-
-    return {
-      completed:   true,
-      status:      newStatus,
-      isDue,
-      zakatAmount: isDue ? currentWealth * 0.025 : 0,
-    };
-  } catch (error) {
-    console.error('Error completing cycle:', error);
-    return { completed: false, error: error.message };
-  }
-};
-
-/**
- * Record a Zakat payment (instant) and create a transaction record.
- * Updates cycle status to 'paid'.
- */
-export const recordZakatPayment = async (userId, {
-  cycleId, cycleDocId, zakatAmount, fromAccountId, fromAccountName,
-  fromAccountBalance, paymentMethod, recipient, note,
-}) => {
-  try {
-    const batch   = writeBatch(db);
-    const today   = new Date().toISOString().split('T')[0];
-    const hijriDate = gregorianToHijri(today);
-
-    // 1. Record Zakat payment document
-    const paymentRef = doc(collection(db, 'users', userId, 'zakatPayments'));
-    batch.set(paymentRef, {
-      cycleId,
-      type:            'instant',
-      totalAmount:     zakatAmount,
-      paidAmount:      zakatAmount,
-      remainingAmount: 0,
-      fromAccountId,
-      fromAccountName,
-      paymentMethod:   paymentMethod || 'cash',
-      recipient:       recipient || '',
-      note:            note || '',
-      status:          'completed',
-      paymentDate:     today,
-      paymentDateHijri: hijriDate,
-      createdAt:       serverTimestamp(),
-    });
-
-    // 2. Create expense transaction so it appears in financial history
-    const txRef = doc(collection(db, 'users', userId, 'transactions'));
-    batch.set(txRef, {
-      type:           'Expense',
-      categoryName:   'Zakat',
-      categoryId:     'zakat-system',
-      accountId:      fromAccountId,
-      accountName:    fromAccountName,
-      amount:         zakatAmount,
-      note:           note || `Zakat payment — ${hijriDate.day}/${hijriDate.month}/${hijriDate.year} AH`,
-      date:           today,
-      isZakatPayment: true,
-      zakatPaymentId: paymentRef.id,
+    const date      = checkDate || new Date().toISOString().split('T')[0];
+    const hijri     = gregorianToHijri(date);
+    const newCycle  = {
+      cycleId:        generateId(),
+      status:         'active',
+      startDate:      date,
+      startDateHijri: hijri,
+      startWealth:    totalWealth,
+      nisabAtStart:   nisabThreshold,
+      paymentStatus:  'unpaid',
+      payments:       [],
+      totalPaid:      0,
       createdAt:      serverTimestamp(),
-    });
-
-    // 3. Deduct from account balance
-    const accRef  = doc(db, 'users', userId, 'accounts', fromAccountId);
-    batch.update(accRef, {
-      balance:   Math.max(0, fromAccountBalance - zakatAmount),
-      updatedAt: serverTimestamp(),
-    });
-
-    // 4. Update cycle status to 'paid'
-    const cycleRef = doc(db, 'users', userId, 'zakatCycles', cycleDocId);
-    batch.update(cycleRef, {
-      status:        'paid',
-      paymentStatus: 'paid',
-      endDate:       today,
-      endDateHijri:  hijriDate,
-      zakatPaid:     zakatAmount,
-      paymentId:     paymentRef.id,
-      paidAt:        serverTimestamp(),
-    });
-
-    await batch.commit();
-    return { success: true, paymentId: paymentRef.id, transactionId: txRef.id };
-  } catch (error) {
-    console.error('Error recording Zakat payment:', error);
-    return { success: false, error: error.message };
+    };
+    await addDoc(cyclesRef, newCycle);
+    return { cycleStarted: true };
+  } catch (err) {
+    console.error('checkAndStartZakatCycle:', err);
+    return { cycleStarted: false, error: err.message };
   }
 };
 
 /**
- * Set up an installment plan for Zakat payment.
- * Creates a zakatPayments doc with the schedule; each installment paid separately.
+ * Called on page load / after each data refresh.
+ * If an active cycle's Hijri year has passed:
+ *   • Marks it as 'due' (wealth ≥ nisab) or 'exempt'
+ *   • Immediately starts a NEW active cycle if wealth ≥ nisab
+ *     (regardless of whether the previous zakat has been paid)
+ * Returns { acted: true } if it made any change, { acted: false } otherwise.
  */
-export const setupZakatInstallments = async (userId, {
-  cycleId, cycleDocId, zakatAmount, fromAccountId, fromAccountName,
-  numberOfInstallments, paymentMethod, recipient, note,
-}) => {
-  try {
-    const today    = new Date().toISOString().split('T')[0];
-    const schedule = [];
-    const baseAmount = Math.round((zakatAmount / numberOfInstallments) * 100) / 100;
+export const autoCompleteCycleIfYearPassed = async (
+  userId, activeCycle, currentWealth, nisabThreshold, wealthBreakdown
+) => {
+  if (!activeCycle || activeCycle.status !== 'active') return { acted: false };
+  if (!hasOneHijriYearPassed(activeCycle.startDate))   return { acted: false };
 
-    for (let i = 0; i < numberOfInstallments; i++) {
-      const dueDate = new Date();
-      dueDate.setMonth(dueDate.getMonth() + i);
-      schedule.push({
-        installmentNumber: i + 1,
-        amount:   i === numberOfInstallments - 1
-          ? Math.round((zakatAmount - baseAmount * (numberOfInstallments - 1)) * 100) / 100
-          : baseAmount,
-        dueDate:    dueDate.toISOString().split('T')[0],
-        status:    'pending',
-        paidDate:  null,
-        paidAmount: null,
+  try {
+    const today  = new Date().toISOString().split('T')[0];
+    const hijri  = gregorianToHijri(today);
+    const isDue  = currentWealth >= nisabThreshold;
+
+    // 1. Close current cycle
+    await updateDoc(doc(db, 'users', userId, 'zakatCycles', activeCycle.id), {
+      status:          isDue ? 'due' : 'exempt',
+      endDate:         today,
+      endDateHijri:    hijri,
+      endWealth:       currentWealth,
+      zakatDue:        isDue ? currentWealth * 0.025 : 0,
+      yearCompletedAt: serverTimestamp(),
+    });
+
+    // 2. Auto-start new cycle if wealth still ≥ nisab
+    if (isDue && nisabThreshold > 0) {
+      await addDoc(collection(db, 'users', userId, 'zakatCycles'), {
+        cycleId:        generateId(),
+        status:         'active',
+        startDate:      today,
+        startDateHijri: hijri,
+        startWealth:    currentWealth,
+        startBreakdown: wealthBreakdown || null,
+        nisabAtStart:   nisabThreshold,
+        paymentStatus:  'unpaid',
+        payments:       [],
+        totalPaid:      0,
+        createdAt:      serverTimestamp(),
       });
     }
 
-    const paymentRef = await addDoc(
-      collection(db, 'users', userId, 'zakatPayments'),
-      {
-        cycleId,
-        type:                 'installment',
-        totalAmount:          zakatAmount,
-        paidAmount:           0,
-        remainingAmount:      zakatAmount,
-        fromAccountId,
-        fromAccountName,
-        paymentMethod:        paymentMethod || 'cash',
-        recipient:            recipient || '',
-        note:                 note || '',
-        numberOfInstallments,
-        status:               'active',
-        installments:         schedule,
-        createdAt:            serverTimestamp(),
-        updatedAt:            serverTimestamp(),
-      }
-    );
+    return { acted: true, isDue, zakatDue: isDue ? currentWealth * 0.025 : 0 };
+  } catch (err) {
+    console.error('autoCompleteCycleIfYearPassed:', err);
+    return { acted: false, error: err.message };
+  }
+};
 
-    // Update cycle to show installment plan started
-    await updateDoc(doc(db, 'users', userId, 'zakatCycles', cycleDocId), {
-      paymentStatus: 'installment-active',
-      paymentId:     paymentRef.id,
-      updatedAt:     serverTimestamp(),
+// Kept for legacy compatibility
+export const completeCycleAndAutoStart = autoCompleteCycleIfYearPassed;
+export const checkCycleCompletion = autoCompleteCycleIfYearPassed;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAYMENT — FULL / PARTIAL
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Record a Zakat payment (full or partial).
+ *
+ * Steps:
+ *  1. Deduct amount from chosen account
+ *  2. Create an Expense transaction under "Zakat Payment" category
+ *  3. Append payment to cycle's payments[] array; mark cycle 'paid' if fully settled
+ *  4. If fully paid AND wealth ≥ nisab → auto-start new cycle
+ */
+export const recordZakatPayment = async (userId, opts) => {
+  const {
+    cycleDocId,
+    zakatDueTotal,         // total zakat due for the cycle (to detect full payment)
+    paymentAmount,
+    fromAccountId,
+    fromAccountName   = '',
+    fromAccountBalance,
+    paymentDate       = new Date().toISOString().split('T')[0],
+    recipient         = '',
+    note              = '',
+    nisabThreshold    = 0,
+    currentWealth     = 0,
+    wealthBreakdown   = null,
+  } = opts;
+
+  if (!fromAccountId)                 return { success: false, error: 'No account selected.'     };
+  if (!paymentAmount || paymentAmount <= 0) return { success: false, error: 'Invalid amount.'    };
+  if (paymentAmount > fromAccountBalance)   return { success: false, error: 'Insufficient balance.' };
+
+  try {
+    // 1. Deduct from account
+    await updateAccount(userId, fromAccountId, {
+      balance: fromAccountBalance - paymentAmount,
     });
 
-    return { success: true, paymentId: paymentRef.id, schedule };
-  } catch (error) {
-    console.error('Error setting up installments:', error);
-    return { success: false, error: error.message };
+    // 2. Expense transaction
+    const catId = await getOrCreateZakatCategory(userId);
+    const desc  = ['Zakat payment',
+      recipient ? `to ${recipient}` : '',
+      note       ? `— ${note}`      : '',
+    ].filter(Boolean).join(' ');
+
+    await addDoc(collection(db, 'users', userId, 'transactions'), {
+      type:           'Expense',
+      amount:         paymentAmount,
+      accountId:      fromAccountId,
+      categoryId:     catId,
+      description:    desc || 'Zakat payment',
+      date:           paymentDate,
+      isZakatPayment: true,
+      zakatCycleId:   cycleDocId,
+      createdAt:      serverTimestamp(),
+    });
+
+    // 3. Update cycle
+    const cycleRef  = doc(db, 'users', userId, 'zakatCycles', cycleDocId);
+    const cycleSnap = await getDoc(cycleRef);
+    const cycleData = cycleSnap.exists() ? cycleSnap.data() : {};
+    const prevPmts  = cycleData.payments || [];
+
+    const newPmt = {
+      paymentId:    generateId(),
+      amount:       paymentAmount,
+      accountId:    fromAccountId,
+      accountName:  fromAccountName,
+      date:         paymentDate,
+      recipient,
+      note,
+      recordedAt:   new Date().toISOString(),
+    };
+    const allPmts      = [...prevPmts, newPmt];
+    const totalPaidNow = allPmts.reduce((s, p) => s + (p.amount || 0), 0);
+    const isFullyPaid  = zakatDueTotal > 0 && totalPaidNow >= zakatDueTotal;
+
+    await updateDoc(cycleRef, {
+      payments:        allPmts,
+      totalPaid:       totalPaidNow,
+      zakatPaid:       totalPaidNow,
+      lastPaymentDate: paymentDate,
+      ...(isFullyPaid ? {
+        status:       'paid',
+        endDate:      paymentDate,
+        endDateHijri: gregorianToHijri(paymentDate),
+        endWealth:    currentWealth,
+        paidAt:       serverTimestamp(),
+      } : {}),
+    });
+
+    // 4. If fully paid AND wealth ≥ nisab → auto-start new cycle
+    if (isFullyPaid && currentWealth >= nisabThreshold && nisabThreshold > 0) {
+      const today = new Date().toISOString().split('T')[0];
+      const hijri = gregorianToHijri(today);
+      await addDoc(collection(db, 'users', userId, 'zakatCycles'), {
+        cycleId:        generateId(),
+        status:         'active',
+        startDate:      today,
+        startDateHijri: hijri,
+        startWealth:    currentWealth,
+        startBreakdown: wealthBreakdown || null,
+        nisabAtStart:   nisabThreshold,
+        paymentStatus:  'unpaid',
+        payments:       [],
+        totalPaid:      0,
+        createdAt:      serverTimestamp(),
+      });
+    }
+
+    return { success: true, isFullyPaid, totalPaid: totalPaidNow };
+  } catch (err) {
+    console.error('recordZakatPayment:', err);
+    return { success: false, error: err.message };
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INSTALLMENT PLAN
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Create an installment payment plan for a cycle.
+ * No money is deducted yet — each installment is paid separately.
+ */
+export const setupZakatInstallments = async (userId, opts) => {
+  const {
+    cycleDocId,
+    zakatAmount,
+    fromAccountId,
+    fromAccountName      = '',
+    numberOfInstallments,
+    paymentDate          = new Date().toISOString().split('T')[0],
+    recipient            = '',
+    note                 = '',
+  } = opts;
+
+  if (!fromAccountId)         return { success: false, error: 'No account selected.'      };
+  if (numberOfInstallments < 1) return { success: false, error: 'Invalid installment count.' };
+
+  try {
+    const schedule = generateInstallmentSchedule(zakatAmount, numberOfInstallments);
+    const per      = Math.round((zakatAmount / numberOfInstallments) * 100) / 100;
+
+    const planDoc = {
+      paymentId:            generateId(),
+      cycleDocId,
+      type:                 'installment',
+      status:               'active',
+      totalAmount:          zakatAmount,
+      numberOfInstallments,
+      perInstallmentAmount: per,
+      paidAmount:           0,
+      remainingAmount:      zakatAmount,
+      fromAccountId,
+      fromAccountName,
+      recipient,
+      note,
+      startDate:            paymentDate,
+      installments:         schedule,
+      createdAt:            serverTimestamp(),
+    };
+
+    const ref = await addDoc(
+      collection(db, 'users', userId, 'zakatPayments'), planDoc
+    );
+
+    await updateDoc(doc(db, 'users', userId, 'zakatCycles', cycleDocId), {
+      paymentStatus: 'installment_plan',
+      paymentPlanId: ref.id,
+    });
+
+    return { success: true, paymentDocId: ref.id };
+  } catch (err) {
+    console.error('setupZakatInstallments:', err);
+    return { success: false, error: err.message };
   }
 };
 
 /**
  * Pay a single installment.
- * Deducts from account, records transaction, updates installment status.
+ * Deducts from account, records expense transaction with installment info in note.
  */
-export const payZakatInstallment = async (userId, {
-  paymentDocId, installmentIndex, accountBalance,
-}) => {
+export const payZakatInstallment = async (userId, opts) => {
+  const { paymentDocId, installmentIndex, accountBalance, accountId } = opts;
+
   try {
-    const payRef  = doc(db, 'users', userId, 'zakatPayments', paymentDocId);
-    const paySnap = await getDoc(payRef);
-    if (!paySnap.exists()) throw new Error('Payment record not found');
+    const planRef  = doc(db, 'users', userId, 'zakatPayments', paymentDocId);
+    const planSnap = await getDoc(planRef);
+    if (!planSnap.exists()) return { success: false, error: 'Payment plan not found.' };
 
-    const payment      = paySnap.data();
-    const installments = [...payment.installments];
+    const plan         = planSnap.data();
+    const installments = [...plan.installments];
     const inst         = installments[installmentIndex];
-    if (!inst || inst.status === 'paid') throw new Error('Installment already paid or not found');
+    if (!inst)                  return { success: false, error: 'Installment not found.' };
+    if (inst.status === 'paid') return { success: false, error: 'Already paid.'          };
 
-    const today     = new Date().toISOString().split('T')[0];
-    const hijriDate = gregorianToHijri(today);
+    const accId  = accountId || plan.fromAccountId;
+    const accBal = typeof accountBalance === 'number' ? accountBalance : 0;
+    if (inst.amount > accBal)   return { success: false, error: 'Insufficient balance.'  };
 
-    installments[installmentIndex] = {
-      ...inst,
-      status:    'paid',
-      paidDate:  today,
-      paidAmount: inst.amount,
-    };
+    const today   = new Date().toISOString().split('T')[0];
+    const instNote = `Installment ${inst.installmentNumber} of ${plan.numberOfInstallments}` +
+                     (plan.note ? ` — ${plan.note}` : '');
 
-    const totalPaid      = installments.filter((i) => i.status === 'paid').reduce((s, i) => s + i.amount, 0);
-    const remaining      = Math.max(0, payment.totalAmount - totalPaid);
-    const isFullyPaid    = remaining <= 0;
+    // 1. Deduct from account
+    await updateAccount(userId, accId, { balance: accBal - inst.amount });
 
-    const batch = writeBatch(db);
-
-    // Update payment doc
-    batch.update(payRef, {
-      installments,
-      paidAmount:      totalPaid,
-      remainingAmount: remaining,
-      status:          isFullyPaid ? 'completed' : 'active',
-      updatedAt:       serverTimestamp(),
-    });
-
-    // Create transaction for this installment
-    const txRef = doc(collection(db, 'users', userId, 'transactions'));
-    batch.set(txRef, {
+    // 2. Expense transaction — installment info goes in description
+    const catId = await getOrCreateZakatCategory(userId);
+    await addDoc(collection(db, 'users', userId, 'transactions'), {
       type:           'Expense',
-      categoryName:   'Zakat',
-      categoryId:     'zakat-system',
-      accountId:      payment.fromAccountId,
-      accountName:    payment.fromAccountName,
       amount:         inst.amount,
-      note:           `Zakat installment ${inst.installmentNumber} of ${payment.numberOfInstallments} — ${hijriDate.day}/${hijriDate.month}/${hijriDate.year} AH`,
+      accountId:      accId,
+      categoryId:     catId,
+      description:    `Zakat payment — ${instNote}`,
       date:           today,
       isZakatPayment: true,
+      zakatCycleId:   plan.cycleDocId,
       zakatPaymentId: paymentDocId,
-      installmentNumber: inst.installmentNumber,
+      installmentNum: inst.installmentNumber,
       createdAt:      serverTimestamp(),
     });
 
-    // Deduct from account
-    const accRef = doc(db, 'users', userId, 'accounts', payment.fromAccountId);
-    batch.update(accRef, {
-      balance:   Math.max(0, accountBalance - inst.amount),
-      updatedAt: serverTimestamp(),
+    // 3. Update installment record
+    installments[installmentIndex] = {
+      ...inst, status: 'paid', paidDate: today, paidAmount: inst.amount,
+    };
+    const newPaid      = (plan.paidAmount || 0) + inst.amount;
+    const newRemaining = Math.max(0, plan.totalAmount - newPaid);
+    const allDone      = installments.every((i) => i.status === 'paid');
+
+    await updateDoc(planRef, {
+      installments,
+      paidAmount:      newPaid,
+      remainingAmount: newRemaining,
+      status:          allDone ? 'completed' : 'active',
     });
 
-    // If fully paid, mark cycle as paid
-    if (isFullyPaid) {
-      const cycleRef = doc(db, 'users', userId, 'zakatCycles', payment.cycleId);
-      batch.update(cycleRef, {
-        status:        'paid',
-        paymentStatus: 'paid',
-        zakatPaid:     payment.totalAmount,
-        paidAt:        serverTimestamp(),
-      });
-    }
+    // 4. Append to cycle's payments[]
+    const cycleRef  = doc(db, 'users', userId, 'zakatCycles', plan.cycleDocId);
+    const cycleSnap = await getDoc(cycleRef);
+    const cycleData = cycleSnap.exists() ? cycleSnap.data() : {};
+    const prevPmts  = cycleData.payments || [];
+    const allPmts   = [
+      ...prevPmts,
+      {
+        paymentId:        generateId(),
+        amount:           inst.amount,
+        accountId:        accId,
+        accountName:      plan.fromAccountName,
+        date:             today,
+        note:             instNote,
+        isInstallment:    true,
+        installmentNum:   inst.installmentNumber,
+        installmentTotal: plan.numberOfInstallments,
+        recordedAt:       new Date().toISOString(),
+      },
+    ];
+    const totalPaidNow = allPmts.reduce((s, p) => s + (p.amount || 0), 0);
 
-    await batch.commit();
-    return { success: true, isFullyPaid, totalPaid, remaining };
-  } catch (error) {
-    console.error('Error paying installment:', error);
-    return { success: false, error: error.message };
+    await updateDoc(cycleRef, {
+      payments:        allPmts,
+      totalPaid:       totalPaidNow,
+      zakatPaid:       totalPaidNow,
+      lastPaymentDate: today,
+      ...(allDone ? { status: 'paid', paidAt: serverTimestamp() } : {}),
+    });
+
+    return { success: true, allDone, totalPaid: totalPaidNow };
+  } catch (err) {
+    console.error('payZakatInstallment:', err);
+    return { success: false, error: err.message };
   }
 };
 
-/**
- * Get active Zakat payment plan (installments) for a cycle.
- */
-export const getActivePaymentPlan = async (userId, cycleId) => {
+/** Get the active installment plan for a cycle (or null). */
+export const getActivePaymentPlan = async (userId, cycleDocId) => {
   try {
-    const q    = query(
+    const snap = await getDocs(query(
       collection(db, 'users', userId, 'zakatPayments'),
-      where('cycleId', '==', cycleId),
+      where('cycleDocId', '==', cycleDocId),
       where('status', '==', 'active')
-    );
-    const snap = await getDocs(q);
+    ));
     if (snap.empty) return null;
-    const d = snap.docs[0];
-    return { id: d.id, ...d.data() };
-  } catch (error) {
-    console.error('Error fetching payment plan:', error);
+    return { id: snap.docs[0].id, ...snap.docs[0].data() };
+  } catch (err) {
+    console.error('getActivePaymentPlan:', err);
     return null;
   }
 };
 
-/**
- * Get full Zakat history (all cycles).
- */
+/** Get all zakatPayments for this user (newest first). */
 export const getZakatHistory = async (userId) => {
   try {
-    const q    = query(
-      collection(db, 'users', userId, 'zakatCycles'),
+    const snap = await getDocs(query(
+      collection(db, 'users', userId, 'zakatPayments'),
       orderBy('createdAt', 'desc')
-    );
-    const snap = await getDocs(q);
+    ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  } catch (error) {
-    console.error('Error fetching Zakat history:', error);
+  } catch (err) {
+    console.error('getZakatHistory:', err);
     return [];
   }
 };
 
-/**
- * Legacy: Main function called after transactions (kept for compatibility).
- */
-export const updateZakatStatusAfterTransaction = async (userId, transactionDate, nisabThreshold) => {
+/** Fetch current account balances and sum them. */
+export const fetchAndCalculateWealth = async (userId) => {
   try {
-    // Get active cycle
-    const activeSnap = await getDocs(
-      query(collection(db, 'users', userId, 'zakatCycles'), where('status', '==', 'active'))
-    );
-    let activeCycle = null;
-    if (!activeSnap.empty) {
-      const d    = activeSnap.docs[0];
-      activeCycle = { id: d.id, ...d.data() };
-    }
+    const snap     = await getDocs(collection(db, 'users', userId, 'accounts'));
+    const accounts = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const total    = accounts.reduce((s, a) => s + (Number(a.balance) || 0), 0);
+    return { totalWealth: total, accounts };
+  } catch (err) {
+    console.error('fetchAndCalculateWealth:', err);
+    return { totalWealth: 0, accounts: [] };
+  }
+};
 
-    if (activeCycle) {
-      await checkCycleCompletion(userId, activeCycle, nisabThreshold);
+/** Legacy: same as autoCompleteCycleIfYearPassed. */
+export const updateZakatStatusAfterTransaction = async (userId, _date, nisabThreshold) => {
+  try {
+    const { totalWealth } = await fetchAndCalculateWealth(userId);
+    const snap = await getDocs(query(
+      collection(db, 'users', userId, 'zakatCycles'),
+      where('status', '==', 'active')
+    ));
+    if (!snap.empty) {
+      const cycle = { id: snap.docs[0].id, ...snap.docs[0].data() };
+      await autoCompleteCycleIfYearPassed(userId, cycle, totalWealth, nisabThreshold);
     } else {
-      await checkAndStartZakatCycle(userId, nisabThreshold);
+      await checkAndStartZakatCycle(userId, totalWealth, nisabThreshold);
     }
     return { success: true };
-  } catch (error) {
-    console.error('Error updating Zakat status:', error);
-    return { success: false, error: error.message };
+  } catch (err) {
+    return { success: false, error: err.message };
   }
 };

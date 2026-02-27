@@ -153,12 +153,15 @@ export const calculateZakatableWealth = ({
   });
 
   // ── Lendings (Receivables) ─────────────────────────────────────────────
-  // Only count active lendings (money still outstanding/owed to user)
-  // Field: remainingBalance (from lending page: principalAmount - totalRepaid)
+  // NOTE: Lendings are NOT included in zakatable wealth.
+  // Although technically a receivable (user's wealth), the money is NOT
+  // currently in the user's possession. We track it separately for display
+  // but do NOT add to zakatable assets.
   lendings.forEach((lending) => {
     if (lending.status !== 'active') return;
     const outstanding = Number(lending.remainingBalance) || Number(lending.principalAmount) || 0;
     breakdown.lendingsTotal += outstanding;
+    // Intentionally NOT added to accountsTotal or totalAssets
   });
 
   // ── Loans (Liabilities — to be deducted) ──────────────────────────────
@@ -199,9 +202,11 @@ export const calculateZakatableWealth = ({
   });
 
   // ── Totals ────────────────────────────────────────────────────────────
+  // Note: lendingsTotal is tracked for display but NOT included in zakatable assets
+  // because the money is not currently in the user's possession.
   breakdown.totalAssets =
     breakdown.accountsTotal +
-    breakdown.lendingsTotal +
+    // breakdown.lendingsTotal — excluded: money not in hand
     breakdown.investmentsTotal +
     breakdown.goalsTotal +
     breakdown.jewelleryTotal;
