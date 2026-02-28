@@ -210,34 +210,72 @@ export default function RibaPage() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [txSnap, accResult, catSnap] = await Promise.all([
-        getDocs(query(
-          collection(db, 'users', user.uid, 'transactions'),
-          where('isRiba', '==', true),
-          orderBy('date', 'desc')
-        )),
+      const [accResult, catSnap] = await Promise.all([
         getAccounts(user.uid),
         getDocs(collection(db, 'users', user.uid, 'categories')),
       ]);
 
-      setRibaTxns(txSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const cats = catSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       if (accResult.success) setAccounts(accResult.accounts);
-      setCategories(catSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch (err) {
-      console.error(err);
-      // Fallback: query without composite index (no orderBy)
+      setCategories(cats);
+
+      // Find category IDs whose name contains "riba" or "interest"
+      const ribaCatIds = cats
+        .filter(c => {
+          const n = (c.name || '').toLowerCase();
+          return n.includes('riba') || n.includes('interest');
+        })
+        .map(c => c.id);
+
+      // Query 1: transactions explicitly flagged isRiba = true
+      let ribaByFlag = [];
       try {
         const snap = await getDocs(query(
           collection(db, 'users', user.uid, 'transactions'),
-          where('isRiba', '==', true)
+          where('isRiba', '==', true),
+          orderBy('date', 'desc')
         ));
-        const sorted = snap.docs
-          .map(d => ({ id: d.id, ...d.data() }))
-          .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-        setRibaTxns(sorted);
-      } catch (e2) {
-        showToast('Failed to load Riba records', 'error');
+        ribaByFlag = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      } catch {
+        // fallback without orderBy (index may not exist yet)
+        try {
+          const snap = await getDocs(query(
+            collection(db, 'users', user.uid, 'transactions'),
+            where('isRiba', '==', true)
+          ));
+          ribaByFlag = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        } catch { /* ignore */ }
       }
+
+      // Query 2: Income transactions in a Riba/Interest category (no isRiba flag on old records)
+      let ribaByCat = [];
+      for (const catId of ribaCatIds) {
+        try {
+          const snap = await getDocs(query(
+            collection(db, 'users', user.uid, 'transactions'),
+            where('categoryId', '==', catId),
+            where('type', '==', 'Income')
+          ));
+          ribaByCat.push(...snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        } catch { /* ignore */ }
+      }
+
+      // Merge — deduplicate by id, flag ones found by category (so the page treats them as riba)
+      const seen = new Set(ribaByFlag.map(t => t.id));
+      for (const t of ribaByCat) {
+        if (!seen.has(t.id)) {
+          ribaByFlag.push({ ...t, isRiba: true }); // treat as riba for display
+          seen.add(t.id);
+        }
+      }
+
+      // Sort newest first
+      ribaByFlag.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      setRibaTxns(ribaByFlag);
+
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to load Riba records', 'error');
     } finally {
       setLoading(false);
     }
