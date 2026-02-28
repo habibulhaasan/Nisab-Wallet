@@ -27,7 +27,6 @@ import {
 import { showToast } from '@/components/Toast';
 
 // ─── System-category helper ────────────────────────────────────────────────
-// Finds or creates a named system category (e.g. "Fees & Charges", "Interest / Riba")
 async function getOrCreateSystemCategory(uid, name, type, color, extraFields = {}) {
   const ref = collection(db, 'users', uid, 'categories');
   const q   = query(ref, where('name', '==', name));
@@ -35,9 +34,7 @@ async function getOrCreateSystemCategory(uid, name, type, color, extraFields = {
   if (!snap.empty) return snap.docs[0].id;
 
   const docRef = await addDoc(ref, {
-    name,
-    type,
-    color,
+    name, type, color,
     categoryId: generateId(),
     isSystem: true,
     ...extraFields,
@@ -49,9 +46,9 @@ async function getOrCreateSystemCategory(uid, name, type, color, extraFields = {
 // ─── Quick inline Add-Category mini-form ──────────────────────────────────
 function InlineCategoryForm({ type, onSaved, onCancel }) {
   const { user } = useAuth();
-  const [name,    setName]    = useState('');
-  const [color,   setColor]   = useState(type === 'Income' ? '#10B981' : '#EF4444');
-  const [saving,  setSaving]  = useState(false);
+  const [name,   setName]   = useState('');
+  const [color,  setColor]  = useState(type === 'Income' ? '#10B981' : '#EF4444');
+  const [saving, setSaving] = useState(false);
 
   const COLORS = [
     '#EF4444','#F59E0B','#10B981','#3B82F6',
@@ -65,9 +62,7 @@ function InlineCategoryForm({ type, onSaved, onCancel }) {
     try {
       const ref    = collection(db, 'users', user.uid, 'categories');
       const docRef = await addDoc(ref, {
-        name: name.trim(),
-        type,
-        color,
+        name: name.trim(), type, color,
         categoryId: generateId(),
         createdAt: serverTimestamp(),
       });
@@ -86,9 +81,7 @@ function InlineCategoryForm({ type, onSaved, onCancel }) {
     }`}>
       <p className="text-[10px] font-bold text-gray-500 uppercase mb-2">New {type} Category</p>
       <input
-        autoFocus
-        value={name}
-        onChange={e => setName(e.target.value)}
+        autoFocus value={name} onChange={e => setName(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') onCancel(); }}
         placeholder="Category name…"
         className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md mb-2 outline-none focus:ring-1 focus:ring-gray-400"
@@ -97,8 +90,7 @@ function InlineCategoryForm({ type, onSaved, onCancel }) {
         {COLORS.map(c => (
           <button key={c} type="button" onClick={() => setColor(c)}
             className={`w-5 h-5 rounded-full transition-all ${color === c ? 'ring-2 ring-offset-1 ring-gray-700 scale-110' : ''}`}
-            style={{ backgroundColor: c }}
-          />
+            style={{ backgroundColor: c }} />
         ))}
       </div>
       <div className="flex gap-2">
@@ -121,8 +113,7 @@ function InlineCategoryForm({ type, onSaved, onCancel }) {
 function CategorySelect({ value, onChange, categories, type, disabled, onCategoryCreated }) {
   const [showInline, setShowInline] = useState(false);
   const filtered = categories.filter(c =>
-    c.type?.toLowerCase() === type.toLowerCase() ||
-    c.type === 'Both'
+    c.type?.toLowerCase() === type.toLowerCase() || c.type === 'Both'
   );
   const isIncome = type === 'Income';
 
@@ -131,20 +122,15 @@ function CategorySelect({ value, onChange, categories, type, disabled, onCategor
       <select
         value={value}
         onChange={e => {
-          if (e.target.value === '__add_new__') {
-            setShowInline(true);
-          } else {
-            setShowInline(false);
-            onChange(e.target.value);
-          }
+          if (e.target.value === '__add_new__') { setShowInline(true); }
+          else { setShowInline(false); onChange(e.target.value); }
         }}
         className={`w-full rounded-lg p-2.5 text-xs font-bold focus:ring-1 outline-none border ${
           isIncome
             ? 'bg-green-50 border-green-100 focus:ring-green-500'
             : 'bg-red-50 border-red-100 focus:ring-red-500'
         }`}
-        required
-        disabled={disabled}
+        required disabled={disabled}
       >
         <option value="">Select Category</option>
         {filtered.map(c => (
@@ -152,15 +138,10 @@ function CategorySelect({ value, onChange, categories, type, disabled, onCategor
         ))}
         <option value="__add_new__">➕ Add new category…</option>
       </select>
-
       {showInline && (
         <InlineCategoryForm
           type={type}
-          onSaved={(newCat) => {
-            onCategoryCreated(newCat);
-            onChange(newCat.id);
-            setShowInline(false);
-          }}
+          onSaved={newCat => { onCategoryCreated(newCat); onChange(newCat.id); setShowInline(false); }}
           onCancel={() => setShowInline(false)}
         />
       )}
@@ -171,19 +152,13 @@ function CategorySelect({ value, onChange, categories, type, disabled, onCategor
 // ─── Charges field component ──────────────────────────────────────────────
 function ChargesField({ value, onChange, disabled, note, onNoteChange }) {
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    if (value > 0 || note) setOpen(true);
-  }, []);
+  useEffect(() => { if (value > 0 || note) setOpen(true); }, []);
 
   return (
     <div className="col-span-2">
       {!open ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-300 text-xs text-gray-400 hover:border-gray-400 hover:text-gray-600 transition-colors"
-        >
+        <button type="button" onClick={() => setOpen(true)}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-300 text-xs text-gray-400 hover:border-gray-400 hover:text-gray-600 transition-colors">
           <Zap className="w-3.5 h-3.5" />
           Add related charges / fees (optional)
         </button>
@@ -202,27 +177,16 @@ function ChargesField({ value, onChange, disabled, note, onNoteChange }) {
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-[10px] text-gray-500 font-semibold block mb-1">Amount (৳)</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={value || ''}
+              <input type="number" step="0.01" min="0" value={value || ''}
                 onChange={e => onChange(parseFloat(e.target.value) || 0)}
-                placeholder="0.00"
-                disabled={disabled}
-                className="w-full px-2.5 py-1.5 text-sm font-bold border border-orange-200 bg-white rounded-md outline-none focus:ring-1 focus:ring-orange-400"
-              />
+                placeholder="0.00" disabled={disabled}
+                className="w-full px-2.5 py-1.5 text-sm font-bold border border-orange-200 bg-white rounded-md outline-none focus:ring-1 focus:ring-orange-400" />
             </div>
             <div>
               <label className="text-[10px] text-gray-500 font-semibold block mb-1">Label</label>
-              <input
-                type="text"
-                value={note || ''}
-                onChange={e => onNoteChange(e.target.value)}
-                placeholder="e.g. TDS, Bank fee…"
-                disabled={disabled}
-                className="w-full px-2.5 py-1.5 text-sm border border-orange-200 bg-white rounded-md outline-none focus:ring-1 focus:ring-orange-400"
-              />
+              <input type="text" value={note || ''} onChange={e => onNoteChange(e.target.value)}
+                placeholder="e.g. TDS, Bank fee…" disabled={disabled}
+                className="w-full px-2.5 py-1.5 text-sm border border-orange-200 bg-white rounded-md outline-none focus:ring-1 focus:ring-orange-400" />
             </div>
           </div>
           <p className="text-[10px] text-orange-600 flex items-center gap-1">
@@ -235,250 +199,206 @@ function ChargesField({ value, onChange, disabled, note, onNoteChange }) {
   );
 }
 
-// ─── NEW: Transaction Detail Modal Component ──────────────────────────────
-function TransactionDetailModal({ transaction, accounts, categories, onClose, onEdit, onDelete }) {
-  if (!transaction) return null;
+// ─── Transaction Detail Popup ─────────────────────────────────────────────
+function TransactionDetailPopup({ transaction, onClose, onEdit, onDelete, getAccountName, getCategoryName, getCategoryColor }) {
+  const [visible, setVisible] = useState(false);
 
-  const account = accounts.find(a => a.id === transaction.accountId);
-  const category = categories.find(c => c.id === transaction.categoryId);
-  const relatedAccount = accounts.find(a => a.id === transaction.relatedAccountId);
+  // Trigger enter animation on mount
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(true), 10);
+    return () => clearTimeout(t);
+  }, []);
 
-  const isTransfer = transaction.isTransfer;
-  const isIncome = transaction.type === 'Income';
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return 'N/A';
-    const d = new Date(dateStr);
-    return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+  const handleClose = () => {
+    setVisible(false);
+    setTimeout(onClose, 280);
   };
 
-  const formatDateTime = (timestamp) => {
-    if (!timestamp) return 'N/A';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  const handleEdit = () => {
+    setVisible(false);
+    setTimeout(() => { onClose(); onEdit(transaction); }, 280);
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/70 z-50 animate-fadeIn md:flex md:items-center md:justify-center md:p-4"
-      onClick={onClose}>
-      <div className="bg-white w-full h-full md:h-auto md:max-w-md md:rounded-2xl shadow-2xl animate-slideUpMobile md:animate-slideUp overflow-hidden flex flex-col md:max-h-[85vh]"
-        onClick={e => e.stopPropagation()}>
-        
-        {/* Header */}
-        <div className={`relative px-4 md:px-6 pt-4 md:pt-6 pb-3 md:pb-4 flex-shrink-0 ${
-          isTransfer ? 'bg-gradient-to-br from-blue-500 to-blue-600' :
-          isIncome ? 'bg-gradient-to-br from-green-500 to-green-600' :
-          'bg-gradient-to-br from-red-500 to-red-600'
-        }`}>
-          {/* Mobile handle */}
-          <div className="md:hidden flex justify-center mb-2">
-            <div className="w-10 h-1 bg-white/30 rounded-full"></div>
-          </div>
+  const handleDelete = () => {
+    setVisible(false);
+    setTimeout(() => { onClose(); onDelete(transaction); }, 280);
+  };
 
-          <button onClick={onClose}
-            className="absolute top-3 md:top-4 right-3 md:right-4 text-white/80 hover:text-white transition-colors">
-            <X size={20} className="md:w-6 md:h-6" />
-          </button>
-          
-          <div className="flex items-center gap-2 md:gap-3 mb-2 md:mb-3">
-            {isTransfer ? (
-              <div className="bg-white/20 backdrop-blur-sm p-2 md:p-3 rounded-lg md:rounded-xl">
-                <ArrowRightLeft size={20} className="text-white md:w-6 md:h-6" />
-              </div>
-            ) : isIncome ? (
-              <div className="bg-white/20 backdrop-blur-sm p-2 md:p-3 rounded-lg md:rounded-xl">
-                <ArrowUpCircle size={20} className="text-white md:w-6 md:h-6" />
-              </div>
-            ) : (
-              <div className="bg-white/20 backdrop-blur-sm p-2 md:p-3 rounded-lg md:rounded-xl">
-                <ArrowDownCircle size={20} className="text-white md:w-6 md:h-6" />
-              </div>
-            )}
-            <div>
-              <h3 className="text-white text-xs md:text-sm font-semibold uppercase tracking-wide">
-                {isTransfer ? 'Transfer' : isIncome ? 'Income' : 'Expense'}
-              </h3>
-              <p className="text-white/80 text-[10px] md:text-xs">Transaction Details</p>
-            </div>
-          </div>
+  const t = transaction;
+  const isTransfer = t.isTransfer;
+  const accentColor = isTransfer ? 'blue' : t.type === 'Income' ? 'green' : 'red';
 
-          {/* Amount */}
-          <div className="text-center py-3 md:py-4">
-            <div className="text-white/80 text-[10px] md:text-xs font-semibold uppercase tracking-wider mb-1">
-              Amount
-            </div>
-            <div className="text-white text-3xl md:text-4xl font-bold">
-              ৳{parseFloat(transaction.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </div>
-          </div>
-        </div>
+  const headerBg = {
+    blue:  'from-blue-600 to-blue-700',
+    green: 'from-green-600 to-green-700',
+    red:   'from-red-600 to-red-700',
+  }[accentColor];
 
-        {/* Content - Scrollable */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3 md:space-y-4">
-          
-          {/* Transfer specific details */}
-          {isTransfer && (
-            <>
-              <DetailRow 
-                label={transaction.transferDirection === 'from' ? 'From Account' : 'To Account'} 
-                value={account?.name || 'Unknown'} 
-                icon={<Wallet size={14} className="md:w-4 md:h-4" />}
-              />
-              <DetailRow 
-                label={transaction.transferDirection === 'from' ? 'To Account' : 'From Account'} 
-                value={relatedAccount?.name || 'Unknown'} 
-                icon={<Wallet size={14} className="md:w-4 md:h-4" />}
-              />
-            </>
-          )}
+  const amountColor = {
+    blue:  'text-blue-50',
+    green: 'text-green-50',
+    red:   'text-red-50',
+  }[accentColor];
 
-          {/* Income/Expense specific details */}
-          {!isTransfer && (
-            <>
-              <DetailRow 
-                label="Account" 
-                value={account?.name || 'Unknown'} 
-                icon={<Wallet size={14} className="md:w-4 md:h-4" />}
-              />
-              <DetailRow 
-                label="Category" 
-                value={
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full" 
-                      style={{ backgroundColor: category?.color || '#9CA3AF' }} />
-                    <span>{category?.name || 'Unknown'}</span>
-                    {category?.isRiba && <span className="text-amber-600">⚠</span>}
-                  </div>
-                }
-                icon={<Receipt size={14} className="md:w-4 md:h-4" />}
-              />
-            </>
-          )}
+  const formattedDate = (() => {
+    const d = new Date(t.date);
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  })();
 
-          {/* Date */}
-          <DetailRow 
-            label="Date" 
-            value={formatDate(transaction.date)} 
-            icon={<Calendar size={14} className="md:w-4 md:h-4" />}
-          />
+  const formattedTime = t.createdAt?.toDate
+    ? t.createdAt.toDate().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    : null;
 
-          {/* Created At */}
-          {transaction.createdAt && (
-            <DetailRow 
-              label="Created At" 
-              value={formatDateTime(transaction.createdAt)} 
-              icon={<Calendar size={14} className="md:w-4 md:h-4" />}
-            />
-          )}
-
-          {/* Description/Note */}
-          {transaction.description && (
-            <DetailRow 
-              label="Note" 
-              value={transaction.description} 
-              icon={<Info size={14} className="md:w-4 md:h-4" />}
-            />
-          )}
-
-          {/* Charge badge */}
-          {transaction.isCharge && (
-            <div className="bg-orange-50 border border-orange-200 rounded-lg p-2.5 md:p-3">
-              <div className="flex items-center gap-2">
-                <Zap size={13} className="text-orange-600 md:w-3.5 md:h-3.5" />
-                <span className="text-[11px] md:text-xs font-semibold text-orange-900">Transaction Fee/Charge</span>
-              </div>
-            </div>
-          )}
-
-          {/* Source info */}
-          {transaction.source && (
-            <DetailRow 
-              label="Source" 
-              value={
-                transaction.source === 'jewellery_sale' ? '💎 Jewellery Sale' :
-                transaction.source === 'goal' ? '🎯 Goal' :
-                transaction.source
-              }
-              icon={<Zap size={14} className="md:w-4 md:h-4" />}
-            />
-          )}
-
-          {/* Riba warning */}
-          {transaction.isRiba && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 md:p-3 space-y-2">
-              <div className="flex items-start gap-2">
-                <AlertCircle size={13} className="text-amber-600 flex-shrink-0 mt-0.5 md:w-3.5 md:h-3.5" />
-                <p className="text-[11px] md:text-xs text-amber-800">
-                  <strong>Riba/Interest income.</strong> Should be donated as Sadaqah.
-                </p>
-              </div>
-              {transaction.sadaqahDone && (
-                <div className="flex items-center gap-1.5 text-green-700">
-                  <span className="text-[11px] md:text-xs font-semibold">✓ Purified</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Transaction ID */}
-          <div className="pt-2 border-t border-gray-100">
-            <p className="text-[9px] md:text-[10px] text-gray-400 uppercase tracking-wide">Transaction ID</p>
-            <p className="text-[11px] md:text-xs text-gray-600 font-mono break-all">{transaction.id}</p>
-          </div>
-        </div>
-
-        {/* Action buttons - Fixed at bottom */}
-        <div className="flex-shrink-0 p-3 md:p-4 border-t border-gray-100 flex gap-2 md:gap-3 bg-white">
-          {!isTransfer && (
-            <button
-              onClick={() => {
-                onEdit(transaction);
-                onClose();
-              }}
-              className="flex-1 py-2.5 md:py-3 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-gray-700 rounded-lg font-semibold text-xs md:text-sm transition-colors flex items-center justify-center gap-1.5 md:gap-2"
-            >
-              <Edit2 size={14} className="md:w-4 md:h-4" />
-              Edit
-            </button>
-          )}
-          <button
-            onClick={() => {
-              onDelete(transaction);
-              onClose();
-            }}
-            className={`${isTransfer ? 'flex-1' : 'flex-1'} py-2.5 md:py-3 bg-red-500 hover:bg-red-600 active:bg-red-700 text-white rounded-lg font-semibold text-xs md:text-sm transition-colors flex items-center justify-center gap-1.5 md:gap-2`}
-          >
-            <Trash2 size={14} className="md:w-4 md:h-4" />
-            Delete
-          </button>
-        </div>
-      </div>
+  const DetailRow = ({ label, value, valueClass = '' }) => (
+    <div className="flex items-start justify-between gap-4 py-2.5 border-b border-gray-100 last:border-0">
+      <span className="text-xs text-gray-400 font-medium flex-shrink-0 w-24">{label}</span>
+      <span className={`text-xs font-semibold text-gray-800 text-right ${valueClass}`}>{value}</span>
     </div>
   );
-}
 
-// Helper component for detail rows
-function DetailRow({ label, value, icon }) {
   return (
-    <div className="flex items-start gap-2 md:gap-3 py-1.5 md:py-2">
-      <div className="text-gray-400 mt-0.5">
-        {icon}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-wide font-semibold mb-0.5">
-          {label}
-        </p>
-        <div className="text-xs md:text-sm text-gray-900 font-medium break-words">
-          {value}
+    <>
+      {/* Backdrop */}
+      <div
+        onClick={handleClose}
+        className="fixed inset-0 z-50 transition-all duration-300 ease-out"
+        style={{ backgroundColor: visible ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0)' }}
+      />
+
+      {/* Sheet — slides up from bottom on mobile, scales in on desktop */}
+      <div
+        className="fixed z-50 w-full sm:w-auto sm:max-w-sm"
+        style={{
+          bottom: 0, left: 0, right: 0,
+          margin: '0 auto',
+          // Desktop: centred
+        }}
+      >
+        <div
+          className={`
+            bg-white w-full sm:max-w-sm mx-auto
+            rounded-t-2xl sm:rounded-2xl
+            shadow-2xl overflow-hidden
+            transition-all duration-300 ease-out
+            ${visible
+              ? 'translate-y-0 opacity-100 sm:scale-100'
+              : 'translate-y-8 opacity-0 sm:scale-95'}
+          `}
+          style={{
+            // On desktop, centre it properly
+            position: 'fixed',
+            bottom: 0,
+            left: '50%',
+            transform: visible
+              ? 'translateX(-50%) translateY(0)'
+              : 'translateX(-50%) translateY(2rem)',
+            width: '100%',
+            maxWidth: '24rem',
+          }}
+        >
+          {/* Colour header */}
+          <div className={`bg-gradient-to-br ${headerBg} px-5 pt-5 pb-6`}>
+            {/* Drag handle (mobile) */}
+            <div className="w-8 h-1 bg-white/30 rounded-full mx-auto mb-4" />
+
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <span className="text-white/70 text-[10px] font-bold uppercase tracking-widest">
+                    {isTransfer ? 'Transfer' : t.type}
+                  </span>
+                  {t.isRiba && (
+                    <span className="px-1.5 py-0.5 text-[9px] font-bold bg-white/20 text-white rounded-full">
+                      RIBA
+                    </span>
+                  )}
+                  {t.isCharge && (
+                    <span className="px-1.5 py-0.5 text-[9px] font-bold bg-white/20 text-white rounded-full">
+                      FEE
+                    </span>
+                  )}
+                  {t.isRiba && t.sadaqahDone && (
+                    <span className="px-1.5 py-0.5 text-[9px] font-bold bg-white/20 text-white rounded-full">
+                      ✓ Purified
+                    </span>
+                  )}
+                </div>
+                <p className={`text-3xl font-black ${amountColor} tabular-nums`}>
+                  {t.type === 'Income' ? '+' : '−'}৳{Number(t.amount).toLocaleString()}
+                </p>
+                <p className="text-white/75 text-sm mt-1 truncate">
+                  {isTransfer
+                    ? (t.type === 'Income' ? `From ${t.relatedAccountName}` : `To ${t.relatedAccountName}`)
+                    : getCategoryName(t.categoryId)}
+                </p>
+              </div>
+              <button onClick={handleClose}
+                className="ml-3 p-1.5 rounded-full bg-white/15 hover:bg-white/25 text-white transition-colors flex-shrink-0">
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Detail rows */}
+          <div className="px-5 py-1">
+            <DetailRow label="Date" value={formattedDate} />
+            <DetailRow label="Account" value={getAccountName(t.accountId)} />
+
+            {!isTransfer && (
+              <DetailRow
+                label="Category"
+                value={
+                  <span className="flex items-center gap-1.5 justify-end">
+                    <span className="w-2 h-2 rounded-full flex-shrink-0 inline-block"
+                      style={{ backgroundColor: getCategoryColor(t.categoryId) }} />
+                    {getCategoryName(t.categoryId)}
+                  </span>
+                }
+              />
+            )}
+
+            {isTransfer && (
+              <DetailRow
+                label={t.type === 'Income' ? 'From Account' : 'To Account'}
+                value={t.relatedAccountName}
+              />
+            )}
+
+            {t.description ? (
+              <DetailRow label="Note" value={t.description} />
+            ) : null}
+
+            {formattedTime && (
+              <DetailRow label="Recorded" value={formattedTime} valueClass="text-gray-400" />
+            )}
+          </div>
+
+          {/* Riba notice */}
+          {t.isRiba && (
+            <div className="mx-5 mb-3 flex items-start gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+              <AlertCircle size={13} className="text-amber-600 flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-amber-800 leading-relaxed">
+                Interest income — purify by donating as Sadaqah via the <strong>Riba Tracker</strong>.
+              </p>
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div className="px-5 pb-6 pt-2 flex gap-3">
+            {!isTransfer && (
+              <button onClick={handleEdit}
+                className="flex-1 py-2.5 flex items-center justify-center gap-1.5 border-2 border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors">
+                <Edit2 size={14} /> Edit
+              </button>
+            )}
+            <button onClick={handleDelete}
+              className="flex-1 py-2.5 flex items-center justify-center gap-1.5 border-2 border-red-100 rounded-xl text-sm font-bold text-red-600 hover:bg-red-50 transition-colors">
+              <Trash2 size={14} /> Delete
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -497,6 +417,9 @@ export default function TransactionsPage() {
   const [showDeleteModal,     setShowDeleteModal]     = useState(false);
   const [transactionToDelete, setTransactionToDelete] = useState(null);
   const [editingTransaction,  setEditingTransaction]  = useState(null);
+
+  // ── NEW: detail popup state ────────────────────────────────────────────
+  const [viewingTransaction,  setViewingTransaction]  = useState(null);
 
   const [filterType,          setFilterType]          = useState('All');
   const [filterAccount,       setFilterAccount]       = useState('All');
@@ -522,10 +445,6 @@ export default function TransactionsPage() {
   const [summaryIncome,         setSummaryIncome]         = useState(0);
   const [summaryExpense,        setSummaryExpense]        = useState(0);
   const [summaryNet,            setSummaryNet]            = useState(0);
-
-  // NEW: Transaction detail modal state
-  const [selectedTransaction, setSelectedTransaction] = useState(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
 
   // ── Load ─────────────────────────────────────────────────────────────────
   useEffect(() => { if (user) loadData(); }, [user]);
@@ -560,7 +479,7 @@ export default function TransactionsPage() {
 
   const loadTransactionsAndTransfers = async () => {
     try {
-      const transRef   = collection(db, 'users', user.uid, 'transactions');
+      const transRef    = collection(db, 'users', user.uid, 'transactions');
       const transferRef = collection(db, 'users', user.uid, 'transfers');
       let normal = [], transfers = [];
 
@@ -623,7 +542,6 @@ export default function TransactionsPage() {
     }
   };
 
-  // Called by InlineCategoryForm after saving — adds to local state so select is immediately populated
   const handleCategoryCreated = (newCat) => {
     setCategories(prev => [...prev, newCat]);
   };
@@ -635,7 +553,7 @@ export default function TransactionsPage() {
     const filtered = range
       ? transactions.filter(t => t.date >= range.start && t.date <= range.end)
       : transactions;
-    const inc = filtered.filter(t => t.type === 'Income' && !t.isTransfer).reduce((s, t) => s + Number(t.amount || 0), 0);
+    const inc = filtered.filter(t => t.type === 'Income'  && !t.isTransfer).reduce((s, t) => s + Number(t.amount || 0), 0);
     const exp = filtered.filter(t => t.type === 'Expense' && !t.isTransfer).reduce((s, t) => s + Number(t.amount || 0), 0);
     setSummaryIncome(inc);
     setSummaryExpense(exp);
@@ -645,14 +563,8 @@ export default function TransactionsPage() {
   const getSummaryDateRange = () => {
     const now = new Date();
     const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
-    if (dateFilter === 'Daily') { const s = fmtISO(now); return { start: s, end: s }; }
-    if (dateFilter === 'Weekly') {
-      const dow = now.getDay();
-      const diff = dow === 6 ? 0 : dow + 1;
-      const ws = new Date(now); ws.setDate(d - diff);
-      const we = new Date(ws); we.setDate(ws.getDate() + 6);
-      return { start: fmtISO(ws), end: fmtISO(we) };
-    }
+    if (dateFilter === 'Daily')   { const s = fmtISO(now); return { start: s, end: s }; }
+    if (dateFilter === 'Weekly')  { const dw = now.getDay(), diff = dw===6?0:dw+1; const ws = new Date(now); ws.setDate(d-diff); const we = new Date(ws); we.setDate(ws.getDate()+6); return { start: fmtISO(ws), end: fmtISO(we) }; }
     if (dateFilter === 'Monthly') return { start: fmtISO(new Date(y,m,1)), end: fmtISO(new Date(y,m+1,0)) };
     if (dateFilter === 'Yearly')  return { start: fmtISO(new Date(y,0,1)), end: fmtISO(new Date(y,11,31)) };
     if (dateFilter === 'Custom' && customDateRange.start && customDateRange.end) return customDateRange;
@@ -673,28 +585,20 @@ export default function TransactionsPage() {
 
   const totalBalance = accounts.reduce((s, a) => s + (Number(a.balance) || 0), 0);
 
-  // ── Save charge as separate expense transaction ────────────────────────
+  // ── Record charge ─────────────────────────────────────────────────────
   const recordCharge = async (chargeAmount, chargeNote, accountId, date) => {
     if (!chargeAmount || chargeAmount <= 0 || !accountId) return;
-    const feeCatId = await getOrCreateSystemCategory(
-      user.uid, 'Fees & Charges', 'Expense', '#F97316'
-    );
+    const feeCatId = await getOrCreateSystemCategory(user.uid, 'Fees & Charges', 'Expense', '#F97316');
     const account  = accounts.find(a => a.id === accountId);
     await addDoc(collection(db, 'users', user.uid, 'transactions'), {
-      type:        'Expense',
-      amount:      chargeAmount,
-      accountId,
-      categoryId:  feeCatId,
+      type: 'Expense', amount: chargeAmount, accountId,
+      categoryId: feeCatId,
       description: chargeNote || 'Transaction charge',
-      date,
-      isCharge:    true,
-      createdAt:   Timestamp.now(),
+      date, isCharge: true, createdAt: Timestamp.now(),
     });
-    // Deduct charge from account balance
     if (account) {
       await updateAccount(user.uid, accountId, { balance: account.balance - chargeAmount });
     }
-    // Update local accounts state so next balance check is accurate
     setAccounts(prev => prev.map(a => a.id === accountId ? { ...a, balance: a.balance - chargeAmount } : a));
   };
 
@@ -716,10 +620,7 @@ export default function TransactionsPage() {
     setCheckingBalance(true);
 
     try {
-      // Balance check for expenses (include charge amount)
-      const totalDeduct = formData.type === 'Expense'
-        ? amount + (formData.chargeAmount || 0)
-        : 0;
+      const totalDeduct = formData.type === 'Expense' ? amount + (formData.chargeAmount || 0) : 0;
 
       if (formData.type === 'Expense') {
         const avail = await getAvailableBalance(user.uid, formData.accountId, account.balance);
@@ -729,7 +630,6 @@ export default function TransactionsPage() {
         }
       }
 
-      // Check if selected category is Riba — add isRiba flag to transaction
       const selectedCat = categories.find(c => c.id === formData.categoryId);
       const isRiba = selectedCat?.isRiba === true;
 
@@ -772,12 +672,8 @@ export default function TransactionsPage() {
           : account.balance - amount;
         await updateAccount(user.uid, account.id, { balance: newBal });
 
-        // Record charges as separate expense
         if (formData.chargeAmount > 0) {
-          await recordCharge(
-            formData.chargeAmount, formData.chargeNote,
-            formData.accountId, formData.date
-          );
+          await recordCharge(formData.chargeAmount, formData.chargeNote, formData.accountId, formData.date);
           showToast(`Added + ৳${formData.chargeAmount.toLocaleString()} charge recorded`, 'success');
         } else {
           showToast('Added', 'success');
@@ -807,10 +703,10 @@ export default function TransactionsPage() {
       return showToast('Cannot transfer to same account', 'error');
     }
 
-    const amount  = parseFloat(transferData.amount);
-    const charge  = transferData.chargeAmount || 0;
-    const from    = accounts.find(a => a.id === transferData.fromAccountId);
-    const to      = accounts.find(a => a.id === transferData.toAccountId);
+    const amount = parseFloat(transferData.amount);
+    const charge = transferData.chargeAmount || 0;
+    const from   = accounts.find(a => a.id === transferData.fromAccountId);
+    const to     = accounts.find(a => a.id === transferData.toAccountId);
     if (!from || !to) return showToast('Invalid accounts', 'error');
 
     setSubmitting(true);
@@ -820,13 +716,11 @@ export default function TransactionsPage() {
       const avail = await getAvailableBalance(user.uid, from.id, from.balance);
       if (amount + charge > avail) {
         setSubmitting(false); setCheckingBalance(false);
-        return showToast(
-          `Insufficient balance in ${from.name}! Available: ৳${avail.toLocaleString()}`, 'error'
-        );
+        return showToast(`Insufficient balance in ${from.name}! Available: ৳${avail.toLocaleString()}`, 'error');
       }
 
       if (editingTransaction) {
-        const oldAmount  = parseFloat(editingTransaction.amount);
+        const oldAmount = parseFloat(editingTransaction.amount);
         let rFromId, rToId;
         if (editingTransaction.transferDirection === 'from') {
           rFromId = editingTransaction.accountId; rToId = editingTransaction.relatedAccountId;
@@ -860,7 +754,6 @@ export default function TransactionsPage() {
         await updateAccount(user.uid, from.id, { balance: from.balance - amount });
         await updateAccount(user.uid, to.id,   { balance: to.balance + amount });
 
-        // Charge comes out of the FROM account (on top of transfer amount)
         if (charge > 0) {
           await recordCharge(charge, transferData.chargeNote, transferData.fromAccountId, transferData.date);
           showToast(`Transfer done + ৳${charge.toLocaleString()} charge recorded`, 'success');
@@ -895,7 +788,7 @@ export default function TransactionsPage() {
         const from = accounts.find(a => a.id === fromId);
         const to   = accounts.find(a => a.id === toId);
         if (from) await updateAccount(user.uid, from.id, { balance: from.balance + transactionToDelete.amount });
-        if (to)   await updateAccount(user.uid, to.id,   { balance: to.balance - transactionToDelete.amount });
+        if (to)   await updateAccount(user.uid, to.id,   { balance: to.balance   - transactionToDelete.amount });
         await deleteDoc(doc(db, 'users', user.uid, 'transfers', originalTransferId));
       } else {
         const acc = accounts.find(a => a.id === transactionToDelete.accountId);
@@ -906,8 +799,6 @@ export default function TransactionsPage() {
           await updateAccount(user.uid, acc.id, { balance: nb });
         }
         await deleteDoc(doc(db, 'users', user.uid, 'transactions', transactionToDelete.id));
-
-        // Jewellery undo
         if (transactionToDelete.source === 'jewellery_sale' && transactionToDelete.jewelleryId) {
           await unmarkSold(user.uid, transactionToDelete.jewelleryId);
         }
@@ -949,17 +840,10 @@ export default function TransactionsPage() {
     setTransferData({ fromAccountId: accounts[0]?.id || '', toAccountId: accounts[1]?.id || '', amount: '', description: '', date: new Date().toISOString().split('T')[0], chargeAmount: 0, chargeNote: '' });
   };
 
-  // ── NEW: Handle transaction click to show details ──────────────────────
-  const handleTransactionClick = (txn) => {
-    setSelectedTransaction(txn);
-    setShowDetailModal(true);
-  };
-
   // ── Helpers ───────────────────────────────────────────────────────────
-  const getAccountName  = id => accounts.find(a => a.id === id)?.name || 'Unknown';
-  const getCategoryName = id => categories.find(c => c.id === id)?.name || 'Unknown';
+  const getAccountName   = id => accounts.find(a => a.id === id)?.name || 'Unknown';
+  const getCategoryName  = id => categories.find(c => c.id === id)?.name || 'Unknown';
   const getCategoryColor = id => categories.find(c => c.id === id)?.color || '#6B7280';
-  const isRibaTx = t => !!t.isRiba;
 
   // ── Filter ────────────────────────────────────────────────────────────
   const getRange = () => {
@@ -993,7 +877,7 @@ export default function TransactionsPage() {
   const grouped = filteredTransactions.reduce((acc, t) => {
     if (!acc[t.date]) acc[t.date] = { records: [], dayIncome: 0, dayExpense: 0 };
     acc[t.date].records.push(t);
-    if (t.type === 'Income') acc[t.date].dayIncome += Number(t.amount || 0);
+    if (t.type === 'Income')  acc[t.date].dayIncome  += Number(t.amount || 0);
     if (t.type === 'Expense') acc[t.date].dayExpense += Number(t.amount || 0);
     return acc;
   }, {});
@@ -1008,6 +892,7 @@ export default function TransactionsPage() {
   // ══════════════════════════════════════════════════════════════════════
   return (
     <div className="max-w-7xl mx-auto space-y-5 pb-6">
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -1015,11 +900,8 @@ export default function TransactionsPage() {
           <p className="text-sm text-gray-500 mt-1">Track your income, expenses and transfers</p>
         </div>
         <div className="relative group">
-          <button
-            onClick={() => setShowModal(true)}
-            disabled={isButtonDisabled}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-          >
+          <button onClick={() => setShowModal(true)} disabled={isButtonDisabled}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium">
             <Plus size={16} /> Add Transaction
           </button>
           {isButtonDisabled && (
@@ -1162,14 +1044,20 @@ export default function TransactionsPage() {
                   <span className="text-red-600 font-medium">-৳{dayExpense.toLocaleString()}</span>
                 </div>
               </div>
+
               {records.map(t => (
-                <div 
-                  key={t.id} 
-                  onClick={() => handleTransactionClick(t)}
-                  className={`px-4 py-3 hover:bg-gray-50 flex items-center justify-between gap-3 border-b border-gray-100 last:border-b-0 cursor-pointer ${t.isRiba ? 'bg-amber-50/50' : ''}`}
+                <div
+                  key={t.id}
+                  className={`px-4 py-3 flex items-center justify-between gap-3 border-b border-gray-100 last:border-b-0 group
+                    ${t.isRiba ? 'bg-amber-50/50' : 'hover:bg-gray-50'} transition-colors cursor-pointer`}
                 >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${t.type === 'Income' ? 'bg-green-50' : 'bg-red-50'}`}>
+                  {/* ── Clickable info area → opens detail popup ── */}
+                  <button
+                    type="button"
+                    onClick={() => setViewingTransaction(t)}
+                    className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                  >
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${t.type === 'Income' ? 'bg-green-50' : 'bg-red-50'}`}>
                       {t.type === 'Income'
                         ? <ArrowUpCircle size={16} className="text-green-600" />
                         : <ArrowDownCircle size={16} className="text-red-600" />}
@@ -1184,36 +1072,36 @@ export default function TransactionsPage() {
                             : getCategoryName(t.categoryId)}
                         </p>
                         {t.isRiba && (
-                          <span className="px-1.5 py-0.5 text-[9px] font-bold bg-amber-100 text-amber-700 rounded-full border border-amber-200">
-                            RIBA
-                          </span>
+                          <span className="px-1.5 py-0.5 text-[9px] font-bold bg-amber-100 text-amber-700 rounded-full border border-amber-200">RIBA</span>
                         )}
                         {t.isCharge && (
-                          <span className="px-1.5 py-0.5 text-[9px] font-bold bg-orange-100 text-orange-700 rounded-full border border-orange-200">
-                            FEE
-                          </span>
+                          <span className="px-1.5 py-0.5 text-[9px] font-bold bg-orange-100 text-orange-700 rounded-full border border-orange-200">FEE</span>
                         )}
                         {t.isRiba && t.sadaqahDone && (
-                          <span className="px-1.5 py-0.5 text-[9px] font-bold bg-green-100 text-green-700 rounded-full border border-green-200">
-                            ✓ Purified
-                          </span>
+                          <span className="px-1.5 py-0.5 text-[9px] font-bold bg-green-100 text-green-700 rounded-full border border-green-200">✓ Purified</span>
                         )}
                       </div>
                       <p className="text-xs text-gray-600 truncate mt-0.5">{getAccountName(t.accountId)}</p>
                       {t.description && <p className="text-xs text-gray-500 truncate mt-0.5">{t.description}</p>}
                     </div>
-                  </div>
+                  </button>
+
+                  {/* Amount + edit/delete buttons */}
                   <div className="flex items-center gap-3 flex-shrink-0">
                     <p className={`text-base font-semibold ${t.type === 'Income' ? 'text-green-600' : 'text-red-600'}`}>
                       {t.type === 'Income' ? '+' : '-'}৳{Number(t.amount).toLocaleString()}
                     </p>
-                    <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                    <div className="flex gap-1">
                       {!t.isTransfer && (
-                        <button onClick={() => handleEdit(t)} className="p-1 hover:bg-gray-100 rounded">
+                        <button
+                          onClick={e => { e.stopPropagation(); handleEdit(t); }}
+                          className="p-1 hover:bg-gray-100 rounded">
                           <Edit2 size={15} className="text-gray-500" />
                         </button>
                       )}
-                      <button onClick={() => { setTransactionToDelete(t); setShowDeleteModal(true); }} className="p-1 hover:bg-red-50 rounded">
+                      <button
+                        onClick={e => { e.stopPropagation(); setTransactionToDelete(t); setShowDeleteModal(true); }}
+                        className="p-1 hover:bg-red-50 rounded">
                         <Trash2 size={15} className="text-gray-500" />
                       </button>
                     </div>
@@ -1225,21 +1113,16 @@ export default function TransactionsPage() {
         </div>
       )}
 
-      {/* NEW: Transaction Detail Modal */}
-      {showDetailModal && selectedTransaction && (
-        <TransactionDetailModal
-          transaction={selectedTransaction}
-          accounts={accounts}
-          categories={categories}
-          onClose={() => {
-            setShowDetailModal(false);
-            setSelectedTransaction(null);
-          }}
-          onEdit={handleEdit}
-          onDelete={(txn) => {
-            setTransactionToDelete(txn);
-            setShowDeleteModal(true);
-          }}
+      {/* ── Transaction Detail Popup ── */}
+      {viewingTransaction && (
+        <TransactionDetailPopup
+          transaction={viewingTransaction}
+          onClose={() => setViewingTransaction(null)}
+          onEdit={t => { setViewingTransaction(null); handleEdit(t); }}
+          onDelete={t => { setViewingTransaction(null); setTransactionToDelete(t); setShowDeleteModal(true); }}
+          getAccountName={getAccountName}
+          getCategoryName={getCategoryName}
+          getCategoryColor={getCategoryColor}
         />
       )}
 
@@ -1280,25 +1163,23 @@ export default function TransactionsPage() {
                 </div>
               )}
 
-              {/* Form content */}
+              {/* Transfer form */}
               {modalTab === 'transfer' ? (
-                /* ── Transfer form ── */
                 <>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-blue-600 uppercase ml-1">Amount (৳)</label>
+                    <label className="text-[10px] font-bold uppercase ml-1 text-blue-600">Amount (৳)</label>
                     <input type="number" step="0.01" value={transferData.amount}
                       onChange={e => setTransferData(p => ({ ...p, amount: e.target.value }))}
-                      className="w-full bg-blue-50 text-blue-600 border-2 border-blue-100 rounded-lg p-3 text-2xl font-bold text-center outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-full border-2 rounded-lg p-3 text-2xl font-bold text-center outline-none bg-blue-50 text-blue-600 border-blue-100 focus:ring-1 focus:ring-blue-500"
                       placeholder="0.00" required disabled={submitting} />
                   </div>
-                  <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="text-[10px] font-bold text-blue-500 uppercase mb-1 block ml-1">From Account</label>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block ml-1">From Account</label>
                       <select value={transferData.fromAccountId}
                         onChange={e => setTransferData(p => ({ ...p, fromAccountId: e.target.value }))}
-                        className="w-full bg-blue-50 border-blue-100 rounded-lg p-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
                         required disabled={submitting}>
-                        <option value="">Select Source</option>
                         {accountsWithAvailable.map(a => (
                           <option key={a.id} value={a.id}>{a.name} (Avail: ৳{(a.availableBalance||0).toLocaleString()})</option>
                         ))}
@@ -1330,14 +1211,12 @@ export default function TransactionsPage() {
                         className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
                         placeholder="e.g. Savings…" disabled={submitting} />
                     </div>
-                    {/* Charges */}
                     <ChargesField
                       value={transferData.chargeAmount}
                       onChange={v => setTransferData(p => ({ ...p, chargeAmount: v }))}
                       note={transferData.chargeNote}
                       onNoteChange={n => setTransferData(p => ({ ...p, chargeNote: n }))}
-                      disabled={submitting}
-                    />
+                      disabled={submitting} />
                   </div>
                   <button type="submit" disabled={submitting}
                     className="w-full py-4 text-white rounded-lg text-sm font-bold shadow-lg transition-all mt-2 uppercase tracking-widest bg-blue-600 hover:bg-blue-700 disabled:opacity-70 flex items-center justify-center gap-2">
@@ -1347,7 +1226,7 @@ export default function TransactionsPage() {
                   </button>
                 </>
               ) : (
-                /* ── Income / Expense form ── */
+                /* Income / Expense form */
                 <>
                   <div className="space-y-1">
                     <label className={`text-[10px] font-bold uppercase ml-1 ${modalTab === 'income' ? 'text-green-600' : 'text-red-600'}`}>
@@ -1375,7 +1254,6 @@ export default function TransactionsPage() {
                         ))}
                       </select>
                     </div>
-
                     <div>
                       <label className={`text-[10px] font-bold uppercase mb-1 block ml-1 ${modalTab === 'income' ? 'text-green-500' : 'text-red-500'}`}>
                         Category
@@ -1386,10 +1264,8 @@ export default function TransactionsPage() {
                         categories={categories}
                         type={formData.type}
                         disabled={submitting}
-                        onCategoryCreated={handleCategoryCreated}
-                      />
+                        onCategoryCreated={handleCategoryCreated} />
                     </div>
-
                     <div>
                       <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block ml-1">Date</label>
                       <input type="date" value={formData.date}
@@ -1397,7 +1273,6 @@ export default function TransactionsPage() {
                         className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
                         required disabled={submitting} />
                     </div>
-
                     <div>
                       <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block ml-1">Note</label>
                       <input type="text" value={formData.description}
@@ -1405,15 +1280,12 @@ export default function TransactionsPage() {
                         className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
                         placeholder="e.g. Rent, Salary…" disabled={submitting} />
                     </div>
-
-                    {/* Charges — available on both income and expense tabs */}
                     <ChargesField
                       value={formData.chargeAmount}
                       onChange={v => setFormData(p => ({ ...p, chargeAmount: v }))}
                       note={formData.chargeNote}
                       onNoteChange={n => setFormData(p => ({ ...p, chargeNote: n }))}
-                      disabled={submitting}
-                    />
+                      disabled={submitting} />
                   </div>
 
                   {/* Riba warning */}
@@ -1462,58 +1334,6 @@ export default function TransactionsPage() {
           </div>
         </div>
       )}
-
-      {/* CSS Animations */}
-      <style jsx global>{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        
-        @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        
-        @keyframes slideUpMobile {
-          from {
-            transform: translateY(100%);
-          }
-          to {
-            transform: translateY(0);
-          }
-        }
-        
-        .animate-fadeIn {
-          animation: fadeIn 0.2s ease-out;
-        }
-        
-        .animate-slideUp {
-          animation: slideUp 0.3s ease-out;
-        }
-        
-        .animate-slideUpMobile {
-          animation: slideUpMobile 0.3s ease-out;
-        }
-        
-        /* Mobile bottom sheet positioning */
-        @media (max-width: 768px) {
-          .animate-slideUpMobile {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            border-radius: 20px 20px 0 0;
-            max-height: 90vh;
-          }
-        }
-      `}</style>
     </div>
   );
 }

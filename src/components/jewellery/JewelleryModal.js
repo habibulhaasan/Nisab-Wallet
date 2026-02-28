@@ -47,7 +47,15 @@ export default function JewelleryModal({ item, accounts = [], onSave, onClose })
     item?.purchaseDate || new Date().toISOString().split('T')[0]
   );
 
-  // ── Record as transaction (only for "purchased" type, only on Add) ────────
+  // ── Record as transaction ──────────────────────────────────────────────────
+  // Show on:
+  //   • New item (any time acquisitionType === purchased)
+  //   • Edit item that was never recorded (no purchaseTransactionId)
+  const alreadyRecorded   = isEdit && !!item?.purchaseTransactionId;
+  const isPurchased        = acquisitionType === ACQUISITION_TYPES.PURCHASED;
+  // canRecordTx = purchased + not already recorded
+  const canRecordTx        = isPurchased && !alreadyRecorded;
+
   const [recordTransaction, setRecordTransaction] = useState(false);
   const [txAccountId,       setTxAccountId]       = useState('');
   const [insufficientFunds, setInsufficientFunds] = useState(false);
@@ -72,10 +80,6 @@ export default function JewelleryModal({ item, accounts = [], onSave, onClose })
     ? (parseFloat(purchaseTotal) || 0)
     : estimatedTotal;
 
-  // Is "purchased" & not edit (we only show record-transaction option on Add)
-  const isPurchased    = acquisitionType === ACQUISITION_TYPES.PURCHASED;
-  const canRecordTx    = isPurchased && !isEdit;
-
   // Selected account object
   const selectedAccount = accounts.find((a) => a.id === txAccountId);
 
@@ -93,13 +97,19 @@ export default function JewelleryModal({ item, accounts = [], onSave, onClose })
     if (accounts.length > 0 && !txAccountId) setTxAccountId(accounts[0].id);
   }, [accounts]);
 
+  // When user switches off "purchased", turn off record toggle
+  useEffect(() => {
+    if (!isPurchased) setRecordTransaction(false);
+  }, [isPurchased]);
+
   // ── Validation ────────────────────────────────────────────────────────────
   const validate = () => {
     const e = {};
     if (!name.trim()) e.name   = 'Name is required';
     if (grams <= 0)   e.weight = 'Enter at least one weight unit';
-    if (recordTransaction && !txAccountId) e.account = 'Select an account';
-    if (recordTransaction && insufficientFunds) e.funds = 'Insufficient balance in selected account';
+    if (recordTransaction && !txAccountId)      e.account = 'Select an account';
+    if (recordTransaction && insufficientFunds) e.funds   = 'Insufficient balance in selected account';
+    if (recordTransaction && displayPurchaseTotal <= 0) e.amount = 'Enter a purchase price before recording a transaction';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -135,7 +145,7 @@ export default function JewelleryModal({ item, accounts = [], onSave, onClose })
       _txAccountId:       canRecordTx && recordTransaction ? txAccountId : null,
       _txAccountBalance:  canRecordTx && recordTransaction && selectedAccount ? selectedAccount.balance : null,
       _txAccountName:     canRecordTx && recordTransaction && selectedAccount ? selectedAccount.name : null,
-      // Zakat value — starts null, set when user first checks price
+      // Zakat value — preserve existing
       currentMarketValue:    item?.currentMarketValue    ?? null,
       currentDeductedValue:  item?.currentDeductedValue  ?? null,
       currentZakatValue:     item?.currentZakatValue     ?? null,
@@ -155,7 +165,6 @@ export default function JewelleryModal({ item, accounts = [], onSave, onClose })
     if (metal === 'Silver' && !silverKarats.includes(karat)) setKarat('22K');
   }, [metal]);
 
-  // ── Acquisition type icons/labels ─────────────────────────────────────────
   const ACQN_OPTIONS = [
     { value: ACQUISITION_TYPES.PURCHASED, label: 'Purchased',  icon: ShoppingBag },
     { value: ACQUISITION_TYPES.GIFT,      label: 'Gift',        icon: Gift        },
@@ -197,7 +206,6 @@ export default function JewelleryModal({ item, accounts = [], onSave, onClose })
           {/* ── Basic info ── */}
           <Section icon={<Tag className="w-4 h-4 text-amber-600" />} title="Basic Info">
             <div className="space-y-3">
-              {/* Name */}
               <div>
                 <label className="label-sm">Item Name</label>
                 <input
@@ -207,8 +215,6 @@ export default function JewelleryModal({ item, accounts = [], onSave, onClose })
                 />
                 {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
               </div>
-
-              {/* Category + Metal */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label-sm">Category</label>
@@ -219,8 +225,6 @@ export default function JewelleryModal({ item, accounts = [], onSave, onClose })
                   <SelectField value={metal} onChange={setMetal} options={METAL_OPTIONS} />
                 </div>
               </div>
-
-              {/* Karat */}
               <div>
                 <label className="label-sm">Karat / Purity</label>
                 <div className="flex gap-2 flex-wrap">
@@ -234,8 +238,6 @@ export default function JewelleryModal({ item, accounts = [], onSave, onClose })
                   ))}
                 </div>
               </div>
-
-              {/* Notes */}
               <div>
                 <label className="label-sm">Notes <span className="text-gray-400">(optional)</span></label>
                 <textarea
@@ -247,7 +249,7 @@ export default function JewelleryModal({ item, accounts = [], onSave, onClose })
             </div>
           </Section>
 
-          {/* ── How did you acquire it? ── */}
+          {/* ── Acquisition ── */}
           <Section icon={<Gift className="w-4 h-4 text-purple-500" />} title="How Was It Acquired?">
             <div className="grid grid-cols-4 gap-2">
               {ACQN_OPTIONS.map(({ value, label, icon: Icon }) => (
@@ -262,8 +264,6 @@ export default function JewelleryModal({ item, accounts = [], onSave, onClose })
                 </button>
               ))}
             </div>
-
-            {/* Context hint */}
             <div className="mt-2 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5 text-xs text-gray-500 leading-relaxed">
               {acquisitionType === ACQUISITION_TYPES.PURCHASED && (
                 <>📦 <strong>Purchased</strong> — you paid for this. Optionally record cost below and deduct from account.</>
@@ -293,7 +293,7 @@ export default function JewelleryModal({ item, accounts = [], onSave, onClose })
                 { label: 'Vori', val: wVori, set: setWVori, max: 999 },
                 { label: 'Ana',  val: wAna,  set: setWAna,  max: 15  },
                 { label: 'Roti', val: wRoti, set: setWRoti, max: 5   },
-                { label: 'Point',val: wPoint,set: setWPoint,max: 9   },
+                { label: 'Point',val: wPoint,set: setWPoint,max: 5   },
               ].map(({ label, val, set, max }) => (
                 <div key={label}>
                   <label className="label-sm text-center block">{label}</label>
@@ -317,7 +317,7 @@ export default function JewelleryModal({ item, accounts = [], onSave, onClose })
             )}
           </Section>
 
-          {/* ── Purchase price (only for "purchased") ── */}
+          {/* ── Purchase price + record-as-transaction ── */}
           {isPurchased && (
             <Section icon={<DollarSign className="w-4 h-4 text-emerald-600" />} title="Purchase Price (optional)">
 
@@ -366,8 +366,8 @@ export default function JewelleryModal({ item, accounts = [], onSave, onClose })
                   {grams > 0 && goldPriceAtPurchase > 0 && (
                     <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-xs space-y-1.5">
                       <p className="font-semibold text-emerald-800 mb-2">Estimated Purchase Cost</p>
-                      <Row label="Base value"             val={fmtBDT(baseValue)} />
-                      <Row label={`VAT (${vatPct}%)`}     val={fmtBDT(vatAmount)} />
+                      <Row label="Base value"               val={fmtBDT(baseValue)} />
+                      <Row label={`VAT (${vatPct}%)`}       val={fmtBDT(vatAmount)} />
                       <Row label={`Making (${makingPct}%)`} val={fmtBDT(makingAmount)} />
                       {otherFlat > 0 && <Row label="Other charges" val={fmtBDT(otherFlat)} />}
                       <div className="border-t border-emerald-200 pt-1.5 mt-1">
@@ -389,36 +389,65 @@ export default function JewelleryModal({ item, accounts = [], onSave, onClose })
                 </div>
               )}
 
-              {/* ── Record as transaction toggle ── */}
-              {canRecordTx && displayPurchaseTotal > 0 && accounts.length > 0 && (
-                <div className="mt-4">
-                  {/* Toggle */}
+              {/* ── Record as expense transaction ── */}
+              {canRecordTx && accounts.length > 0 && (
+                <div className="mt-5">
+                  {/* Divider */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="h-px flex-1 bg-gray-100" />
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Expense Transaction</span>
+                    <div className="h-px flex-1 bg-gray-100" />
+                  </div>
+
+                  {/* Toggle button */}
                   <button
-                    onClick={() => setRecordTransaction(!recordTransaction)}
-                    className={`w-full flex items-center justify-between gap-3 p-3.5 rounded-xl border-2 transition-all ${
+                    type="button"
+                    onClick={() => setRecordTransaction(prev => !prev)}
+                    className={`w-full flex items-center justify-between gap-3 p-4 rounded-xl border-2 transition-all ${
                       recordTransaction
                         ? 'border-emerald-400 bg-emerald-50'
-                        : 'border-gray-200 bg-white hover:border-gray-300'
-                    }`}>
-                    <div className="flex items-center gap-2.5">
-                      <CreditCard className={`w-4 h-4 ${recordTransaction ? 'text-emerald-600' : 'text-gray-400'}`} />
+                        : 'border-dashed border-gray-300 bg-white hover:border-gray-400 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                        recordTransaction ? 'bg-emerald-500' : 'bg-gray-100'
+                      }`}>
+                        <CreditCard className={`w-4 h-4 ${recordTransaction ? 'text-white' : 'text-gray-400'}`} />
+                      </div>
                       <div className="text-left">
                         <p className={`text-sm font-bold ${recordTransaction ? 'text-emerald-800' : 'text-gray-700'}`}>
-                          Deduct from account &amp; record as expense
+                          Record as expense &amp; deduct from account
                         </p>
                         <p className="text-xs text-gray-500 mt-0.5">
-                          Creates an expense transaction of {fmtBDT(displayPurchaseTotal)} and deducts from selected account
+                          {displayPurchaseTotal > 0
+                            ? `Creates an expense of ${fmtBDT(displayPurchaseTotal)} and deducts from account`
+                            : 'Enter a purchase price above first'}
                         </p>
                       </div>
                     </div>
-                    <div className={`w-10 h-5 rounded-full flex items-center transition-all flex-shrink-0 ${
-                      recordTransaction ? 'bg-emerald-500 justify-end' : 'bg-gray-300 justify-start'
+                    {/* Toggle pill */}
+                    <div className={`w-11 h-6 rounded-full flex items-center transition-all flex-shrink-0 ${
+                      recordTransaction ? 'bg-emerald-500 justify-end' : 'bg-gray-200 justify-start'
                     }`}>
-                      <div className="w-4 h-4 bg-white rounded-full mx-0.5 shadow-sm" />
+                      <div className="w-5 h-5 bg-white rounded-full mx-0.5 shadow-sm" />
                     </div>
                   </button>
 
-                  {/* Account selector */}
+                  {/* Amount warning — toggle is on but no price yet */}
+                  {recordTransaction && displayPurchaseTotal <= 0 && (
+                    <div className="mt-2 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                      <p className="text-xs text-amber-700">
+                        Enter a purchase amount above so we know how much to deduct.
+                      </p>
+                    </div>
+                  )}
+                  {errors.amount && (
+                    <p className="text-xs text-red-500 mt-1">{errors.amount}</p>
+                  )}
+
+                  {/* Account selector — shown when toggle is on */}
                   {recordTransaction && (
                     <div className="mt-3 space-y-2">
                       <label className="label-sm">Deduct from account</label>
@@ -426,14 +455,18 @@ export default function JewelleryModal({ item, accounts = [], onSave, onClose })
                         {accounts.map((acc) => {
                           const hasEnough = acc.balance >= displayPurchaseTotal;
                           return (
-                            <button key={acc.id} onClick={() => setTxAccountId(acc.id)}
+                            <button
+                              key={acc.id}
+                              type="button"
+                              onClick={() => setTxAccountId(acc.id)}
                               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 text-left transition-all ${
                                 txAccountId === acc.id
                                   ? hasEnough
                                     ? 'border-emerald-400 bg-emerald-50'
                                     : 'border-red-300 bg-red-50'
                                   : 'border-gray-200 hover:border-gray-300 bg-white'
-                              }`}>
+                              }`}
+                            >
                               <div>
                                 <p className="text-sm font-semibold text-gray-800">{acc.name}</p>
                                 <p className="text-xs text-gray-500">{acc.type}</p>
@@ -442,26 +475,26 @@ export default function JewelleryModal({ item, accounts = [], onSave, onClose })
                                 <p className={`text-sm font-bold ${hasEnough ? 'text-gray-800' : 'text-red-500'}`}>
                                   {fmtBDT(acc.balance)}
                                 </p>
-                                {!hasEnough && (
-                                  <p className="text-xs text-red-500">Insufficient</p>
-                                )}
+                                {!hasEnough && <p className="text-xs text-red-500">Insufficient</p>}
                               </div>
                             </button>
                           );
                         })}
                       </div>
                       {errors.account && <p className="text-xs text-red-500">{errors.account}</p>}
+
                       {insufficientFunds && (
                         <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
                           <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
                           <p className="text-xs text-red-700">
                             Selected account doesn&apos;t have enough balance ({fmtBDT(displayPurchaseTotal)} needed).
-                            You can still save the jewellery without recording a transaction.
+                            You can still save without recording a transaction.
                           </p>
                         </div>
                       )}
-                      {/* Summary */}
-                      {selectedAccount && !insufficientFunds && (
+
+                      {/* Before / after balance */}
+                      {selectedAccount && !insufficientFunds && displayPurchaseTotal > 0 && (
                         <div className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5 text-xs flex items-center justify-between">
                           <span className="text-gray-500">Balance after purchase</span>
                           <div className="flex items-center gap-1.5 font-semibold text-gray-800">
@@ -477,26 +510,27 @@ export default function JewelleryModal({ item, accounts = [], onSave, onClose })
               )}
 
               {/* No accounts warning */}
-              {canRecordTx && displayPurchaseTotal > 0 && accounts.length === 0 && (
-                <div className="mt-3 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+              {canRecordTx && accounts.length === 0 && (
+                <div className="mt-4 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
                   <Info className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
                   <p className="text-xs text-amber-700">Add an account first to record the purchase as a transaction.</p>
                 </div>
               )}
 
-              {/* Previously purchased note */}
-              {!canRecordTx && isEdit && (
-                <div className="mt-3 flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2.5">
-                  <Info className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
-                  <p className="text-xs text-blue-700">
-                    Transaction was recorded when this item was added. Editing purchase cost here only updates the record — it does not affect account balances.
+              {/* Already recorded notice */}
+              {alreadyRecorded && (
+                <div className="mt-4 flex items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                  <p className="text-xs text-emerald-700">
+                    Purchase expense was already recorded when this item was added.
+                    Editing here updates the record only — account balance is not changed again.
                   </p>
                 </div>
               )}
             </Section>
           )}
 
-          {/* For gift/inherited — acquisition date */}
+          {/* Date acquired (gift / inherited / other) */}
           {!isPurchased && (
             <Section icon={<DollarSign className="w-4 h-4 text-gray-400" />} title="Date Acquired (optional)">
               <input type="date" value={purchaseDate}
@@ -516,8 +550,11 @@ export default function JewelleryModal({ item, accounts = [], onSave, onClose })
             className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold text-sm hover:bg-gray-50 transition-colors">
             Cancel
           </button>
-          <button onClick={handleSave} disabled={saving || (recordTransaction && insufficientFunds)}
-            className="flex-1 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 text-white font-bold text-sm transition-colors flex items-center justify-center gap-2">
+          <button
+            onClick={handleSave}
+            disabled={saving || (recordTransaction && insufficientFunds)}
+            className="flex-1 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 text-white font-bold text-sm transition-colors flex items-center justify-center gap-2"
+          >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
             {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Jewellery'}
           </button>

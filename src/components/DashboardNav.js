@@ -8,9 +8,9 @@ import Image from 'next/image';
 import { 
   LayoutDashboard, CreditCard, Receipt, FolderOpen, Star, BarChart3, 
   LogOut, Menu, X, ArrowRightLeft, Settings, 
-  Users, Package, DollarSign, Globe, Sprout,
+  Users, Package, DollarSign, Globe, TrendingUp,
   HandCoins, MessageCircleQuestion, Goal, Blend, MessageSquareMore,
-  Home, Repeat ,FileText, ShoppingBag, PiggyBank, AlertTriangle
+  Home, Repeat ,FileText, ShoppingBag, PiggyBank, AlertTriangle, Gem
 } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
 import { checkIsAdmin } from '@/lib/adminUtils';
@@ -55,7 +55,8 @@ export default function DashboardNav() {
       { name: 'Loans', href: '/dashboard/loans', icon: HandCoins },
       { name: 'Lend', href: '/dashboard/lendings', icon: Blend },
       { name: 'Goals', href: '/dashboard/goals', icon: Goal },
-      { name: 'Investments', href: '/dashboard/investments', icon: Sprout },
+      { name: 'Jewellery', href: '/dashboard/jewellery', icon: Gem },
+      { name: 'Investments', href: '/dashboard/investments', icon: TrendingUp },
       { name: 'Zakat', href: '/dashboard/zakat', icon: Star },
       { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
       { name: 'Recurring', href: '/dashboard/recurring', icon: Repeat},
