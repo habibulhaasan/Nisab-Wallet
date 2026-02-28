@@ -235,6 +235,253 @@ function ChargesField({ value, onChange, disabled, note, onNoteChange }) {
   );
 }
 
+// ─── NEW: Transaction Detail Modal Component ──────────────────────────────
+function TransactionDetailModal({ transaction, accounts, categories, onClose, onEdit, onDelete }) {
+  if (!transaction) return null;
+
+  const account = accounts.find(a => a.id === transaction.accountId);
+  const category = categories.find(c => c.id === transaction.categoryId);
+  const relatedAccount = accounts.find(a => a.id === transaction.relatedAccountId);
+
+  const isTransfer = transaction.isTransfer;
+  const isIncome = transaction.type === 'Income';
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    const d = new Date(dateStr);
+    return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+  };
+
+  const formatDateTime = (timestamp) => {
+    if (!timestamp) return 'N/A';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 animate-fadeIn md:flex md:items-center md:justify-center md:p-4"
+      onClick={onClose}>
+      <div className="bg-white w-full h-full md:h-auto md:max-w-md md:rounded-2xl shadow-2xl animate-slideUpMobile md:animate-slideUp overflow-hidden flex flex-col md:max-h-[85vh]"
+        onClick={e => e.stopPropagation()}>
+        
+        {/* Header */}
+        <div className={`relative px-4 md:px-6 pt-4 md:pt-6 pb-3 md:pb-4 flex-shrink-0 ${
+          isTransfer ? 'bg-gradient-to-br from-blue-500 to-blue-600' :
+          isIncome ? 'bg-gradient-to-br from-green-500 to-green-600' :
+          'bg-gradient-to-br from-red-500 to-red-600'
+        }`}>
+          {/* Mobile handle */}
+          <div className="md:hidden flex justify-center mb-2">
+            <div className="w-10 h-1 bg-white/30 rounded-full"></div>
+          </div>
+
+          <button onClick={onClose}
+            className="absolute top-3 md:top-4 right-3 md:right-4 text-white/80 hover:text-white transition-colors">
+            <X size={20} className="md:w-6 md:h-6" />
+          </button>
+          
+          <div className="flex items-center gap-2 md:gap-3 mb-2 md:mb-3">
+            {isTransfer ? (
+              <div className="bg-white/20 backdrop-blur-sm p-2 md:p-3 rounded-lg md:rounded-xl">
+                <ArrowRightLeft size={20} className="text-white md:w-6 md:h-6" />
+              </div>
+            ) : isIncome ? (
+              <div className="bg-white/20 backdrop-blur-sm p-2 md:p-3 rounded-lg md:rounded-xl">
+                <ArrowUpCircle size={20} className="text-white md:w-6 md:h-6" />
+              </div>
+            ) : (
+              <div className="bg-white/20 backdrop-blur-sm p-2 md:p-3 rounded-lg md:rounded-xl">
+                <ArrowDownCircle size={20} className="text-white md:w-6 md:h-6" />
+              </div>
+            )}
+            <div>
+              <h3 className="text-white text-xs md:text-sm font-semibold uppercase tracking-wide">
+                {isTransfer ? 'Transfer' : isIncome ? 'Income' : 'Expense'}
+              </h3>
+              <p className="text-white/80 text-[10px] md:text-xs">Transaction Details</p>
+            </div>
+          </div>
+
+          {/* Amount */}
+          <div className="text-center py-3 md:py-4">
+            <div className="text-white/80 text-[10px] md:text-xs font-semibold uppercase tracking-wider mb-1">
+              Amount
+            </div>
+            <div className="text-white text-3xl md:text-4xl font-bold">
+              ৳{parseFloat(transaction.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+          </div>
+        </div>
+
+        {/* Content - Scrollable */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3 md:space-y-4">
+          
+          {/* Transfer specific details */}
+          {isTransfer && (
+            <>
+              <DetailRow 
+                label={transaction.transferDirection === 'from' ? 'From Account' : 'To Account'} 
+                value={account?.name || 'Unknown'} 
+                icon={<Wallet size={14} className="md:w-4 md:h-4" />}
+              />
+              <DetailRow 
+                label={transaction.transferDirection === 'from' ? 'To Account' : 'From Account'} 
+                value={relatedAccount?.name || 'Unknown'} 
+                icon={<Wallet size={14} className="md:w-4 md:h-4" />}
+              />
+            </>
+          )}
+
+          {/* Income/Expense specific details */}
+          {!isTransfer && (
+            <>
+              <DetailRow 
+                label="Account" 
+                value={account?.name || 'Unknown'} 
+                icon={<Wallet size={14} className="md:w-4 md:h-4" />}
+              />
+              <DetailRow 
+                label="Category" 
+                value={
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full" 
+                      style={{ backgroundColor: category?.color || '#9CA3AF' }} />
+                    <span>{category?.name || 'Unknown'}</span>
+                    {category?.isRiba && <span className="text-amber-600">⚠</span>}
+                  </div>
+                }
+                icon={<Receipt size={14} className="md:w-4 md:h-4" />}
+              />
+            </>
+          )}
+
+          {/* Date */}
+          <DetailRow 
+            label="Date" 
+            value={formatDate(transaction.date)} 
+            icon={<Calendar size={14} className="md:w-4 md:h-4" />}
+          />
+
+          {/* Created At */}
+          {transaction.createdAt && (
+            <DetailRow 
+              label="Created At" 
+              value={formatDateTime(transaction.createdAt)} 
+              icon={<Calendar size={14} className="md:w-4 md:h-4" />}
+            />
+          )}
+
+          {/* Description/Note */}
+          {transaction.description && (
+            <DetailRow 
+              label="Note" 
+              value={transaction.description} 
+              icon={<Info size={14} className="md:w-4 md:h-4" />}
+            />
+          )}
+
+          {/* Charge badge */}
+          {transaction.isCharge && (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-2.5 md:p-3">
+              <div className="flex items-center gap-2">
+                <Zap size={13} className="text-orange-600 md:w-3.5 md:h-3.5" />
+                <span className="text-[11px] md:text-xs font-semibold text-orange-900">Transaction Fee/Charge</span>
+              </div>
+            </div>
+          )}
+
+          {/* Source info */}
+          {transaction.source && (
+            <DetailRow 
+              label="Source" 
+              value={
+                transaction.source === 'jewellery_sale' ? '💎 Jewellery Sale' :
+                transaction.source === 'goal' ? '🎯 Goal' :
+                transaction.source
+              }
+              icon={<Zap size={14} className="md:w-4 md:h-4" />}
+            />
+          )}
+
+          {/* Riba warning */}
+          {transaction.isRiba && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 md:p-3 space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertCircle size={13} className="text-amber-600 flex-shrink-0 mt-0.5 md:w-3.5 md:h-3.5" />
+                <p className="text-[11px] md:text-xs text-amber-800">
+                  <strong>Riba/Interest income.</strong> Should be donated as Sadaqah.
+                </p>
+              </div>
+              {transaction.sadaqahDone && (
+                <div className="flex items-center gap-1.5 text-green-700">
+                  <span className="text-[11px] md:text-xs font-semibold">✓ Purified</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Transaction ID */}
+          <div className="pt-2 border-t border-gray-100">
+            <p className="text-[9px] md:text-[10px] text-gray-400 uppercase tracking-wide">Transaction ID</p>
+            <p className="text-[11px] md:text-xs text-gray-600 font-mono break-all">{transaction.id}</p>
+          </div>
+        </div>
+
+        {/* Action buttons - Fixed at bottom */}
+        <div className="flex-shrink-0 p-3 md:p-4 border-t border-gray-100 flex gap-2 md:gap-3 bg-white">
+          {!isTransfer && (
+            <button
+              onClick={() => {
+                onEdit(transaction);
+                onClose();
+              }}
+              className="flex-1 py-2.5 md:py-3 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-gray-700 rounded-lg font-semibold text-xs md:text-sm transition-colors flex items-center justify-center gap-1.5 md:gap-2"
+            >
+              <Edit2 size={14} className="md:w-4 md:h-4" />
+              Edit
+            </button>
+          )}
+          <button
+            onClick={() => {
+              onDelete(transaction);
+              onClose();
+            }}
+            className={`${isTransfer ? 'flex-1' : 'flex-1'} py-2.5 md:py-3 bg-red-500 hover:bg-red-600 active:bg-red-700 text-white rounded-lg font-semibold text-xs md:text-sm transition-colors flex items-center justify-center gap-1.5 md:gap-2`}
+          >
+            <Trash2 size={14} className="md:w-4 md:h-4" />
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Helper component for detail rows
+function DetailRow({ label, value, icon }) {
+  return (
+    <div className="flex items-start gap-2 md:gap-3 py-1.5 md:py-2">
+      <div className="text-gray-400 mt-0.5">
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-wide font-semibold mb-0.5">
+          {label}
+        </p>
+        <div className="text-xs md:text-sm text-gray-900 font-medium break-words">
+          {value}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 export default function TransactionsPage() {
   const { user } = useAuth();
@@ -275,6 +522,10 @@ export default function TransactionsPage() {
   const [summaryIncome,         setSummaryIncome]         = useState(0);
   const [summaryExpense,        setSummaryExpense]        = useState(0);
   const [summaryNet,            setSummaryNet]            = useState(0);
+
+  // NEW: Transaction detail modal state
+  const [selectedTransaction, setSelectedTransaction] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   // ── Load ─────────────────────────────────────────────────────────────────
   useEffect(() => { if (user) loadData(); }, [user]);
@@ -698,6 +949,12 @@ export default function TransactionsPage() {
     setTransferData({ fromAccountId: accounts[0]?.id || '', toAccountId: accounts[1]?.id || '', amount: '', description: '', date: new Date().toISOString().split('T')[0], chargeAmount: 0, chargeNote: '' });
   };
 
+  // ── NEW: Handle transaction click to show details ──────────────────────
+  const handleTransactionClick = (txn) => {
+    setSelectedTransaction(txn);
+    setShowDetailModal(true);
+  };
+
   // ── Helpers ───────────────────────────────────────────────────────────
   const getAccountName  = id => accounts.find(a => a.id === id)?.name || 'Unknown';
   const getCategoryName = id => categories.find(c => c.id === id)?.name || 'Unknown';
@@ -906,7 +1163,11 @@ export default function TransactionsPage() {
                 </div>
               </div>
               {records.map(t => (
-                <div key={t.id} className={`px-4 py-3 hover:bg-gray-50 flex items-center justify-between gap-3 border-b border-gray-100 last:border-b-0 ${t.isRiba ? 'bg-amber-50/50' : ''}`}>
+                <div 
+                  key={t.id} 
+                  onClick={() => handleTransactionClick(t)}
+                  className={`px-4 py-3 hover:bg-gray-50 flex items-center justify-between gap-3 border-b border-gray-100 last:border-b-0 cursor-pointer ${t.isRiba ? 'bg-amber-50/50' : ''}`}
+                >
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center ${t.type === 'Income' ? 'bg-green-50' : 'bg-red-50'}`}>
                       {t.type === 'Income'
@@ -946,7 +1207,7 @@ export default function TransactionsPage() {
                     <p className={`text-base font-semibold ${t.type === 'Income' ? 'text-green-600' : 'text-red-600'}`}>
                       {t.type === 'Income' ? '+' : '-'}৳{Number(t.amount).toLocaleString()}
                     </p>
-                    <div className="flex gap-1">
+                    <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                       {!t.isTransfer && (
                         <button onClick={() => handleEdit(t)} className="p-1 hover:bg-gray-100 rounded">
                           <Edit2 size={15} className="text-gray-500" />
@@ -962,6 +1223,24 @@ export default function TransactionsPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* NEW: Transaction Detail Modal */}
+      {showDetailModal && selectedTransaction && (
+        <TransactionDetailModal
+          transaction={selectedTransaction}
+          accounts={accounts}
+          categories={categories}
+          onClose={() => {
+            setShowDetailModal(false);
+            setSelectedTransaction(null);
+          }}
+          onEdit={handleEdit}
+          onDelete={(txn) => {
+            setTransactionToDelete(txn);
+            setShowDeleteModal(true);
+          }}
+        />
       )}
 
       {/* ── Transaction Modal ── */}
@@ -1001,23 +1280,25 @@ export default function TransactionsPage() {
                 </div>
               )}
 
-              {/* ── Transfer form ── */}
+              {/* Form content */}
               {modalTab === 'transfer' ? (
+                /* ── Transfer form ── */
                 <>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold uppercase ml-1 text-blue-600">Amount (৳)</label>
+                    <label className="text-[10px] font-bold text-blue-600 uppercase ml-1">Amount (৳)</label>
                     <input type="number" step="0.01" value={transferData.amount}
                       onChange={e => setTransferData(p => ({ ...p, amount: e.target.value }))}
-                      className="w-full border-2 rounded-lg p-3 text-2xl font-bold text-center outline-none bg-blue-50 text-blue-600 border-blue-100 focus:ring-1 focus:ring-blue-500"
+                      className="w-full bg-blue-50 text-blue-600 border-2 border-blue-100 rounded-lg p-3 text-2xl font-bold text-center outline-none focus:ring-1 focus:ring-blue-500"
                       placeholder="0.00" required disabled={submitting} />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-4">
                     <div>
-                      <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block ml-1">From Account</label>
+                      <label className="text-[10px] font-bold text-blue-500 uppercase mb-1 block ml-1">From Account</label>
                       <select value={transferData.fromAccountId}
                         onChange={e => setTransferData(p => ({ ...p, fromAccountId: e.target.value }))}
-                        className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full bg-blue-50 border-blue-100 rounded-lg p-2.5 text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
                         required disabled={submitting}>
+                        <option value="">Select Source</option>
                         {accountsWithAvailable.map(a => (
                           <option key={a.id} value={a.id}>{a.name} (Avail: ৳{(a.availableBalance||0).toLocaleString()})</option>
                         ))}
@@ -1181,6 +1462,58 @@ export default function TransactionsPage() {
           </div>
         </div>
       )}
+
+      {/* CSS Animations */}
+      <style jsx global>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        
+        @keyframes slideUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+        @keyframes slideUpMobile {
+          from {
+            transform: translateY(100%);
+          }
+          to {
+            transform: translateY(0);
+          }
+        }
+        
+        .animate-fadeIn {
+          animation: fadeIn 0.2s ease-out;
+        }
+        
+        .animate-slideUp {
+          animation: slideUp 0.3s ease-out;
+        }
+        
+        .animate-slideUpMobile {
+          animation: slideUpMobile 0.3s ease-out;
+        }
+        
+        /* Mobile bottom sheet positioning */
+        @media (max-width: 768px) {
+          .animate-slideUpMobile {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            border-radius: 20px 20px 0 0;
+            max-height: 90vh;
+          }
+        }
+      `}</style>
     </div>
   );
 }
