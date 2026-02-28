@@ -48,6 +48,19 @@ export default function TransactionsPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [transactionToDelete, setTransactionToDelete] = useState(null);
   const [editingTransaction, setEditingTransaction] = useState(null);
+  const [viewingTransaction, setViewingTransaction] = useState(null);
+
+  // Fees & charges
+  const [hasFees, setHasFees]         = useState(false);
+  const [feeAmount, setFeeAmount]     = useState('');
+  const [feeAccountId, setFeeAccountId] = useState('');
+  const [feeCategoryId, setFeeCategoryId] = useState('');
+
+  // Inline add-category
+  const [showAddCat, setShowAddCat]   = useState(false);
+  const [newCatName, setNewCatName]   = useState('');
+  const [newCatColor, setNewCatColor] = useState('#6B7280');
+  const [addingCat, setAddingCat]     = useState(false);
 
   const [filterType, setFilterType] = useState('All');
   const [filterAccount, setFilterAccount] = useState('All');
@@ -326,12 +339,6 @@ export default function TransactionsPage() {
 
   const totalBalance = accounts.reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
 
-  // Returns true if the selected category name indicates Riba/Interest income
-  const isRibaCategory = (categoryId) => {
-    const name = (categories.find(c => c.id === categoryId)?.name || '').toLowerCase();
-    return name.includes('riba') || name.includes('interest');
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (submitting) return;
@@ -458,10 +465,34 @@ export default function TransactionsPage() {
           createdAt: Timestamp.now(),
         });
 
-        const newBal =
+        let newBal =
           formData.type === 'Income'
             ? account.balance + amount
             : account.balance - amount;
+
+        // Fees & charges — record as a separate expense transaction
+        const parsedFee = parseFloat(feeAmount);
+        if (hasFees && parsedFee > 0 && feeAccountId && feeCategoryId) {
+          const feeAcc = accounts.find(a => a.id === feeAccountId);
+          if (feeAcc) {
+            await addDoc(collection(db, 'users', user.uid, 'transactions'), {
+              type: 'Expense',
+              amount: parsedFee,
+              accountId: feeAccountId,
+              categoryId: feeCategoryId,
+              description: `Fee/charge — ${formData.description || getCategoryName(formData.categoryId)}`,
+              date: formData.date,
+              isFee: true,
+              createdAt: Timestamp.now(),
+            });
+            if (feeAcc.id === account.id) {
+              newBal -= parsedFee;
+            } else {
+              await updateAccount(user.uid, feeAcc.id, { balance: feeAcc.balance - parsedFee });
+            }
+          }
+        }
+
         await updateAccount(user.uid, account.id, { balance: newBal });
 
         showToast('Added', 'success');
@@ -718,6 +749,8 @@ export default function TransactionsPage() {
     setModalTab('expense');
     setSubmitting(false);
     setCheckingBalance(false);
+    setHasFees(false); setFeeAmount(''); setFeeAccountId(''); setFeeCategoryId('');
+    setShowAddCat(false); setNewCatName(''); setNewCatColor('#6B7280');
     setFormData({
       type: 'Expense',
       amount: '',
@@ -738,6 +771,10 @@ export default function TransactionsPage() {
   const getAccountName = (id) => accounts.find((a) => a.id === id)?.name || 'Unknown';
   const getCategoryName = (id) => categories.find((c) => c.id === id)?.name || 'Unknown';
   const getCategoryColor = (id) => categories.find((c) => c.id === id)?.color || '#6B7280';
+  const isRibaCategory = (catId) => {
+    const n = (categories.find(c => c.id === catId)?.name || '').toLowerCase();
+    return n.includes('riba') || n.includes('interest');
+  };
   const getAccountAvailable = (id) => accountsWithAvailable.find((a) => a.id === id)?.availableBalance || 0;
 
   const getDateRangeForFilter = () => {
@@ -1062,70 +1099,59 @@ export default function TransactionsPage() {
               {records.map((t) => (
                 <div
                   key={t.id}
-                  className="px-4 py-3 hover:bg-gray-50 flex items-center justify-between gap-3 border-b border-gray-100 last:border-b-0"
+                  className="px-4 py-3 hover:bg-gray-50 flex items-center justify-between gap-3 border-b border-gray-100 last:border-b-0 group"
                 >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                        t.type === 'Income' ? 'bg-green-50' : 'bg-red-50'
-                      }`}
-                    >
-                      {t.type === 'Income' ? (
-                        <ArrowUpCircle size={16} className="text-green-600" />
-                      ) : (
-                        <ArrowDownCircle size={16} className="text-red-600" />
-                      )}
+                  {/* Left clickable area → detail popup */}
+                  <button
+                    type="button"
+                    onClick={() => setViewingTransaction(t)}
+                    className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                  >
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                      t.isTransfer ? 'bg-blue-50' : t.type === 'Income' ? 'bg-green-50' : 'bg-red-50'
+                    }`}>
+                      {t.isTransfer
+                        ? <ArrowRightLeft size={15} className="text-blue-500" />
+                        : t.type === 'Income'
+                          ? <ArrowUpCircle size={16} className="text-green-600" />
+                          : <ArrowDownCircle size={16} className="text-red-600" />
+                      }
                     </div>
-
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         {!t.isTransfer && (
-                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getCategoryColor(t.categoryId) }} />
-                        )}
-                        {t.isTransfer && (
-                          <ArrowRightLeft size={12} className="text-blue-500" />
+                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: getCategoryColor(t.categoryId) }} />
                         )}
                         <p className="text-sm font-medium truncate">
-                          {t.isTransfer 
-                            ? (t.type === 'Income' 
-                                ? `From ${t.relatedAccountName}` 
-                                : `To ${t.relatedAccountName}`)
-                            : getCategoryName(t.categoryId)
-                          }
+                          {t.isTransfer
+                            ? (t.type === 'Income' ? `From ${t.relatedAccountName}` : `To ${t.relatedAccountName}`)
+                            : getCategoryName(t.categoryId)}
                         </p>
+                        {t.isFee  && <span className="text-[9px] bg-orange-100 text-orange-600 font-bold px-1 py-0.5 rounded flex-shrink-0">FEE</span>}
+                        {t.isRiba && <span className="text-[9px] bg-amber-100 text-amber-600 font-bold px-1 py-0.5 rounded flex-shrink-0">RIBA</span>}
                       </div>
-                      <p className="text-xs text-gray-600 truncate mt-0.5">
-                        {getAccountName(t.accountId)}
+                      <p className="text-xs text-gray-500 truncate mt-0.5">
+                        {getAccountName(t.accountId)}{t.description ? ` · ${t.description}` : ''}
                       </p>
-                      {t.description && (
-                        <p className="text-xs text-gray-500 truncate mt-0.5">{t.description}</p>
-                      )}
                     </div>
-                  </div>
+                  </button>
 
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    <p className={`text-base font-semibold ${
-                      t.type === 'Income' ? 'text-green-600' : 'text-red-600'
+                  {/* Right side — amount + edit/delete (edit/delete fade in on hover) */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <p className={`text-sm font-bold tabular-nums ${
+                      t.isTransfer ? 'text-blue-600' : t.type === 'Income' ? 'text-green-600' : 'text-red-600'
                     }`}>
-                      {t.type === 'Income' ? '+' : '-'}
-                      ৳{Number(t.amount).toLocaleString()}
+                      {t.type === 'Income' ? '+' : '-'}৳{Number(t.amount).toLocaleString()}
                     </p>
-
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => handleEdit(t)}
-                        className="p-1 hover:bg-gray-100 rounded"
-                      >
-                        <Edit2 size={15} className="text-gray-500" />
+                    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button type="button" onClick={() => handleEdit(t)}
+                        className="p-1.5 hover:bg-gray-100 rounded" title="Edit">
+                        <Edit2 size={13} className="text-gray-400" />
                       </button>
-                      <button
-                        onClick={() => {
-                          setTransactionToDelete(t);
-                          setShowDeleteModal(true);
-                        }}
-                        className="p-1 hover:bg-red-50 rounded"
-                      >
-                        <Trash2 size={15} className="text-gray-500" />
+                      <button type="button"
+                        onClick={() => { setTransactionToDelete(t); setShowDeleteModal(true); }}
+                        className="p-1.5 hover:bg-red-50 rounded" title="Delete">
+                        <Trash2 size={13} className="text-gray-400" />
                       </button>
                     </div>
                   </div>
@@ -1352,26 +1378,89 @@ export default function TransactionsPage() {
                       }`}>
                         Category
                       </label>
-                      <select
-                        value={formData.categoryId}
-                        onChange={(e) => setFormData(p => ({ ...p, categoryId: e.target.value }))}
-                        className={`w-full rounded-lg p-2.5 text-xs font-bold focus:ring-1 outline-none ${
-                          modalTab === 'income'
-                            ? 'bg-green-50 border-green-100 focus:ring-green-500'
-                            : 'bg-red-50 border-red-100 focus:ring-red-500'
-                        }`}
-                        required
-                        disabled={submitting}
-                      >
-                        <option value="">Select Category</option>
-                        {categories
-                          .filter(c => c.type?.toLowerCase() === formData.type.toLowerCase())
-                          .map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                      </select>
+                      {!showAddCat ? (
+                        <div className="flex gap-1">
+                          <select
+                            value={formData.categoryId}
+                            onChange={(e) => setFormData(p => ({ ...p, categoryId: e.target.value }))}
+                            className={`flex-1 rounded-lg p-2.5 text-xs font-bold focus:ring-1 outline-none border ${
+                              modalTab === 'income'
+                                ? 'bg-green-50 border-green-100 focus:ring-green-500'
+                                : 'bg-red-50 border-red-100 focus:ring-red-500'
+                            }`}
+                            required
+                            disabled={submitting}
+                          >
+                            <option value="">Select Category</option>
+                            {categories
+                              .filter(c => c.type?.toLowerCase() === formData.type.toLowerCase())
+                              .map((c) => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => setShowAddCat(true)}
+                            title="Add new category"
+                            disabled={submitting}
+                            className="w-9 h-9 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-base font-bold flex-shrink-0 transition-colors"
+                          >+</button>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5 bg-gray-50 border border-gray-200 rounded-lg p-2.5">
+                          <p className="text-[9px] font-bold text-gray-400 uppercase">New {formData.type} Category</p>
+                          <div className="flex gap-1.5">
+                            <input
+                              type="text"
+                              value={newCatName}
+                              onChange={e => setNewCatName(e.target.value)}
+                              placeholder="Category name…"
+                              autoFocus
+                              disabled={addingCat}
+                              className="flex-1 bg-white border border-gray-200 rounded-lg px-2.5 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-blue-400"
+                            />
+                            <input
+                              type="color"
+                              value={newCatColor}
+                              onChange={e => setNewCatColor(e.target.value)}
+                              title="Pick colour"
+                              className="w-9 h-9 rounded-lg border border-gray-200 cursor-pointer p-0.5 flex-shrink-0"
+                            />
+                          </div>
+                          <div className="flex gap-1.5">
+                            <button
+                              type="button"
+                              disabled={addingCat || !newCatName.trim()}
+                              onClick={async () => {
+                                if (!newCatName.trim()) return;
+                                setAddingCat(true);
+                                try {
+                                  const { addCategory } = await import('@/lib/firestoreCollections');
+                                  const res = await addCategory(user.uid, {
+                                    name: newCatName.trim(),
+                                    type: formData.type,
+                                    color: newCatColor,
+                                  });
+                                  if (res.success) {
+                                    await loadCategories();
+                                    setFormData(p => ({ ...p, categoryId: res.id }));
+                                    showToast(`"${newCatName.trim()}" added`, 'success');
+                                    setShowAddCat(false);
+                                    setNewCatName(''); setNewCatColor('#6B7280');
+                                  }
+                                } catch { showToast('Failed to add category', 'error'); }
+                                finally { setAddingCat(false); }
+                              }}
+                              className="flex-1 py-1.5 bg-gray-900 text-white text-xs font-bold rounded-lg disabled:opacity-50 transition-opacity"
+                            >{addingCat ? 'Saving…' : 'Save'}</button>
+                            <button
+                              type="button"
+                              onClick={() => { setShowAddCat(false); setNewCatName(''); setNewCatColor('#6B7280'); }}
+                              className="flex-1 py-1.5 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg hover:bg-gray-200"
+                            >Cancel</button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div>
@@ -1403,6 +1492,67 @@ export default function TransactionsPage() {
                     </div>
                   </div>
 
+                  {/* ── Fees & Charges (expense only) ────────────────── */}
+                  {modalTab === 'expense' && !editingTransaction && (
+                    <div className="border border-dashed border-orange-200 rounded-lg overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => { setHasFees(p => !p); if (!feeAccountId) setFeeAccountId(formData.accountId); }}
+                        className="w-full flex items-center justify-between px-3 py-2 bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-bold transition-colors"
+                      >
+                        <span>+ Fees &amp; Charges</span>
+                        <span className="text-orange-300 text-[10px]">{hasFees ? 'HIDE ▲' : 'SHOW ▼'}</span>
+                      </button>
+                      {hasFees && (
+                        <div className="p-3 space-y-2.5">
+                          <p className="text-[10px] text-gray-400 leading-relaxed">
+                            A separate expense record will be created for this fee (e.g. bank charge, delivery fee, service charge).
+                          </p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[9px] font-bold text-orange-500 uppercase block mb-1">Fee Amount (৳)</label>
+                              <input
+                                type="number" step="0.01" min="0"
+                                value={feeAmount}
+                                onChange={e => setFeeAmount(e.target.value)}
+                                placeholder="0.00"
+                                disabled={submitting}
+                                className="w-full bg-orange-50 border border-orange-200 rounded-lg p-2 text-xs font-bold outline-none focus:ring-1 focus:ring-orange-400"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[9px] font-bold text-gray-400 uppercase block mb-1">Fee Account</label>
+                              <select
+                                value={feeAccountId || formData.accountId}
+                                onChange={e => setFeeAccountId(e.target.value)}
+                                disabled={submitting}
+                                className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold outline-none focus:ring-1 focus:ring-orange-400"
+                              >
+                                {accountsWithAvailable.map(a => (
+                                  <option key={a.id} value={a.id}>{a.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-[9px] font-bold text-gray-400 uppercase block mb-1">Fee Category</label>
+                            <select
+                              value={feeCategoryId}
+                              onChange={e => setFeeCategoryId(e.target.value)}
+                              disabled={submitting}
+                              className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold outline-none focus:ring-1 focus:ring-orange-400"
+                            >
+                              <option value="">Select expense category…</option>
+                              {categories.filter(c => c.type?.toLowerCase() === 'expense').map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <button
                     type="submit"
                     disabled={submitting}
@@ -1424,6 +1574,110 @@ export default function TransactionsPage() {
                 </>
               )}
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Transaction Detail Popup ─────────────── */}
+      {viewingTransaction && (
+        <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+          <div className="bg-white w-full sm:max-w-sm sm:rounded-2xl rounded-t-2xl shadow-2xl overflow-hidden">
+
+            {/* Colour header */}
+            <div className={`px-5 pt-5 pb-4 ${
+              viewingTransaction.isTransfer   ? 'bg-blue-600'
+              : viewingTransaction.type === 'Income' ? 'bg-green-600'
+              : 'bg-red-600'
+            }`}>
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex flex-wrap gap-1.5 items-center">
+                  <span className="text-white/75 text-[10px] font-bold uppercase tracking-widest">
+                    {viewingTransaction.isTransfer ? 'Transfer' : viewingTransaction.type}
+                  </span>
+                  {viewingTransaction.isFee  && <span className="bg-white/20 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">FEE</span>}
+                  {viewingTransaction.isRiba && <span className="bg-white/20 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">RIBA</span>}
+                </div>
+                <button type="button" onClick={() => setViewingTransaction(null)} className="text-white/70 hover:text-white ml-3 flex-shrink-0">
+                  <X size={20} />
+                </button>
+              </div>
+              <p className="text-white text-3xl font-black tabular-nums">
+                {viewingTransaction.type === 'Income' ? '+' : '-'}৳{Number(viewingTransaction.amount).toLocaleString()}
+              </p>
+              <p className="text-white/80 text-sm mt-0.5 font-medium truncate">
+                {viewingTransaction.isTransfer
+                  ? (viewingTransaction.type === 'Income'
+                      ? `Transfer from ${viewingTransaction.relatedAccountName}`
+                      : `Transfer to ${viewingTransaction.relatedAccountName}`)
+                  : getCategoryName(viewingTransaction.categoryId)}
+              </p>
+            </div>
+
+            {/* Detail rows */}
+            <div className="px-5 py-4 space-y-3">
+              <TxnRow label="Date"
+                value={new Date(viewingTransaction.date).toLocaleDateString('en-BD',
+                  { day: 'numeric', month: 'long', year: 'numeric' })}
+                icon={<Calendar size={14} className="text-gray-400" />} />
+              <TxnRow label="Account"
+                value={getAccountName(viewingTransaction.accountId)}
+                icon={<Wallet size={14} className="text-gray-400" />} />
+              {!viewingTransaction.isTransfer && viewingTransaction.categoryId && (
+                <TxnRow label="Category"
+                  value={getCategoryName(viewingTransaction.categoryId)}
+                  dot={getCategoryColor(viewingTransaction.categoryId)} />
+              )}
+              {viewingTransaction.isTransfer && (
+                <TxnRow
+                  label={viewingTransaction.type === 'Income' ? 'From' : 'To'}
+                  value={viewingTransaction.relatedAccountName}
+                  icon={<ArrowRightLeft size={14} className="text-blue-400" />} />
+              )}
+              {viewingTransaction.description && (
+                <TxnRow label="Note"
+                  value={viewingTransaction.description}
+                  icon={<Receipt size={14} className="text-gray-400" />} />
+              )}
+              {viewingTransaction.isRiba && (
+                <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                  <AlertTriangle size={13} className="text-amber-500 flex-shrink-0" />
+                  <p className="text-xs text-amber-700 font-semibold">Riba / Interest income — purify via Sadaqah</p>
+                </div>
+              )}
+              {viewingTransaction.isFee && (
+                <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-xl px-3 py-2">
+                  <AlertCircle size={13} className="text-orange-500 flex-shrink-0" />
+                  <p className="text-xs text-orange-700 font-semibold">Bank / service fee entry</p>
+                </div>
+              )}
+              {viewingTransaction.isZakatPayment && (
+                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+                  <Receipt size={13} className="text-emerald-500 flex-shrink-0" />
+                  <p className="text-xs text-emerald-700 font-semibold">Zakat payment</p>
+                </div>
+              )}
+              {viewingTransaction.createdAt?.toDate && (
+                <TxnRow label="Recorded"
+                  value={viewingTransaction.createdAt.toDate().toLocaleString('en-BD')}
+                  icon={<Calendar size={13} className="text-gray-300" />} />
+              )}
+            </div>
+
+            {/* Action buttons */}
+            <div className="px-5 pb-5 flex gap-3">
+              {!viewingTransaction.isTransfer && (
+                <button type="button"
+                  onClick={() => { setViewingTransaction(null); handleEdit(viewingTransaction); }}
+                  className="flex-1 py-2.5 border-2 border-gray-200 text-gray-700 text-sm font-bold rounded-xl hover:bg-gray-50 flex items-center justify-center gap-1.5">
+                  <Edit2 size={14} /> Edit
+                </button>
+              )}
+              <button type="button"
+                onClick={() => { setViewingTransaction(null); setTransactionToDelete(viewingTransaction); setShowDeleteModal(true); }}
+                className="flex-1 py-2.5 bg-red-50 border-2 border-red-100 text-red-600 text-sm font-bold rounded-xl hover:bg-red-100 flex items-center justify-center gap-1.5">
+                <Trash2 size={14} /> Delete{viewingTransaction.isTransfer ? ' Transfer' : ''}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1456,6 +1710,19 @@ export default function TransactionsPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+// ─── Detail-popup row helper ─────────────────────────────────────────────────
+function TxnRow({ label, value, icon, dot }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="flex items-center gap-1.5 flex-shrink-0 min-w-0">
+        {icon && <span className="flex-shrink-0">{icon}</span>}
+        {dot  && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: dot }} />}
+        <span className="text-xs text-gray-400 font-medium whitespace-nowrap">{label}</span>
+      </div>
+      <span className="text-sm text-gray-800 font-semibold text-right break-words max-w-[60%]">{value}</span>
     </div>
   );
 }
