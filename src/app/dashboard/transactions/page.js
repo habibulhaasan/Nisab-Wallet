@@ -265,57 +265,62 @@ function TransactionDetailModal({ transaction, accounts, categories, onClose, on
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 animate-fadeIn"
+    <div className="fixed inset-0 bg-black/70 z-50 animate-fadeIn md:flex md:items-center md:justify-center md:p-4"
       onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl animate-slideUp"
+      <div className="bg-white w-full h-full md:h-auto md:max-w-md md:rounded-2xl shadow-2xl animate-slideUpMobile md:animate-slideUp overflow-hidden flex flex-col md:max-h-[85vh]"
         onClick={e => e.stopPropagation()}>
         
         {/* Header */}
-        <div className={`relative px-6 pt-6 pb-4 rounded-t-2xl ${
+        <div className={`relative px-4 md:px-6 pt-4 md:pt-6 pb-3 md:pb-4 flex-shrink-0 ${
           isTransfer ? 'bg-gradient-to-br from-blue-500 to-blue-600' :
           isIncome ? 'bg-gradient-to-br from-green-500 to-green-600' :
           'bg-gradient-to-br from-red-500 to-red-600'
         }`}>
+          {/* Mobile handle */}
+          <div className="md:hidden flex justify-center mb-2">
+            <div className="w-10 h-1 bg-white/30 rounded-full"></div>
+          </div>
+
           <button onClick={onClose}
-            className="absolute top-4 right-4 text-white/80 hover:text-white transition-colors">
-            <X size={24} />
+            className="absolute top-3 md:top-4 right-3 md:right-4 text-white/80 hover:text-white transition-colors">
+            <X size={20} className="md:w-6 md:h-6" />
           </button>
           
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-2 md:gap-3 mb-2 md:mb-3">
             {isTransfer ? (
-              <div className="bg-white/20 backdrop-blur-sm p-3 rounded-xl">
-                <ArrowRightLeft size={24} className="text-white" />
+              <div className="bg-white/20 backdrop-blur-sm p-2 md:p-3 rounded-lg md:rounded-xl">
+                <ArrowRightLeft size={20} className="text-white md:w-6 md:h-6" />
               </div>
             ) : isIncome ? (
-              <div className="bg-white/20 backdrop-blur-sm p-3 rounded-xl">
-                <ArrowUpCircle size={24} className="text-white" />
+              <div className="bg-white/20 backdrop-blur-sm p-2 md:p-3 rounded-lg md:rounded-xl">
+                <ArrowUpCircle size={20} className="text-white md:w-6 md:h-6" />
               </div>
             ) : (
-              <div className="bg-white/20 backdrop-blur-sm p-3 rounded-xl">
-                <ArrowDownCircle size={24} className="text-white" />
+              <div className="bg-white/20 backdrop-blur-sm p-2 md:p-3 rounded-lg md:rounded-xl">
+                <ArrowDownCircle size={20} className="text-white md:w-6 md:h-6" />
               </div>
             )}
             <div>
-              <h3 className="text-white text-sm font-semibold uppercase tracking-wide">
+              <h3 className="text-white text-xs md:text-sm font-semibold uppercase tracking-wide">
                 {isTransfer ? 'Transfer' : isIncome ? 'Income' : 'Expense'}
               </h3>
-              <p className="text-white/80 text-xs">Transaction Details</p>
+              <p className="text-white/80 text-[10px] md:text-xs">Transaction Details</p>
             </div>
           </div>
 
           {/* Amount */}
-          <div className="text-center py-4">
-            <div className="text-white/80 text-xs font-semibold uppercase tracking-wider mb-1">
+          <div className="text-center py-3 md:py-4">
+            <div className="text-white/80 text-[10px] md:text-xs font-semibold uppercase tracking-wider mb-1">
               Amount
             </div>
-            <div className="text-white text-4xl font-bold">
+            <div className="text-white text-3xl md:text-4xl font-bold">
               ৳{parseFloat(transaction.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
           </div>
         </div>
 
-        {/* Content */}
-        <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+        {/* Content - Scrollable */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3 md:space-y-4">
           
           {/* Transfer specific details */}
           {isTransfer && (
@@ -323,12 +328,12 @@ function TransactionDetailModal({ transaction, accounts, categories, onClose, on
               <DetailRow 
                 label={transaction.transferDirection === 'from' ? 'From Account' : 'To Account'} 
                 value={account?.name || 'Unknown'} 
-                icon={<Wallet size={16} />}
+                icon={<Wallet size={14} className="md:w-4 md:h-4" />}
               />
               <DetailRow 
                 label={transaction.transferDirection === 'from' ? 'To Account' : 'From Account'} 
                 value={relatedAccount?.name || 'Unknown'} 
-                icon={<Wallet size={16} />}
+                icon={<Wallet size={14} className="md:w-4 md:h-4" />}
               />
             </>
           )}
@@ -339,19 +344,19 @@ function TransactionDetailModal({ transaction, accounts, categories, onClose, on
               <DetailRow 
                 label="Account" 
                 value={account?.name || 'Unknown'} 
-                icon={<Wallet size={16} />}
+                icon={<Wallet size={14} className="md:w-4 md:h-4" />}
               />
               <DetailRow 
                 label="Category" 
                 value={
                   <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full" 
+                    <span className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full" 
                       style={{ backgroundColor: category?.color || '#9CA3AF' }} />
                     <span>{category?.name || 'Unknown'}</span>
                     {category?.isRiba && <span className="text-amber-600">⚠</span>}
                   </div>
                 }
-                icon={<Receipt size={16} />}
+                icon={<Receipt size={14} className="md:w-4 md:h-4" />}
               />
             </>
           )}
@@ -360,7 +365,7 @@ function TransactionDetailModal({ transaction, accounts, categories, onClose, on
           <DetailRow 
             label="Date" 
             value={formatDate(transaction.date)} 
-            icon={<Calendar size={16} />}
+            icon={<Calendar size={14} className="md:w-4 md:h-4" />}
           />
 
           {/* Created At */}
@@ -368,7 +373,7 @@ function TransactionDetailModal({ transaction, accounts, categories, onClose, on
             <DetailRow 
               label="Created At" 
               value={formatDateTime(transaction.createdAt)} 
-              icon={<Calendar size={16} />}
+              icon={<Calendar size={14} className="md:w-4 md:h-4" />}
             />
           )}
 
@@ -377,16 +382,16 @@ function TransactionDetailModal({ transaction, accounts, categories, onClose, on
             <DetailRow 
               label="Note" 
               value={transaction.description} 
-              icon={<Info size={16} />}
+              icon={<Info size={14} className="md:w-4 md:h-4" />}
             />
           )}
 
           {/* Charge badge */}
           {transaction.isCharge && (
-            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-2.5 md:p-3">
               <div className="flex items-center gap-2">
-                <Zap size={14} className="text-orange-600" />
-                <span className="text-xs font-semibold text-orange-900">Transaction Fee/Charge</span>
+                <Zap size={13} className="text-orange-600 md:w-3.5 md:h-3.5" />
+                <span className="text-[11px] md:text-xs font-semibold text-orange-900">Transaction Fee/Charge</span>
               </div>
             </div>
           )}
@@ -400,22 +405,22 @@ function TransactionDetailModal({ transaction, accounts, categories, onClose, on
                 transaction.source === 'goal' ? '🎯 Goal' :
                 transaction.source
               }
-              icon={<Zap size={16} />}
+              icon={<Zap size={14} className="md:w-4 md:h-4" />}
             />
           )}
 
           {/* Riba warning */}
           {transaction.isRiba && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 md:p-3 space-y-2">
               <div className="flex items-start gap-2">
-                <AlertCircle size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-amber-800">
+                <AlertCircle size={13} className="text-amber-600 flex-shrink-0 mt-0.5 md:w-3.5 md:h-3.5" />
+                <p className="text-[11px] md:text-xs text-amber-800">
                   <strong>Riba/Interest income.</strong> Should be donated as Sadaqah.
                 </p>
               </div>
               {transaction.sadaqahDone && (
                 <div className="flex items-center gap-1.5 text-green-700">
-                  <span className="text-xs font-semibold">✓ Purified</span>
+                  <span className="text-[11px] md:text-xs font-semibold">✓ Purified</span>
                 </div>
               )}
             </div>
@@ -423,22 +428,22 @@ function TransactionDetailModal({ transaction, accounts, categories, onClose, on
 
           {/* Transaction ID */}
           <div className="pt-2 border-t border-gray-100">
-            <p className="text-[10px] text-gray-400 uppercase tracking-wide">Transaction ID</p>
-            <p className="text-xs text-gray-600 font-mono break-all">{transaction.id}</p>
+            <p className="text-[9px] md:text-[10px] text-gray-400 uppercase tracking-wide">Transaction ID</p>
+            <p className="text-[11px] md:text-xs text-gray-600 font-mono break-all">{transaction.id}</p>
           </div>
         </div>
 
-        {/* Action buttons */}
-        <div className="p-4 border-t border-gray-100 flex gap-3">
+        {/* Action buttons - Fixed at bottom */}
+        <div className="flex-shrink-0 p-3 md:p-4 border-t border-gray-100 flex gap-2 md:gap-3 bg-white">
           {!isTransfer && (
             <button
               onClick={() => {
                 onEdit(transaction);
                 onClose();
               }}
-              className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2"
+              className="flex-1 py-2.5 md:py-3 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-gray-700 rounded-lg font-semibold text-xs md:text-sm transition-colors flex items-center justify-center gap-1.5 md:gap-2"
             >
-              <Edit2 size={16} />
+              <Edit2 size={14} className="md:w-4 md:h-4" />
               Edit
             </button>
           )}
@@ -447,9 +452,9 @@ function TransactionDetailModal({ transaction, accounts, categories, onClose, on
               onDelete(transaction);
               onClose();
             }}
-            className={`${isTransfer ? 'flex-1' : 'flex-1'} py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2`}
+            className={`${isTransfer ? 'flex-1' : 'flex-1'} py-2.5 md:py-3 bg-red-500 hover:bg-red-600 active:bg-red-700 text-white rounded-lg font-semibold text-xs md:text-sm transition-colors flex items-center justify-center gap-1.5 md:gap-2`}
           >
-            <Trash2 size={16} />
+            <Trash2 size={14} className="md:w-4 md:h-4" />
             Delete
           </button>
         </div>
@@ -461,15 +466,15 @@ function TransactionDetailModal({ transaction, accounts, categories, onClose, on
 // Helper component for detail rows
 function DetailRow({ label, value, icon }) {
   return (
-    <div className="flex items-start gap-3 py-2">
+    <div className="flex items-start gap-2 md:gap-3 py-1.5 md:py-2">
       <div className="text-gray-400 mt-0.5">
         {icon}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold mb-0.5">
+        <p className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-wide font-semibold mb-0.5">
           {label}
         </p>
-        <div className="text-sm text-gray-900 font-medium break-words">
+        <div className="text-xs md:text-sm text-gray-900 font-medium break-words">
           {value}
         </div>
       </div>
@@ -1476,12 +1481,37 @@ export default function TransactionsPage() {
           }
         }
         
+        @keyframes slideUpMobile {
+          from {
+            transform: translateY(100%);
+          }
+          to {
+            transform: translateY(0);
+          }
+        }
+        
         .animate-fadeIn {
           animation: fadeIn 0.2s ease-out;
         }
         
         .animate-slideUp {
           animation: slideUp 0.3s ease-out;
+        }
+        
+        .animate-slideUpMobile {
+          animation: slideUpMobile 0.3s ease-out;
+        }
+        
+        /* Mobile bottom sheet positioning */
+        @media (max-width: 768px) {
+          .animate-slideUpMobile {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            border-radius: 20px 20px 0 0;
+            max-height: 90vh;
+          }
         }
       `}</style>
     </div>
