@@ -48,6 +48,7 @@ export default function TransactionsPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [transactionToDelete, setTransactionToDelete] = useState(null);
   const [editingTransaction, setEditingTransaction] = useState(null);
+  const [viewingTransaction, setViewingTransaction] = useState(null);
 
   const [filterType, setFilterType] = useState('All');
   const [filterAccount, setFilterAccount] = useState('All');
@@ -325,12 +326,6 @@ export default function TransactionsPage() {
   };
 
   const totalBalance = accounts.reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
-
-  // Returns true if the selected category name indicates Riba/Interest income
-  const isRibaCategory = (categoryId) => {
-    const name = (categories.find(c => c.id === categoryId)?.name || '').toLowerCase();
-    return name.includes('riba') || name.includes('interest');
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -738,6 +733,10 @@ export default function TransactionsPage() {
   const getAccountName = (id) => accounts.find((a) => a.id === id)?.name || 'Unknown';
   const getCategoryName = (id) => categories.find((c) => c.id === id)?.name || 'Unknown';
   const getCategoryColor = (id) => categories.find((c) => c.id === id)?.color || '#6B7280';
+  const isRibaCategory = (categoryId) => {
+    const name = (categories.find(c => c.id === categoryId)?.name || '').toLowerCase();
+    return name.includes('riba') || name.includes('interest');
+  };
   const getAccountAvailable = (id) => accountsWithAvailable.find((a) => a.id === id)?.availableBalance || 0;
 
   const getDateRangeForFilter = () => {
@@ -1064,9 +1063,12 @@ export default function TransactionsPage() {
                   key={t.id}
                   className="px-4 py-3 hover:bg-gray-50 flex items-center justify-between gap-3 border-b border-gray-100 last:border-b-0"
                 >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <button
+                    onClick={() => setViewingTransaction(t)}
+                    className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                  >
                     <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                      className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                         t.type === 'Income' ? 'bg-green-50' : 'bg-red-50'
                       }`}
                     >
@@ -1080,10 +1082,10 @@ export default function TransactionsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         {!t.isTransfer && (
-                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getCategoryColor(t.categoryId) }} />
+                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: getCategoryColor(t.categoryId) }} />
                         )}
                         {t.isTransfer && (
-                          <ArrowRightLeft size={12} className="text-blue-500" />
+                          <ArrowRightLeft size={12} className="text-blue-500 flex-shrink-0" />
                         )}
                         <p className="text-sm font-medium truncate">
                           {t.isTransfer 
@@ -1101,7 +1103,7 @@ export default function TransactionsPage() {
                         <p className="text-xs text-gray-500 truncate mt-0.5">{t.description}</p>
                       )}
                     </div>
-                  </div>
+                  </button>
 
                   <div className="flex items-center gap-3 flex-shrink-0">
                     <p className={`text-base font-semibold ${
@@ -1428,6 +1430,113 @@ export default function TransactionsPage() {
         </div>
       )}
 
+      {/* Transaction Detail Popup */}
+      {viewingTransaction && (
+        <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+          <div className="bg-white w-full sm:max-w-sm sm:rounded-2xl rounded-t-2xl shadow-2xl overflow-hidden">
+            {/* Colour-coded header */}
+            <div className={`px-5 pt-5 pb-4 ${
+              viewingTransaction.isTransfer
+                ? 'bg-blue-600'
+                : viewingTransaction.type === 'Income'
+                  ? 'bg-green-600'
+                  : 'bg-red-600'
+            }`}>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-white/80 text-xs font-semibold uppercase tracking-widest">
+                  {viewingTransaction.isTransfer ? 'Transfer' : viewingTransaction.type}
+                </span>
+                <button onClick={() => setViewingTransaction(null)} className="text-white/70 hover:text-white">
+                  <X size={20} />
+                </button>
+              </div>
+              <p className="text-white text-3xl font-bold">
+                {viewingTransaction.type === 'Income' ? '+' : '-'}৳{Number(viewingTransaction.amount).toLocaleString()}
+              </p>
+              <p className="text-white/80 text-sm mt-1">
+                {viewingTransaction.isTransfer
+                  ? (viewingTransaction.type === 'Income'
+                      ? `Transfer from ${viewingTransaction.relatedAccountName}`
+                      : `Transfer to ${viewingTransaction.relatedAccountName}`)
+                  : getCategoryName(viewingTransaction.categoryId)}
+              </p>
+            </div>
+
+            {/* Detail rows */}
+            <div className="px-5 py-4 space-y-3">
+              <DetailRow
+                label="Date"
+                value={new Date(viewingTransaction.date).toLocaleDateString('en-BD', { day: 'numeric', month: 'long', year: 'numeric' })}
+                icon={<Calendar size={15} className="text-gray-400" />}
+              />
+              <DetailRow
+                label="Account"
+                value={getAccountName(viewingTransaction.accountId)}
+                icon={<Wallet size={15} className="text-gray-400" />}
+              />
+              {!viewingTransaction.isTransfer && (
+                <DetailRow
+                  label="Category"
+                  value={getCategoryName(viewingTransaction.categoryId)}
+                  dot={getCategoryColor(viewingTransaction.categoryId)}
+                />
+              )}
+              {viewingTransaction.description && (
+                <DetailRow
+                  label="Note"
+                  value={viewingTransaction.description}
+                  icon={<Receipt size={15} className="text-gray-400" />}
+                />
+              )}
+              {viewingTransaction.isTransfer && viewingTransaction.relatedAccountName && (
+                <DetailRow
+                  label={viewingTransaction.type === 'Income' ? 'From Account' : 'To Account'}
+                  value={viewingTransaction.relatedAccountName}
+                  icon={<ArrowRightLeft size={15} className="text-blue-400" />}
+                />
+              )}
+              {viewingTransaction.isRiba && (
+                <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                  <AlertTriangle size={14} className="text-amber-500 flex-shrink-0" />
+                  <p className="text-xs text-amber-700 font-medium">Riba / Interest income — purify via Sadaqah</p>
+                </div>
+              )}
+              {viewingTransaction.isZakatPayment && (
+                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+                  <Receipt size={14} className="text-emerald-500 flex-shrink-0" />
+                  <p className="text-xs text-emerald-700 font-medium">Zakat payment recorded</p>
+                </div>
+              )}
+              {viewingTransaction.createdAt && (
+                <DetailRow
+                  label="Recorded at"
+                  value={viewingTransaction.createdAt?.toDate
+                    ? viewingTransaction.createdAt.toDate().toLocaleString('en-BD')
+                    : '—'}
+                  icon={<Calendar size={15} className="text-gray-300" />}
+                />
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="px-5 pb-5 flex gap-3">
+              <button
+                onClick={() => { setViewingTransaction(null); handleEdit(viewingTransaction); }}
+                className="flex-1 py-2.5 border-2 border-gray-200 text-gray-700 text-sm font-semibold rounded-xl hover:bg-gray-50 flex items-center justify-center gap-2"
+              >
+                <Edit2 size={14} /> Edit
+              </button>
+              <button
+                onClick={() => { setViewingTransaction(null); setTransactionToDelete(viewingTransaction); setShowDeleteModal(true); }}
+                className="flex-1 py-2.5 bg-red-50 border-2 border-red-200 text-red-600 text-sm font-semibold rounded-xl hover:bg-red-100 flex items-center justify-center gap-2"
+              >
+                <Trash2 size={14} /> Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
@@ -1456,6 +1565,19 @@ export default function TransactionsPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+// ─── Small helper used inside the detail popup ───────────────────────────────
+function DetailRow({ label, value, icon, dot }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="flex items-center gap-1.5 min-w-0">
+        {icon && <span className="flex-shrink-0">{icon}</span>}
+        {dot && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: dot }} />}
+        <span className="text-xs text-gray-400 font-medium">{label}</span>
+      </div>
+      <span className="text-sm text-gray-800 font-medium text-right max-w-[60%] break-words">{value}</span>
     </div>
   );
 }
