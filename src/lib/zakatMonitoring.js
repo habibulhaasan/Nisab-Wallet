@@ -37,6 +37,42 @@ const getOrCreateZakatCategory = async (userId) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// AUTO-FETCH NISAB AT YEAR END
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Attempts to fetch the latest Nisab threshold automatically from the metal
+ * prices API. Returns { nisab, silverPerGram, source, note } or null on failure.
+ *
+ * This is called at cycle completion so the Zakat amount is based on the
+ * *current* silver price, not a stale saved value — making the calculation
+ * fully transparent.
+ */
+const autoFetchNisabAtYearEnd = async () => {
+  try {
+    const res  = await fetch('/api/metal-prices');
+    const data = await res.json();
+    if (data?.nisab?.full && data.primarySilver?.perGram) {
+      return {
+        nisab:        data.nisab.full,
+        silverPerGram: data.primarySilver.perGram,
+        silverPerVori: data.primarySilver.perVori,
+        source:       data.source || 'auto',
+        isSpotFallback: !!data.isSpotFallback,
+        fetchedAt:    data.fetchedAt || new Date().toISOString(),
+        note: data.isSpotFallback
+          ? 'Nisab auto-fetched at year end using international spot prices (BAJUS site unavailable). Verify manually for accuracy.'
+          : 'Nisab auto-fetched at year end from BAJUS official rates.',
+      };
+    }
+    return null;
+  } catch (err) {
+    console.error('autoFetchNisabAtYearEnd:', err);
+    return null;
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CYCLE MANAGEMENT
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -76,9 +112,13 @@ export const checkAndStartZakatCycle = async (userId, totalWealth, nisabThreshol
 /**
  * Called on page load / after each data refresh.
  * If an active cycle's Hijri year has passed:
- *   • Marks it as 'due' (wealth ≥ nisab) or 'exempt'
- *   • Immediately starts a NEW active cycle if wealth ≥ nisab
- *     (regardless of whether the previous zakat has been paid)
+ *
+ *   1. Auto-fetches current Nisab from the API (transparent, auditable).
+ *      Falls back to the saved Nisab if the API is unreachable.
+ *   2. Saves the fetched Nisab + a transparency note onto the cycle document.
+ *   3. Marks cycle as 'due' or 'exempt' based on current wealth vs fetched Nisab.
+ *   4. Auto-starts a NEW active cycle if wealth ≥ Nisab.
+ *
  * Returns { acted: true } if it made any change, { acted: false } otherwise.
  */
 export const autoCompleteCycleIfYearPassed = async (
@@ -90,20 +130,38 @@ export const autoCompleteCycleIfYearPassed = async (
   try {
     const today  = new Date().toISOString().split('T')[0];
     const hijri  = gregorianToHijri(today);
-    const isDue  = currentWealth >= nisabThreshold;
 
-    // 1. Close current cycle
+    // ── 1. Try to get fresh Nisab at year end ──────────────────────────────
+    const fetched = await autoFetchNisabAtYearEnd();
+
+    // Effective Nisab: prefer fresh API value, fall back to last saved value
+    const effectiveNisab = fetched?.nisab || nisabThreshold;
+    const isDue          = currentWealth >= effectiveNisab;
+
+    // Transparency note stored on the cycle document
+    const nisabNote = fetched
+      ? fetched.note
+      : `Nisab auto-fetch failed at year end. Used last saved value (৳${nisabThreshold?.toLocaleString() || 0}). Please update Nisab settings manually.`;
+
+    // ── 2. Close current cycle ─────────────────────────────────────────────
     await updateDoc(doc(db, 'users', userId, 'zakatCycles', activeCycle.id), {
-      status:          isDue ? 'due' : 'exempt',
-      endDate:         today,
-      endDateHijri:    hijri,
-      endWealth:       currentWealth,
-      zakatDue:        isDue ? currentWealth * 0.025 : 0,
-      yearCompletedAt: serverTimestamp(),
+      status:              isDue ? 'due' : 'exempt',
+      endDate:             today,
+      endDateHijri:        hijri,
+      endWealth:           currentWealth,
+      zakatDue:            isDue ? currentWealth * 0.025 : 0,
+      // Nisab at year end (may differ from nisabAtStart if prices changed)
+      nisabAtEnd:          effectiveNisab,
+      nisabAtEndNote:      nisabNote,
+      nisabAtEndFetched:   fetched ? true : false,
+      nisabAtEndSource:    fetched?.source || 'saved',
+      nisabAtEndFetchedAt: fetched?.fetchedAt || null,
+      silverPerGramAtEnd:  fetched?.silverPerGram || null,
+      yearCompletedAt:     serverTimestamp(),
     });
 
-    // 2. Auto-start new cycle if wealth still ≥ nisab
-    if (isDue && nisabThreshold > 0) {
+    // ── 3. Auto-start new cycle if wealth still ≥ Nisab ───────────────────
+    if (isDue && effectiveNisab > 0) {
       await addDoc(collection(db, 'users', userId, 'zakatCycles'), {
         cycleId:        generateId(),
         status:         'active',
@@ -111,7 +169,7 @@ export const autoCompleteCycleIfYearPassed = async (
         startDateHijri: hijri,
         startWealth:    currentWealth,
         startBreakdown: wealthBreakdown || null,
-        nisabAtStart:   nisabThreshold,
+        nisabAtStart:   effectiveNisab,
         paymentStatus:  'unpaid',
         payments:       [],
         totalPaid:      0,
@@ -119,7 +177,35 @@ export const autoCompleteCycleIfYearPassed = async (
       });
     }
 
-    return { acted: true, isDue, zakatDue: isDue ? currentWealth * 0.025 : 0 };
+    // ── 4. Persist fresh Nisab back to user settings so UI stays current ───
+    if (fetched) {
+      try {
+        const settingsRef = collection(db, 'users', userId, 'settings');
+        const settSnap    = await getDocs(settingsRef);
+        const update = {
+          nisabThreshold:     fetched.nisab,
+          silverPricePerGram: fetched.silverPerGram,
+          silverPricePerVori: fetched.silverPerVori || null,
+          lastFetched:        fetched.fetchedAt,
+          priceSource:        'auto',
+          updatedAt:          serverTimestamp(),
+          autoUpdatedAtYearEnd: true,
+        };
+        if (settSnap.empty) await addDoc(settingsRef, update);
+        else await updateDoc(doc(db, 'users', userId, 'settings', settSnap.docs[0].id), update);
+      } catch (e) {
+        console.error('Failed to persist auto-fetched Nisab to settings:', e);
+      }
+    }
+
+    return {
+      acted:        true,
+      isDue,
+      zakatDue:     isDue ? currentWealth * 0.025 : 0,
+      effectiveNisab,
+      nisabFetched: !!fetched,
+      nisabNote,
+    };
   } catch (err) {
     console.error('autoCompleteCycleIfYearPassed:', err);
     return { acted: false, error: err.message };
@@ -146,7 +232,7 @@ export const checkCycleCompletion = autoCompleteCycleIfYearPassed;
 export const recordZakatPayment = async (userId, opts) => {
   const {
     cycleDocId,
-    zakatDueTotal,         // total zakat due for the cycle (to detect full payment)
+    zakatDueTotal,
     paymentAmount,
     fromAccountId,
     fromAccountName   = '',
@@ -159,9 +245,9 @@ export const recordZakatPayment = async (userId, opts) => {
     wealthBreakdown   = null,
   } = opts;
 
-  if (!fromAccountId)                 return { success: false, error: 'No account selected.'     };
-  if (!paymentAmount || paymentAmount <= 0) return { success: false, error: 'Invalid amount.'    };
-  if (paymentAmount > fromAccountBalance)   return { success: false, error: 'Insufficient balance.' };
+  if (!fromAccountId)                       return { success: false, error: 'No account selected.'     };
+  if (!paymentAmount || paymentAmount <= 0) return { success: false, error: 'Invalid amount.'          };
+  if (paymentAmount > fromAccountBalance)   return { success: false, error: 'Insufficient balance.'    };
 
   try {
     // 1. Deduct from account
@@ -268,7 +354,7 @@ export const setupZakatInstallments = async (userId, opts) => {
     note                 = '',
   } = opts;
 
-  if (!fromAccountId)         return { success: false, error: 'No account selected.'      };
+  if (!fromAccountId)           return { success: false, error: 'No account selected.'      };
   if (numberOfInstallments < 1) return { success: false, error: 'Invalid installment count.' };
 
   try {
@@ -332,7 +418,7 @@ export const payZakatInstallment = async (userId, opts) => {
     const accBal = typeof accountBalance === 'number' ? accountBalance : 0;
     if (inst.amount > accBal)   return { success: false, error: 'Insufficient balance.'  };
 
-    const today   = new Date().toISOString().split('T')[0];
+    const today    = new Date().toISOString().split('T')[0];
     const instNote = `Installment ${inst.installmentNumber} of ${plan.numberOfInstallments}` +
                      (plan.note ? ` — ${plan.note}` : '');
 

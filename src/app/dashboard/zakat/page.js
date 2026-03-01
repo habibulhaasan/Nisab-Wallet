@@ -37,10 +37,262 @@ import {
   Settings, History, ChevronDown, ChevronUp,
   CreditCard, CalendarDays, X, Loader2, Info, Banknote,
   Building2, Smartphone, Coins, HandCoins, TrendingUp, Target,
-  Minus, ArrowRight, Check, AlertTriangle,
+  Minus, ArrowRight, Check, AlertTriangle, CalendarClock,
+  Bell, RefreshCw, Sparkles,
 } from 'lucide-react';
 import NisabSettingsModal from '@/components/zakat/NisabSettingsModal';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// DATE HELPER — always dd/mm/yyyy
+// ─────────────────────────────────────────────────────────────────────────────
+const fmtDate = (isoOrDate) => {
+  if (!isoOrDate) return '—';
+  try {
+    const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate;
+    if (isNaN(d.getTime())) return isoOrDate;
+    const dd   = String(d.getDate()).padStart(2, '0');
+    const mm   = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  } catch { return String(isoOrDate); }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// START / EDIT CYCLE MODAL
+// ─────────────────────────────────────────────────────────────────────────────
+function StartCycleModal({ totalWealth, nisabThreshold, fmt, onConfirm, onClose, editMode = false, currentStartDate = null }) {
+  const today      = new Date().toISOString().split('T')[0];
+  const [startDate, setStartDate] = useState(currentStartDate || today);
+  const [saving,    setSaving]    = useState(false);
+
+  const hijriPreview = (() => {
+    try { return gregorianToHijri(startDate); } catch { return null; }
+  })();
+
+  const isBackdated   = startDate < today;
+  const alreadyPassed = startDate ? hasOneHijriYearPassed(startDate) : false;
+
+  const handleConfirm = async () => {
+    setSaving(true);
+    await onConfirm(startDate);
+    setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
+        style={{ maxHeight: 'min(95vh, 640px)' }}>
+
+        {/* Header */}
+        <div className="flex-shrink-0 border-b border-gray-100 px-5 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-emerald-100 rounded-xl flex items-center justify-center">
+                <CalendarClock className="w-4 h-4 text-emerald-700" />
+              </div>
+              <div>
+                <h2 className="font-bold text-gray-900 text-base">
+                  {editMode ? 'Correct Cycle Start Date' : 'Start Zakat Monitoring'}
+                </h2>
+                <p className="text-xs text-gray-500">
+                  {editMode ? 'Update when your Nisab cycle actually began' : 'Set when your Nisab cycle began'}
+                </p>
+              </div>
+            </div>
+            <button onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">
+              <X className="w-4 h-4 text-gray-500" />
+            </button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+
+          {/* Context explanation */}
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm text-blue-800 leading-relaxed">
+            <p className="font-semibold mb-1 flex items-center gap-1.5">
+              <Info className="w-4 h-4 flex-shrink-0" />
+              {editMode ? 'Correcting your cycle start date' : 'Already a Sahib al-Mal?'}
+            </p>
+            <p>
+              {editMode
+                ? 'The app started your cycle from today, but if your wealth crossed Nisab on an earlier date, set that actual date here. This corrects your remaining days and Zakat due date.'
+                : "If your wealth was already above Nisab before you started using this app, set the actual date your wealth first crossed the Nisab threshold — not today's date. This ensures your one Hijri year is counted correctly."}
+            </p>
+          </div>
+
+          {/* Wealth summary */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-gray-50 rounded-xl px-4 py-3">
+              <p className="text-xs text-gray-400 mb-0.5">Current Wealth</p>
+              <p className="font-bold text-gray-900">{fmt(totalWealth)}</p>
+            </div>
+            <div className="bg-gray-50 rounded-xl px-4 py-3">
+              <p className="text-xs text-gray-400 mb-0.5">Nisab Threshold</p>
+              <p className="font-bold text-emerald-700">{fmt(nisabThreshold)}</p>
+            </div>
+          </div>
+
+          {/* Date picker */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Cycle Start Date <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="date"
+              value={startDate}
+              max={today}
+              onChange={e => setStartDate(e.target.value)}
+              className="w-full px-4 py-3 border-2 border-gray-200 focus:border-emerald-500 rounded-xl text-sm font-medium outline-none transition-colors"
+            />
+            <p className="text-xs text-gray-400 mt-1.5">
+              Cannot be a future date. Leave as today if wealth just reached Nisab.
+            </p>
+          </div>
+
+          {/* Hijri preview */}
+          {hijriPreview && (
+            <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <p className="text-xs text-emerald-600 font-medium">Hijri Start Date</p>
+                  <p className="text-sm font-bold text-emerald-900">{formatHijriDate(hijriPreview)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-emerald-600 font-medium">
+                    {alreadyPassed ? 'Year End' : 'Zakat Due On'}
+                  </p>
+                  <p className="text-sm font-bold text-emerald-900">
+                    {(() => {
+                      try { return fmtDate(addOneHijriYear(startDate)); }
+                      catch { return '—'; }
+                    })()}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Backdated warning */}
+          {isBackdated && !alreadyPassed && (
+            <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-3 py-3">
+              <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-amber-800 leading-relaxed">
+                Backdating to <strong>{fmtDate(startDate)}</strong> — the one Hijri year countdown
+                will use this date. You will have{' '}
+                <strong>{daysUntilHijriAnniversary(startDate)} days remaining</strong> from today.
+              </p>
+            </div>
+          )}
+
+          {/* Already passed warning */}
+          {alreadyPassed && (
+            <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-xl px-3 py-3">
+              <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+              <div className="text-xs text-red-800 leading-relaxed">
+                <p className="font-semibold mb-0.5">One Hijri year has already passed!</p>
+                <p>
+                  Using <strong>{fmtDate(startDate)}</strong> means the year is already complete.
+                  If your wealth was ≥ Nisab on that end date, <strong>Zakat is immediately due</strong>.
+                  The cycle will be marked as due right away.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Today shortcut */}
+          {startDate !== today && (
+            <button
+              onClick={() => setStartDate(today)}
+              className="w-full py-2 text-xs font-medium text-gray-500 hover:text-gray-700 border border-dashed border-gray-300 rounded-xl transition-colors"
+            >
+              Reset to today
+            </button>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex-shrink-0 border-t border-gray-100 px-5 py-4 flex gap-3">
+          <button onClick={onClose}
+            className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold text-sm hover:bg-gray-50 transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={saving || !startDate}
+            className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white font-bold text-sm transition-colors flex items-center justify-center gap-2"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+            {saving ? 'Saving…' : alreadyPassed
+              ? (editMode ? 'Update & Mark Due' : 'Start & Mark Due')
+              : (editMode ? 'Update Start Date' : 'Start Monitoring')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NISAB REMINDER BANNER
+// Shown when daysRemaining ≤ 3 (within 3 days of year end)
+// ─────────────────────────────────────────────────────────────────────────────
+function NisabReminderBanner({ daysRemaining, yearEndDate, onOpenSettings }) {
+  const isUrgent  = daysRemaining <= 1;
+  const isWarning = daysRemaining <= 3;
+  if (!isWarning) return null;
+
+  return (
+    <div className={`rounded-xl border p-4 ${
+      isUrgent
+        ? 'bg-red-50 border-red-300'
+        : 'bg-amber-50 border-amber-300'
+    }`}>
+      <div className="flex items-start gap-3">
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+          isUrgent ? 'bg-red-100' : 'bg-amber-100'
+        }`}>
+          <Bell className={`w-4 h-4 ${isUrgent ? 'text-red-600' : 'text-amber-600'}`} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className={`font-bold text-sm ${isUrgent ? 'text-red-900' : 'text-amber-900'}`}>
+            {isUrgent
+              ? '⚠️ Zakat Year Ends Tomorrow — Update Nisab Now!'
+              : `🔔 Zakat Year Ends in ${daysRemaining} Days — Refresh Nisab`}
+          </p>
+          <p className={`text-xs mt-1 leading-relaxed ${isUrgent ? 'text-red-700' : 'text-amber-700'}`}>
+            Your Hijri year completes on <strong>{fmtDate(yearEndDate)}</strong>. For an accurate
+            Zakat calculation, please update the silver price in Nisab Settings before your year
+            ends. The system will also try to auto-fetch the latest price at year-end, but a
+            manual refresh ensures accuracy.
+          </p>
+          <div className="flex flex-wrap gap-2 mt-3">
+            <button
+              onClick={onOpenSettings}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white transition-colors ${
+                isUrgent ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-600 hover:bg-amber-700'
+              }`}
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> Update Nisab Settings
+            </button>
+            <div className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium ${
+              isUrgent ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+            }`}>
+              <Sparkles className="w-3.5 h-3.5" />
+              Auto-fetch will run at year-end as backup
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN PAGE
+// ─────────────────────────────────────────────────────────────────────────────
 export default function ZakatPage() {
   const { user } = useAuth();
   const settings = useSettings();
@@ -52,13 +304,13 @@ export default function ZakatPage() {
   const [goals,           setGoals]           = useState([]);
   const [jewellery,       setJewellery]       = useState([]);
 
-  const [nisabThreshold,      setNisabThreshold]      = useState(0);
-  const [silverPricePerGram,  setSilverPricePerGram]  = useState(0);
-  const [silverPricePerVori,  setSilverPricePerVori]  = useState(0);
-  const [priceUnit,           setPriceUnit]           = useState('gram');
-  const [goldPricePerGram,    setGoldPricePerGram]    = useState(0);
-  const [goldPricePerVori,    setGoldPricePerVori]    = useState(0);
-  const [applyDeduction,      setApplyDeduction]      = useState(false);
+  const [nisabThreshold,     setNisabThreshold]     = useState(0);
+  const [silverPricePerGram, setSilverPricePerGram] = useState(0);
+  const [silverPricePerVori, setSilverPricePerVori] = useState(0);
+  const [priceUnit,          setPriceUnit]          = useState('gram');
+  const [goldPricePerGram,   setGoldPricePerGram]   = useState(0);
+  const [goldPricePerVori,   setGoldPricePerVori]   = useState(0);
+  const [applyDeduction,     setApplyDeduction]     = useState(false);
 
   const [activeCycle,     setActiveCycle]     = useState(null);
   const [dueCycle,        setDueCycle]        = useState(null);
@@ -67,12 +319,14 @@ export default function ZakatPage() {
   const [activePayment,   setActivePayment]   = useState(null);
   const [zakatPayments,   setZakatPayments]   = useState([]);
 
-  const [loading,           setLoading]           = useState(true);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [showPaymentModal,  setShowPaymentModal]  = useState(false);
-  const [activeTab,         setActiveTab]         = useState('overview');
-  const [expandedCycleId,   setExpandedCycleId]  = useState(null);
-  const [autoCheckDone,     setAutoCheckDone]     = useState(false);
+  const [loading,             setLoading]             = useState(true);
+  const [showSettingsModal,   setShowSettingsModal]   = useState(false);
+  const [showPaymentModal,    setShowPaymentModal]    = useState(false);
+  const [showStartCycleModal, setShowStartCycleModal] = useState(false);
+  const [editStartCycleMode,  setEditStartCycleMode]  = useState(false);
+  const [activeTab,           setActiveTab]           = useState('overview');
+  const [expandedCycleId,     setExpandedCycleId]     = useState(null);
+  const [autoCheckDone,       setAutoCheckDone]       = useState(false);
 
   const loadAllAssets = useCallback(async () => {
     try {
@@ -104,7 +358,7 @@ export default function ZakatPage() {
       let thresh = 0;
       snap.forEach(d => {
         const data = d.data();
-        if (data.nisabThreshold    !== undefined) { setNisabThreshold(data.nisabThreshold); thresh = data.nisabThreshold; }
+        if (data.nisabThreshold     !== undefined) { setNisabThreshold(data.nisabThreshold); thresh = data.nisabThreshold; }
         if (data.silverPricePerGram !== undefined) setSilverPricePerGram(data.silverPricePerGram);
         if (data.silverPricePerVori !== undefined) setSilverPricePerVori(data.silverPricePerVori);
         if (data.goldPricePerGram   !== undefined) setGoldPricePerGram(data.goldPricePerGram);
@@ -146,13 +400,13 @@ export default function ZakatPage() {
   const loadData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
-    const [breakdown, thresh] = await Promise.all([loadAllAssets(), loadNisabSettings(), loadZakatCycles(), loadPaymentHistory()]);
+    await Promise.all([loadAllAssets(), loadNisabSettings(), loadZakatCycles(), loadPaymentHistory()]);
     setLoading(false);
   }, [user, loadAllAssets, loadNisabSettings, loadZakatCycles, loadPaymentHistory]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Auto-complete cycle if Hijri year passed
+  // Auto-complete cycle if Hijri year passed (triggers auto-fetch of Nisab)
   useEffect(() => {
     if (autoCheckDone || !activeCycle || !wealthBreakdown || nisabThreshold === 0) return;
     if (!hasOneHijriYearPassed(activeCycle.startDate)) return;
@@ -161,45 +415,136 @@ export default function ZakatPage() {
       const result = await autoCompleteCycleIfYearPassed(
         user.uid, activeCycle, wealthBreakdown.netZakatableWealth, nisabThreshold, wealthBreakdown
       );
-      if (result.acted) { showToast('Zakat year completed. New cycle started automatically.', 'info'); await loadZakatCycles(); }
+      if (result.acted) {
+        const msg = result.nisabFetched
+          ? `Zakat year completed. Nisab auto-updated to ৳${result.effectiveNisab?.toLocaleString()}. ${result.isDue ? 'Zakat is due.' : 'You are exempt.'}`
+          : `Zakat year completed (saved Nisab used — update manually for accuracy). ${result.isDue ? 'Zakat is due.' : 'You are exempt.'}`;
+        showToast(msg, result.isDue ? 'info' : 'success');
+        await loadData();
+      }
     })();
   }, [activeCycle, wealthBreakdown, nisabThreshold]);
 
   const saveNisabSettings = async (payload) => {
     try {
       const settingsData = {
-        nisabThreshold: payload.nisabThreshold, silverPricePerGram: payload.silverPricePerGram || 0,
-        silverPricePerVori: payload.silverPricePerVori || 0, goldPricePerGram: payload.goldPricePerGram || 0,
-        goldPricePerVori: payload.goldPricePerVori || 0, priceUnit: payload.priceUnit || 'gram',
-        priceSource: payload.priceSource || 'manual', lastFetched: payload.lastFetched || null,
-        usdToBdt: payload.usdToBdt || null, updatedAt: serverTimestamp(),
+        nisabThreshold:     payload.nisabThreshold,
+        silverPricePerGram: payload.silverPricePerGram || 0,
+        silverPricePerVori: payload.silverPricePerVori || 0,
+        goldPricePerGram:   payload.goldPricePerGram   || 0,
+        goldPricePerVori:   payload.goldPricePerVori   || 0,
+        priceUnit:          payload.priceUnit          || 'gram',
+        priceSource:        payload.priceSource        || 'manual',
+        lastFetched:        payload.lastFetched        || null,
+        usdToBdt:           payload.usdToBdt           || null,
+        updatedAt:          serverTimestamp(),
       };
       const settingsRef = collection(db, 'users', user.uid, 'settings');
       const snap = await getDocs(settingsRef);
       if (snap.empty) await addDoc(settingsRef, settingsData);
       else await updateDoc(doc(db, 'users', user.uid, 'settings', snap.docs[0].id), settingsData);
-      setNisabThreshold(payload.nisabThreshold); setSilverPricePerGram(payload.silverPricePerGram || 0);
-      setSilverPricePerVori(payload.silverPricePerVori || 0); setGoldPricePerGram(payload.goldPricePerGram || 0);
-      setGoldPricePerVori(payload.goldPricePerVori || 0); setPriceUnit(payload.priceUnit || 'gram');
-      setApplyDeduction(payload.applyDeduction || false);
-      setShowSettingsModal(false); showToast('Nisab settings saved!', 'success');
+      setNisabThreshold(payload.nisabThreshold);
+      setSilverPricePerGram(payload.silverPricePerGram || 0);
+      setSilverPricePerVori(payload.silverPricePerVori || 0);
+      setGoldPricePerGram(payload.goldPricePerGram     || 0);
+      setGoldPricePerVori(payload.goldPricePerVori     || 0);
+      setPriceUnit(payload.priceUnit                   || 'gram');
+      setApplyDeduction(payload.applyDeduction         || false);
+      setShowSettingsModal(false);
+      showToast('Nisab settings saved!', 'success');
       if (wealthBreakdown?.netZakatableWealth >= payload.nisabThreshold && payload.nisabThreshold > 0 && !activeCycle) {
-        await startNewCycle(wealthBreakdown.netZakatableWealth, payload.nisabThreshold);
+        setShowStartCycleModal(true);
       }
     } catch (err) { showToast('Error saving settings: ' + err.message, 'error'); }
   };
 
-  const startNewCycle = async (wealthAmount, nisabAmount) => {
+  // ── startNewCycle — accepts optional custom start date ────────────────────
+  const startNewCycle = async (customStartDate) => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const hijriDate = gregorianToHijri(today);
-      await addDoc(collection(db, 'users', user.uid, 'zakatCycles'), {
-        cycleId: generateId(), status: 'active', startDate: today,
-        startDateHijri: hijriDate, startWealth: wealthAmount, startBreakdown: wealthBreakdown,
-        nisabAtStart: nisabAmount, paymentStatus: 'unpaid', createdAt: serverTimestamp(),
-      });
-      await loadZakatCycles(); showToast('Zakat monitoring cycle started!', 'success');
-    } catch (err) { console.error(err); }
+      const startDate         = customStartDate || new Date().toISOString().split('T')[0];
+      const hijriDate         = gregorianToHijri(startDate);
+      const yearAlreadyPassed = hasOneHijriYearPassed(startDate);
+
+      if (yearAlreadyPassed) {
+        const today    = new Date().toISOString().split('T')[0];
+        const endHijri = gregorianToHijri(today);
+        const zakatDue = (wealthBreakdown?.netZakatableWealth || 0) * 0.025;
+        await addDoc(collection(db, 'users', user.uid, 'zakatCycles'), {
+          cycleId:        generateId(),
+          status:         'due',
+          startDate,
+          startDateHijri: hijriDate,
+          startWealth:    wealthBreakdown?.netZakatableWealth || 0,
+          startBreakdown: wealthBreakdown,
+          nisabAtStart:   nisabThreshold,
+          endDate:        today,
+          endDateHijri:   endHijri,
+          endWealth:      wealthBreakdown?.netZakatableWealth || 0,
+          zakatDue,
+          paymentStatus:  'unpaid',
+          createdAt:      serverTimestamp(),
+        });
+        showToast('One Hijri year has passed — Zakat is now due!', 'info');
+      } else {
+        await addDoc(collection(db, 'users', user.uid, 'zakatCycles'), {
+          cycleId:        generateId(),
+          status:         'active',
+          startDate,
+          startDateHijri: hijriDate,
+          startWealth:    wealthBreakdown?.netZakatableWealth || 0,
+          startBreakdown: wealthBreakdown,
+          nisabAtStart:   nisabThreshold,
+          paymentStatus:  'unpaid',
+          createdAt:      serverTimestamp(),
+        });
+        const isBackdated = startDate < new Date().toISOString().split('T')[0];
+        showToast(
+          isBackdated
+            ? `Cycle started from ${fmtDate(startDate)} — ${daysUntilHijriAnniversary(startDate)} days remaining.`
+            : 'Zakat monitoring cycle started!',
+          'success'
+        );
+      }
+      setShowStartCycleModal(false);
+      await loadZakatCycles();
+    } catch (err) { console.error(err); showToast('Error starting cycle: ' + err.message, 'error'); }
+  };
+
+  // ── editCycleStartDate — update start date of EXISTING active cycle ───────
+  const editCycleStartDate = async (newStartDate) => {
+    if (!activeCycle) return;
+    try {
+      const hijriDate         = gregorianToHijri(newStartDate);
+      const yearAlreadyPassed = hasOneHijriYearPassed(newStartDate);
+
+      if (yearAlreadyPassed) {
+        const today    = new Date().toISOString().split('T')[0];
+        const endHijri = gregorianToHijri(today);
+        const zakatDue = (wealthBreakdown?.netZakatableWealth || 0) * 0.025;
+        await updateDoc(doc(db, 'users', user.uid, 'zakatCycles', activeCycle.id), {
+          startDate:      newStartDate,
+          startDateHijri: hijriDate,
+          status:         'due',
+          endDate:        today,
+          endDateHijri:   endHijri,
+          endWealth:      wealthBreakdown?.netZakatableWealth || 0,
+          zakatDue,
+          updatedAt:      serverTimestamp(),
+        });
+        showToast('Start date updated — one Hijri year has already passed. Zakat is now due!', 'info');
+      } else {
+        await updateDoc(doc(db, 'users', user.uid, 'zakatCycles', activeCycle.id), {
+          startDate:      newStartDate,
+          startDateHijri: hijriDate,
+          updatedAt:      serverTimestamp(),
+        });
+        const days = daysUntilHijriAnniversary(newStartDate);
+        showToast(`Cycle start date updated to ${fmtDate(newStartDate)} — ${days} days remaining.`, 'success');
+      }
+      setShowStartCycleModal(false);
+      setEditStartCycleMode(false);
+      await loadZakatCycles();
+    } catch (err) { showToast('Error updating date: ' + err.message, 'error'); }
   };
 
   const markAsExempt = async () => {
@@ -225,10 +570,13 @@ export default function ZakatPage() {
       if (hasOneHijriYearPassed(activeCycle.startDate)) {
         zakatStatus = totalWealth >= nisabThreshold ? ZAKAT_STATUS.DUE : ZAKAT_STATUS.EXEMPT;
       } else {
-        zakatStatus = ZAKAT_STATUS.MONITORING;
-        daysRemaining = daysUntilHijriAnniversary(activeCycle.startDate);
-        yearEndDate = addOneHijriYear(activeCycle.startDate);
+        zakatStatus     = ZAKAT_STATUS.MONITORING;
+        daysRemaining   = daysUntilHijriAnniversary(activeCycle.startDate);
+        yearEndDate     = addOneHijriYear(activeCycle.startDate);
       }
+    } else if (dueCycle && !activeCycle) {
+      zakatStatus = ZAKAT_STATUS.DUE;
+      zakatAmount = dueCycle.zakatDue || zakatAmount;
     } else if (totalWealth >= nisabThreshold && !activeCycle) {
       zakatStatus = ZAKAT_STATUS.NOT_MANDATORY;
     }
@@ -249,6 +597,7 @@ export default function ZakatPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
+      {/* Page Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Zakat Tracking</h1>
@@ -268,6 +617,7 @@ export default function ZakatPage() {
         </div>
       </div>
 
+      {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
         {[{ id: 'overview', label: 'Overview', icon: Star }, { id: 'history', label: 'Zakat History', icon: History }].map(({ id, label, icon: Icon }) => (
           <button key={id} onClick={() => setActiveTab(id)}
@@ -279,7 +629,16 @@ export default function ZakatPage() {
 
       {activeTab === 'overview' && (
         <>
-          {/* Previous Zakat Due Banner */}
+          {/* ── Nisab Reminder Banner (≤3 days to year end) ── */}
+          {zakatStatus === ZAKAT_STATUS.MONITORING && daysRemaining <= 3 && yearEndDate && (
+            <NisabReminderBanner
+              daysRemaining={daysRemaining}
+              yearEndDate={yearEndDate}
+              onOpenSettings={() => setShowSettingsModal(true)}
+            />
+          )}
+
+          {/* ── Previous Zakat Due Banner ── */}
           {dueCycle && activeCycle && dueCycle.id !== activeCycle.id && (
             <div className="bg-amber-50 border border-amber-300 rounded-xl p-4">
               <div className="flex items-start gap-3">
@@ -287,13 +646,14 @@ export default function ZakatPage() {
                 <div className="flex-1">
                   <p className="font-semibold text-amber-900 text-sm">Previous Zakat Still Unpaid</p>
                   <p className="text-sm text-amber-700 mt-1">
-                    Your Hijri year ended on <strong>{dueCycle.endDate}</strong> with zakat due of <strong>{fmt(dueCycle.zakatDue || 0)}</strong>.
+                    Your Hijri year ended on <strong>{fmtDate(dueCycle.endDate)}</strong> with zakat due of{' '}
+                    <strong>{fmt(dueCycle.zakatDue || 0)}</strong>.
                     A new monitoring cycle has auto-started. Please clear the previous payment.
                   </p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3">
                     <div className="bg-amber-100 rounded-lg p-2 text-xs">
                       <p className="text-amber-600">Cycle Ended</p>
-                      <p className="font-semibold text-amber-900">{dueCycle.endDate}</p>
+                      <p className="font-semibold text-amber-900">{fmtDate(dueCycle.endDate)}</p>
                     </div>
                     <div className="bg-amber-100 rounded-lg p-2 text-xs">
                       <p className="text-amber-600">Zakat Due (2.5%)</p>
@@ -304,8 +664,15 @@ export default function ZakatPage() {
                       <p className="font-semibold text-amber-900">{fmt(dueCycle.endWealth || 0)}</p>
                     </div>
                   </div>
+                  {/* Show auto-Nisab note if applicable */}
+                  {dueCycle.nisabAtEndNote && (
+                    <div className="mt-2 flex items-start gap-2 text-xs text-amber-700 bg-amber-100 rounded-lg p-2">
+                      <Sparkles className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                      <span>{dueCycle.nisabAtEndNote}</span>
+                    </div>
+                  )}
                   <div className="mt-2 text-xs text-amber-700 bg-amber-100 rounded-lg p-2">
-                    <strong>New cycle started:</strong> {activeCycle.startDate} — monitoring continues while previous zakat is pending.
+                    <strong>New cycle started:</strong> {fmtDate(activeCycle.startDate)} — monitoring continues while previous zakat is pending.
                   </div>
                   <button onClick={() => setShowPaymentModal(true)}
                     className="mt-3 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold transition-colors">
@@ -316,7 +683,7 @@ export default function ZakatPage() {
             </div>
           )}
 
-          {/* Main Status Card */}
+          {/* ── Main Status Card ── */}
           <div className="relative bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 rounded-xl border border-emerald-200 overflow-hidden">
             <div className="absolute inset-0 opacity-[0.03]">
               <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-600 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2" />
@@ -350,7 +717,13 @@ export default function ZakatPage() {
                   <WealthStatCard label="Zakat Due (2.5%)" value={fmt(zakatAmount)} sub="Obligatory amount" icon={<AlertCircle className="w-4 h-4 text-red-600" />} highlight />
                 )}
                 {zakatStatus === ZAKAT_STATUS.MONITORING && activeCycle && (
-                  <WealthStatCard label="Days Remaining" value={`${daysRemaining} days`} sub={yearEndDate ? `Until ${yearEndDate.toLocaleDateString()}` : ''} icon={<Clock className="w-4 h-4 text-blue-600" />} />
+                  <WealthStatCard
+                    label="Days Remaining"
+                    value={`${daysRemaining} days`}
+                    sub={yearEndDate ? `Until ${fmtDate(yearEndDate)}` : ''}
+                    icon={<Clock className={`w-4 h-4 ${daysRemaining <= 3 ? 'text-red-500' : 'text-blue-600'}`} />}
+                    highlight={daysRemaining <= 3}
+                  />
                 )}
               </div>
 
@@ -366,15 +739,20 @@ export default function ZakatPage() {
                 </div>
               )}
 
+              {/* Wealth reached Nisab */}
               {zakatStatus === ZAKAT_STATUS.NOT_MANDATORY && nisabThreshold > 0 && totalWealth >= nisabThreshold && !activeCycle && (
-                <ActionBlock icon={<CheckCircle2 className="w-5 h-5 text-green-600" />} title="Wealth Reached Nisab!"
-                  body={`Your wealth (${fmt(totalWealth)}) has reached the Nisab threshold (${fmt(nisabThreshold)}). Start monitoring now.`}
-                  action={{ label: 'Start Monitoring Cycle', onClick: () => startNewCycle(totalWealth, nisabThreshold), color: 'green' }} />
+                <ActionBlock
+                  icon={<CheckCircle2 className="w-5 h-5 text-green-600" />}
+                  title="Wealth Reached Nisab!"
+                  body={`Your wealth (${fmt(totalWealth)}) has reached the Nisab threshold (${fmt(nisabThreshold)}). Start monitoring — you can set the date your wealth first crossed Nisab.`}
+                  action={{ label: 'Start Monitoring Cycle', onClick: () => setShowStartCycleModal(true), color: 'green' }}
+                />
               )}
 
               {zakatStatus === ZAKAT_STATUS.NOT_MANDATORY && (nisabThreshold === 0 || totalWealth < nisabThreshold) && (
                 <ActionBlock icon={<AlertCircle className="w-5 h-5 text-gray-600" />} title="No Active Cycle"
-                  body={nisabThreshold === 0 ? 'Set the Nisab threshold in settings to begin tracking.'
+                  body={nisabThreshold === 0
+                    ? 'Set the Nisab threshold in settings to begin tracking.'
                     : `Your wealth (${fmt(totalWealth)}) has not reached the Nisab threshold (${fmt(nisabThreshold)}).`} />
               )}
 
@@ -383,12 +761,25 @@ export default function ZakatPage() {
                   <div className="flex items-start gap-3">
                     <Clock className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900 mb-1">Monitoring Active</p>
+                      <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
+                        <p className="text-sm font-medium text-gray-900">Monitoring Active</p>
+                        <button
+                          onClick={() => { setEditStartCycleMode(true); setShowStartCycleModal(true); }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors"
+                        >
+                          <CalendarClock className="w-3.5 h-3.5" /> Edit Start Date
+                        </button>
+                      </div>
                       <p className="text-sm text-gray-600 mb-4">Monitoring since your wealth reached Nisab. One Hijri year must pass.</p>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <MiniInfoCard label="Cycle Started (Hijri)" value={formatHijriDate(activeCycle.startDateHijri)} icon={<Calendar className="w-3 h-3 text-blue-600" />} />
-                        <MiniInfoCard label="Started (Gregorian)" value={new Date(activeCycle.startDate).toLocaleDateString()} icon={<Calendar className="w-3 h-3 text-blue-600" />} />
-                        <MiniInfoCard label="Days Remaining" value={`${daysRemaining} days`} sub={yearEndDate ? `Until ${yearEndDate.toLocaleDateString()}` : ''} icon={<Clock className="w-3 h-3 text-blue-600" />} />
+                        <MiniInfoCard label="Started (Gregorian)" value={fmtDate(activeCycle.startDate)} icon={<Calendar className="w-3 h-3 text-blue-600" />} />
+                        <MiniInfoCard
+                          label="Days Remaining"
+                          value={`${daysRemaining} days`}
+                          sub={yearEndDate ? `Until ${fmtDate(yearEndDate)}` : ''}
+                          icon={<Clock className={`w-3 h-3 ${daysRemaining <= 3 ? 'text-red-500' : 'text-blue-600'}`} />}
+                        />
                       </div>
                     </div>
                   </div>
@@ -408,15 +799,28 @@ export default function ZakatPage() {
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-900 mb-1">Zakat Payment Due</p>
                       <p className="text-sm text-gray-600 mb-3">One Hijri year has passed. Zakat is now obligatory.</p>
+                      {/* Show auto-Nisab note on the active/due cycle */}
+                      {(activeCycle?.nisabAtEndNote || dueCycle?.nisabAtEndNote) && (
+                        <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-lg p-3 mb-3">
+                          <Sparkles className="w-3.5 h-3.5 text-blue-600 mt-0.5 flex-shrink-0" />
+                          <p className="text-xs text-blue-700 leading-relaxed">
+                            {activeCycle?.nisabAtEndNote || dueCycle?.nisabAtEndNote}
+                          </p>
+                        </div>
+                      )}
                       <div className="bg-red-50 rounded-lg p-4 mb-4">
                         <p className="text-xs text-red-600 font-medium mb-1">Zakat Amount (2.5%)</p>
                         <p className="text-2xl font-bold text-gray-900">{fmt(zakatAmount)}</p>
                       </div>
                       <div className="flex gap-3">
                         <button onClick={() => setShowPaymentModal(true)}
-                          className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium">Pay Zakat</button>
+                          className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium">
+                          Pay Zakat
+                        </button>
                         <button onClick={markAsExempt}
-                          className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium">Mark Exempt</button>
+                          className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium">
+                          Mark Exempt
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -425,6 +829,7 @@ export default function ZakatPage() {
             </div>
           </div>
 
+          {/* Installment tracker */}
           {activePayment && activePayment.type === 'installment' && activePayment.status === 'active' && (
             <InstallmentTracker payment={activePayment} accounts={accounts}
               onPayInstallment={async (installmentIndex, accountId) => {
@@ -439,6 +844,7 @@ export default function ZakatPage() {
             loans={loans} investments={investments} goals={goals} jewellery={jewellery}
             nisabThreshold={nisabThreshold} fmt={fmt} />
 
+          {/* How Zakat is Calculated */}
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-5">
             <div className="flex items-start gap-2">
               <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
@@ -448,10 +854,12 @@ export default function ZakatPage() {
                 <p><strong>Not Included:</strong> Lendings — money lent to others is NOT in your possession, so it is excluded from zakatable assets.</p>
                 <p><strong>Deducted:</strong> Outstanding loan amounts you owe to others.</p>
                 <p><strong>Rate:</strong> 2.5% of net zakatable wealth, once per Hijri year if wealth stays ≥ Nisab.</p>
+                <p><strong>Nisab at Year End:</strong> The system automatically fetches the latest silver price when your Hijri year completes, for an accurate Zakat calculation. You will see a note on each cycle showing whether it was auto-fetched or manually set.</p>
               </div>
             </div>
           </div>
 
+          {/* Jewellery reminder */}
           {jewellery.length > 0 && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between gap-3">
               <div className="flex items-start gap-2.5">
@@ -479,6 +887,19 @@ export default function ZakatPage() {
       {activeTab === 'history' && (
         <ZakatHistoryTab cycleHistory={cycleHistory} zakatPayments={zakatPayments}
           expandedCycleId={expandedCycleId} setExpandedCycleId={setExpandedCycleId} fmt={fmt} />
+      )}
+
+      {/* ── Start / Edit Cycle Modal ── */}
+      {showStartCycleModal && (
+        <StartCycleModal
+          totalWealth={totalWealth}
+          nisabThreshold={nisabThreshold}
+          fmt={fmt}
+          editMode={editStartCycleMode}
+          currentStartDate={editStartCycleMode ? activeCycle?.startDate : null}
+          onConfirm={editStartCycleMode ? editCycleStartDate : startNewCycle}
+          onClose={() => { setShowStartCycleModal(false); setEditStartCycleMode(false); }}
+        />
       )}
 
       {showPaymentModal && (
@@ -550,7 +971,7 @@ function ActionBlock({ icon, title, body, action }) {
   );
 }
 
-// ─── Wealth Breakdown Card with Accordions ────────────────────────────────────
+// ─── Wealth Breakdown Card ────────────────────────────────────────────────────
 
 function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments, goals, jewellery = [], nisabThreshold, fmt }) {
   const [openSections, setOpenSections] = useState({});
@@ -578,10 +999,10 @@ function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments
   const activeGoals       = goals.filter(g => g.status === 'active' && Number(g.currentAmount) > 0);
 
   const Section = ({ sectionKey, icon, label, total, badge, badgeColor = 'bg-gray-100 text-gray-600', excluded = false, children }) => {
-    const isOpen = !!openSections[sectionKey];
+    const isOpen  = !!openSections[sectionKey];
     const hasKids = !!children;
     return (
-      <div className={`border-b border-gray-50 last:border-0`}>
+      <div className="border-b border-gray-50 last:border-0">
         <button onClick={() => hasKids && toggle(sectionKey)}
           className={`w-full flex items-center gap-3 px-6 py-3.5 hover:bg-gray-50 transition-colors text-left ${hasKids ? 'cursor-pointer' : 'cursor-default'}`}>
           <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${excluded ? 'bg-gray-100' : 'bg-gray-50'}`}>{icon}</div>
@@ -633,56 +1054,48 @@ function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments
             {cashAccs.map(a => <AccRow key={a.id} name={a.name} balance={a.balance} />)}
           </Section>
         )}
-
         {(breakdown.accountBreakdown?.bank || 0) > 0 && (
           <Section sectionKey="bank" icon={<Building2 className="w-4 h-4 text-blue-600" />} label="Bank Accounts"
             total={breakdown.accountBreakdown.bank} badge={`${bankAccs.length} acct${bankAccs.length > 1 ? 's' : ''}`} badgeColor="bg-blue-50 text-blue-700">
             {bankAccs.map(a => <AccRow key={a.id} name={a.name} balance={a.balance} />)}
           </Section>
         )}
-
         {(breakdown.accountBreakdown?.mobile_banking || 0) > 0 && (
           <Section sectionKey="mobile" icon={<Smartphone className="w-4 h-4 text-purple-600" />} label="Mobile Banking"
             total={breakdown.accountBreakdown.mobile_banking} badge={`${mobileAccs.length} acct${mobileAccs.length > 1 ? 's' : ''}`} badgeColor="bg-purple-50 text-purple-700">
             {mobileAccs.map(a => <AccRow key={a.id} name={a.name} balance={a.balance} />)}
           </Section>
         )}
-
         {(breakdown.accountBreakdown?.gold || 0) > 0 && (
           <Section sectionKey="gold" icon={<Coins className="w-4 h-4 text-amber-500" />} label="Gold Accounts"
             total={breakdown.accountBreakdown.gold} badge={`${goldAccs.length} acct${goldAccs.length > 1 ? 's' : ''}`} badgeColor="bg-amber-50 text-amber-700">
             {goldAccs.map(a => <AccRow key={a.id} name={a.name} balance={a.balance} />)}
           </Section>
         )}
-
         {(breakdown.accountBreakdown?.silver || 0) > 0 && (
           <Section sectionKey="silver" icon={<Coins className="w-4 h-4 text-gray-400" />} label="Silver Accounts"
             total={breakdown.accountBreakdown.silver} badge={`${silverAccs.length} acct${silverAccs.length > 1 ? 's' : ''}`} badgeColor="bg-gray-100 text-gray-600">
             {silverAccs.map(a => <AccRow key={a.id} name={a.name} balance={a.balance} />)}
           </Section>
         )}
-
         {(breakdown.accountBreakdown?.other || 0) > 0 && (
           <Section sectionKey="other" icon={<Wallet className="w-4 h-4 text-gray-500" />} label="Other Accounts"
             total={breakdown.accountBreakdown.other} badge={`${otherAccs.length} acct${otherAccs.length > 1 ? 's' : ''}`}>
             {otherAccs.map(a => <AccRow key={a.id} name={a.name} balance={a.balance} type={a.type} />)}
           </Section>
         )}
-
-        {/* Lendings — displayed but EXCLUDED */}
         {breakdown.lendingsTotal > 0 && (
           <Section sectionKey="lendings" icon={<HandCoins className="w-4 h-4 text-cyan-400" />} label="Lendings (Receivable)"
             total={breakdown.lendingsTotal} badge={`${activeLendings.length} active`} badgeColor="bg-cyan-50 text-cyan-600" excluded={true}>
             <p className="text-xs text-gray-400 italic px-3 pt-1">Money lent out is not in your possession — excluded from zakatable wealth.</p>
             {activeLendings.map(l => (
               <div key={l.id} className="flex items-center justify-between py-1.5 px-3 bg-white rounded-lg border border-gray-50">
-                <span className="text-xs text-gray-500">{l.borrowerName || l.name || 'Unknown'}{l.dueDate ? ` (due: ${l.dueDate})` : ''}</span>
+                <span className="text-xs text-gray-500">{l.borrowerName || l.name || 'Unknown'}{l.dueDate ? ` (due: ${fmtDate(l.dueDate)})` : ''}</span>
                 <span className="text-xs text-gray-300 line-through">{fmt(Number(l.remainingBalance) || Number(l.principalAmount) || 0)}</span>
               </div>
             ))}
           </Section>
         )}
-
         {breakdown.investmentsTotal > 0 && (
           <Section sectionKey="investments" icon={<TrendingUp className="w-4 h-4 text-pink-600" />} label="Investments"
             total={breakdown.investmentsTotal} badge={`${activeInvestments.length} active`} badgeColor="bg-pink-50 text-pink-700">
@@ -698,7 +1111,6 @@ function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments
             })}
           </Section>
         )}
-
         {breakdown.goalsTotal > 0 && (
           <Section sectionKey="goals" icon={<Target className="w-4 h-4 text-orange-500" />} label="Savings Goals"
             total={breakdown.goalsTotal} badge={`${activeGoals.length} goal${activeGoals.length > 1 ? 's' : ''}`} badgeColor="bg-orange-50 text-orange-700">
@@ -710,7 +1122,6 @@ function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments
             ))}
           </Section>
         )}
-
         {breakdown.jewelleryTotal > 0 && (
           <div className="flex items-center gap-3 px-6 py-3.5">
             <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0"><Gem className="w-4 h-4 text-amber-400" /></div>
@@ -718,7 +1129,6 @@ function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments
             <p className="font-semibold text-sm text-gray-800">+ {fmt(breakdown.jewelleryTotal)}</p>
           </div>
         )}
-
         {breakdown.loansTotal > 0 && (
           <div className="flex items-center gap-3 px-6 py-3.5 bg-red-50/50">
             <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0"><Minus className="w-4 h-4 text-red-500" /></div>
@@ -726,7 +1136,6 @@ function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments
             <p className="font-semibold text-sm text-red-600">− {fmt(breakdown.loansTotal)}</p>
           </div>
         )}
-
         <div className="flex items-center justify-between px-6 py-3 bg-gray-50">
           <span className="text-sm font-medium text-gray-700">Total Assets</span>
           <span className="font-semibold text-gray-900">{fmt(breakdown.totalAssets)}</span>
@@ -762,7 +1171,7 @@ function InstallmentTracker({ payment, accounts, onPayInstallment, fmt }) {
   const payableAccs = accounts.filter(a => Number(a.balance) > 0);
   useEffect(() => { if (payableAccs.length > 0 && !selectedAccountId) setSelectedAccountId(payableAccs[0].id); }, [payableAccs]);
 
-  const totalPaid = payment.paidAmount || 0;
+  const totalPaid   = payment.paidAmount || 0;
   const progressPct = Math.round((totalPaid / payment.totalAmount) * 100);
 
   return (
@@ -798,7 +1207,9 @@ function InstallmentTracker({ payment, accounts, onPayInstallment, fmt }) {
             <div className="flex-shrink-0">{inst.status === 'paid' ? <Check className="w-4 h-4 text-emerald-600" /> : <Clock className="w-4 h-4 text-gray-400" />}</div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-800">Installment {inst.installmentNumber}</p>
-              <p className="text-xs text-gray-500">{inst.status === 'paid' ? `Paid on ${inst.paidDate}` : `Due: ${inst.dueDate}`}</p>
+              <p className="text-xs text-gray-500">
+                {inst.status === 'paid' ? `Paid on ${fmtDate(inst.paidDate)}` : `Due: ${fmtDate(inst.dueDate)}`}
+              </p>
             </div>
             <p className={`text-sm font-semibold ${inst.status === 'paid' ? 'text-emerald-700' : 'text-gray-700'}`}>{fmt(inst.amount)}</p>
             {inst.status !== 'paid' && (
@@ -818,15 +1229,15 @@ function InstallmentTracker({ payment, accounts, onPayInstallment, fmt }) {
 // ─── Payment Modal ────────────────────────────────────────────────────────────
 
 function ZakatPaymentModal({ zakatAmount, activeCycle, accounts, userId, fmt, onClose, onSuccess }) {
-  const [mode, setMode] = useState('select');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [fromAccountId, setFromAccountId] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('cash');
-  const [recipient, setRecipient] = useState('');
-  const [note, setNote] = useState('');
-  const [installments, setInstallments] = useState(3);
-  const [previewSched, setPreviewSched] = useState([]);
+  const [mode,           setMode]           = useState('select');
+  const [loading,        setLoading]        = useState(false);
+  const [error,          setError]          = useState('');
+  const [fromAccountId,  setFromAccountId]  = useState('');
+  const [paymentMethod,  setPaymentMethod]  = useState('cash');
+  const [recipient,      setRecipient]      = useState('');
+  const [note,           setNote]           = useState('');
+  const [installments,   setInstallments]   = useState(3);
+  const [previewSched,   setPreviewSched]   = useState([]);
 
   const allAccounts = accounts.filter(a => Number(a.balance) > 0).sort((a, b) => Number(b.balance) - Number(a.balance));
   const selectedAcc = allAccounts.find(a => a.id === fromAccountId);
@@ -930,7 +1341,7 @@ function ZakatPaymentModal({ zakatAmount, activeCycle, accounts, userId, fmt, on
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Schedule Preview</p>
                   {previewSched.map(s => (
                     <div key={s.installmentNumber} className="flex justify-between text-xs">
-                      <span className="text-gray-600">Installment {s.installmentNumber} — {s.dueDate}</span>
+                      <span className="text-gray-600">Installment {s.installmentNumber} — {fmtDate(s.dueDate)}</span>
                       <span className="font-medium text-gray-800">{fmt(s.amount)}</span>
                     </div>
                   ))}
@@ -1017,7 +1428,12 @@ function CommonFields({ paymentMethod, setPaymentMethod, recipient, setRecipient
 function ZakatHistoryTab({ cycleHistory, zakatPayments, expandedCycleId, setExpandedCycleId, fmt }) {
   const [historyView, setHistoryView] = useState('cycles');
 
-  const statusBadge = { active: 'bg-blue-100 text-blue-700', due: 'bg-red-100 text-red-700', paid: 'bg-emerald-100 text-emerald-700', exempt: 'bg-gray-100 text-gray-600' };
+  const statusBadge = {
+    active: 'bg-blue-100 text-blue-700',
+    due:    'bg-red-100 text-red-700',
+    paid:   'bg-emerald-100 text-emerald-700',
+    exempt: 'bg-gray-100 text-gray-600',
+  };
   const totalPaid = cycleHistory.filter(c => c.status === 'paid').reduce((s, c) => s + (c.zakatPaid || 0), 0);
   const paidCount = cycleHistory.filter(c => c.status === 'paid').length;
 
@@ -1034,9 +1450,11 @@ function ZakatHistoryTab({ cycleHistory, zakatPayments, expandedCycleId, setExpa
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-4">
-        {[{ label: 'Total Cycles', value: cycleHistory.length, color: 'text-gray-900' },
-          { label: 'Paid Cycles', value: paidCount, color: 'text-emerald-700' },
-          { label: 'Total Paid', value: fmt(totalPaid), color: 'text-gray-900', small: true }].map((s, i) => (
+        {[
+          { label: 'Total Cycles', value: cycleHistory.length,       color: 'text-gray-900' },
+          { label: 'Paid Cycles',  value: paidCount,                 color: 'text-emerald-700' },
+          { label: 'Total Paid',   value: fmt(totalPaid),            color: 'text-gray-900', small: true },
+        ].map((s, i) => (
           <div key={i} className="bg-white border border-gray-100 rounded-xl p-4 text-center shadow-sm">
             <p className={`font-bold ${s.small ? 'text-base' : 'text-2xl'} ${s.color}`}>{s.value}</p>
             <p className="text-xs text-gray-500 mt-0.5">{s.label}</p>
@@ -1059,7 +1477,7 @@ function ZakatHistoryTab({ cycleHistory, zakatPayments, expandedCycleId, setExpa
           <div className="divide-y divide-gray-50">
             {cycleHistory.map((cycle, idx) => {
               const isExpanded = expandedCycleId === cycle.id;
-              const cycleNum = cycleHistory.length - idx;
+              const cycleNum   = cycleHistory.length - idx;
               return (
                 <div key={cycle.id}>
                   <button onClick={() => setExpandedCycleId(isExpanded ? null : cycle.id)}
@@ -1068,11 +1486,14 @@ function ZakatHistoryTab({ cycleHistory, zakatPayments, expandedCycleId, setExpa
                       <span className="text-xs font-bold text-gray-600">#{cycleNum}</span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-800 text-sm">Cycle {cycleNum} — {cycle.startDate}</p>
+                      <p className="font-medium text-gray-800 text-sm">Cycle {cycleNum} — {fmtDate(cycle.startDate)}</p>
                       <p className="text-xs text-gray-400">{formatHijriDate(cycle.startDateHijri)}</p>
                     </div>
-                    {cycle.zakatPaid ? <p className="text-sm font-semibold text-emerald-700 hidden sm:block">{fmt(cycle.zakatPaid)}</p>
-                      : cycle.zakatDue ? <p className="text-sm font-semibold text-red-600 hidden sm:block">{fmt(cycle.zakatDue)} due</p> : null}
+                    {cycle.zakatPaid
+                      ? <p className="text-sm font-semibold text-emerald-700 hidden sm:block">{fmt(cycle.zakatPaid)}</p>
+                      : cycle.zakatDue
+                      ? <p className="text-sm font-semibold text-red-600 hidden sm:block">{fmt(cycle.zakatDue)} due</p>
+                      : null}
                     <span className={`px-2.5 py-1 rounded-full text-xs font-semibold flex-shrink-0 ${statusBadge[cycle.status] || statusBadge.exempt}`}>
                       {cycle.status === 'paid' ? 'Paid ✓' : cycle.status.charAt(0).toUpperCase() + cycle.status.slice(1)}
                     </span>
@@ -1083,14 +1504,15 @@ function ZakatHistoryTab({ cycleHistory, zakatPayments, expandedCycleId, setExpa
                     <div className="px-6 pb-5 bg-gray-50 space-y-3">
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3">
                         {[
-                          { label: 'Start Date', value: cycle.startDate },
-                          { label: 'Start (Hijri)', value: formatHijriDate(cycle.startDateHijri) },
+                          { label: 'Start Date',      value: fmtDate(cycle.startDate) },
+                          { label: 'Start (Hijri)',   value: formatHijriDate(cycle.startDateHijri) },
                           { label: 'Wealth at Start', value: fmt(cycle.startWealth || 0) },
-                          { label: 'Nisab at Start', value: fmt(cycle.nisabAtStart || 0) },
-                          cycle.endDate && { label: 'End Date', value: cycle.endDate },
+                          { label: 'Nisab at Start',  value: fmt(cycle.nisabAtStart || 0) },
+                          cycle.endDate     && { label: 'End Date',    value: fmtDate(cycle.endDate) },
                           cycle.endWealth !== undefined && { label: 'End Wealth', value: fmt(cycle.endWealth) },
-                          cycle.zakatDue && { label: 'Zakat Due', value: fmt(cycle.zakatDue), highlight: true },
-                          cycle.zakatPaid && { label: 'Zakat Paid', value: fmt(cycle.zakatPaid), highlight: true },
+                          cycle.nisabAtEnd  && { label: 'Nisab at Year End', value: fmt(cycle.nisabAtEnd) },
+                          cycle.zakatDue    && { label: 'Zakat Due',   value: fmt(cycle.zakatDue),  highlight: true },
+                          cycle.zakatPaid   && { label: 'Zakat Paid',  value: fmt(cycle.zakatPaid), highlight: true },
                           { label: 'Status', value: cycle.status },
                         ].filter(Boolean).map((item, i) => (
                           <div key={i} className="bg-white rounded-lg p-2.5">
@@ -1099,6 +1521,27 @@ function ZakatHistoryTab({ cycleHistory, zakatPayments, expandedCycleId, setExpa
                           </div>
                         ))}
                       </div>
+
+                      {/* Auto-Nisab transparency note */}
+                      {cycle.nisabAtEndNote && (
+                        <div className={`flex items-start gap-2 rounded-xl p-3 text-xs leading-relaxed ${
+                          cycle.nisabAtEndFetched
+                            ? 'bg-emerald-50 border border-emerald-100 text-emerald-800'
+                            : 'bg-amber-50 border border-amber-200 text-amber-800'
+                        }`}>
+                          <Sparkles className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${cycle.nisabAtEndFetched ? 'text-emerald-600' : 'text-amber-600'}`} />
+                          <div>
+                            <p className="font-semibold mb-0.5">Nisab at Year End</p>
+                            <p>{cycle.nisabAtEndNote}</p>
+                            {cycle.nisabAtEndFetchedAt && (
+                              <p className="text-gray-400 mt-0.5">Fetched: {fmtDate(cycle.nisabAtEndFetchedAt)}</p>
+                            )}
+                            {cycle.silverPerGramAtEnd && (
+                              <p className="text-gray-500 mt-0.5">Silver price: ৳{Number(cycle.silverPerGramAtEnd).toLocaleString()}/gram</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Payment records */}
                       {cycle.payments && cycle.payments.length > 0 && (
@@ -1114,7 +1557,7 @@ function ZakatHistoryTab({ cycleHistory, zakatPayments, expandedCycleId, setExpa
                                     {pmt.accountName ? ` · ${pmt.accountName}` : ''}
                                   </p>
                                   {pmt.note && <p className="text-xs text-gray-400 truncate">{pmt.note}</p>}
-                                  <p className="text-xs text-gray-400">{pmt.date}</p>
+                                  <p className="text-xs text-gray-400">{fmtDate(pmt.date)}</p>
                                 </div>
                                 <p className="text-xs font-semibold text-emerald-700 flex-shrink-0">{fmt(pmt.amount)}</p>
                               </div>
@@ -1131,7 +1574,8 @@ function ZakatHistoryTab({ cycleHistory, zakatPayments, expandedCycleId, setExpa
                               ['Goals', cycle.startBreakdown.goalsTotal], ['Jewellery', cycle.startBreakdown.jewelleryTotal],
                               ['Loans', cycle.startBreakdown.loansTotal]].filter(([, v]) => v > 0).map(([label, value]) => (
                               <div key={label} className="bg-white rounded-lg p-2 text-xs">
-                                <p className="text-gray-400">{label}</p><p className="font-semibold text-gray-800">{fmt(value)}</p>
+                                <p className="text-gray-400">{label}</p>
+                                <p className="font-semibold text-gray-800">{fmt(value)}</p>
                               </div>
                             ))}
                           </div>
@@ -1139,7 +1583,7 @@ function ZakatHistoryTab({ cycleHistory, zakatPayments, expandedCycleId, setExpa
                       )}
 
                       {cycle.status === 'exempt' && <p className="text-xs text-gray-500 bg-gray-100 rounded-lg p-3">ℹ️ Wealth was below Nisab at year end. Zakat was not required for this cycle.</p>}
-                      {cycle.status === 'paid' && <p className="text-xs text-emerald-700 bg-emerald-50 rounded-lg p-3">✅ Zakat paid. JazakAllah Khayran.</p>}
+                      {cycle.status === 'paid'   && <p className="text-xs text-emerald-700 bg-emerald-50 rounded-lg p-3">✅ Zakat paid. JazakAllah Khayran.</p>}
                     </div>
                   )}
                 </div>
@@ -1168,7 +1612,7 @@ function ZakatHistoryTab({ cycleHistory, zakatPayments, expandedCycleId, setExpa
                       </div>
                       <div>
                         <p className="text-sm font-medium text-gray-800">{pmt.type === 'installment' ? `Installment Plan (${pmt.numberOfInstallments}x)` : 'Full Payment'}</p>
-                        <p className="text-xs text-gray-500">{pmt.startDate || ''}</p>
+                        <p className="text-xs text-gray-500">{fmtDate(pmt.startDate)}</p>
                         {pmt.fromAccountName && <p className="text-xs text-gray-400">From: {pmt.fromAccountName}</p>}
                         {pmt.note && <p className="text-xs text-gray-400 mt-0.5 max-w-xs truncate">{pmt.note}</p>}
                       </div>
