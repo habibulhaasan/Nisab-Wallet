@@ -38,7 +38,7 @@ import {
   CreditCard, CalendarDays, X, Loader2, Info, Banknote,
   Building2, Smartphone, Coins, HandCoins, TrendingUp, Target,
   Minus, ArrowRight, Check, AlertTriangle, CalendarClock,
-  Bell, RefreshCw, Sparkles, PlayCircle,
+  Bell, RefreshCw, Sparkles, PlayCircle, ToggleLeft, ToggleRight, Ban,
 } from 'lucide-react';
 import NisabSettingsModal from '@/components/zakat/NisabSettingsModal';
 
@@ -306,6 +306,7 @@ export default function ZakatPage() {
   const [investments,     setInvestments]     = useState([]);
   const [goals,           setGoals]           = useState([]);
   const [jewellery,       setJewellery]       = useState([]);
+  const [ribaTransactions, setRibaTransactions] = useState([]);
 
   const [nisabThreshold,     setNisabThreshold]     = useState(0);
   const [silverPricePerGram, setSilverPricePerGram] = useState(0);
@@ -333,13 +334,14 @@ export default function ZakatPage() {
 
   const loadAllAssets = useCallback(async () => {
     try {
-      const [accResult, lendSnap, loanSnap, invSnap, goalSnap, jewResult] = await Promise.all([
+      const [accResult, lendSnap, loanSnap, invSnap, goalSnap, jewResult, ribaSnap] = await Promise.all([
         getAccounts(user.uid),
         getDocs(collection(db, 'users', user.uid, 'lendings')),
         getDocs(collection(db, 'users', user.uid, 'loans')),
         getDocs(collection(db, 'users', user.uid, 'investments')),
         getDocs(collection(db, 'users', user.uid, 'financialGoals')),
         getJewellery(user.uid),
+        getDocs(query(collection(db, 'users', user.uid, 'transactions'), where('isRiba', '==', true))),
       ]);
       const accs  = accResult.success ? accResult.accounts : [];
       const jws   = jewResult.success ? jewResult.items    : [];
@@ -347,8 +349,9 @@ export default function ZakatPage() {
       const lns   = loanSnap.docs.map(d  => ({ id: d.id, ...d.data() }));
       const invs  = invSnap.docs.map(d   => ({ id: d.id, ...d.data() }));
       const gls   = goalSnap.docs.map(d  => ({ id: d.id, ...d.data() }));
+      const ribas = ribaSnap.docs.map(d  => ({ id: d.id, ...d.data() }));
       setAccounts(accs); setLendings(lends); setLoans(lns);
-      setInvestments(invs); setGoals(gls); setJewellery(jws);
+      setInvestments(invs); setGoals(gls); setJewellery(jws); setRibaTransactions(ribas);
       const breakdown = calculateZakatableWealth({ accounts: accs, lendings: lends, loans: lns, investments: invs, goals: gls, jewellery: jws });
       setWealthBreakdown(breakdown);
       return breakdown;
@@ -427,6 +430,31 @@ export default function ZakatPage() {
       }
     })();
   }, [activeCycle, wealthBreakdown, nisabThreshold]);
+
+  // ── toggleLendingZakat — save countForZakat on a lending document ──────────
+  const toggleLendingZakat = async (lendingId, newValue) => {
+    try {
+      await updateDoc(doc(db, 'users', user.uid, 'lendings', lendingId), {
+        countForZakat: newValue,
+        updatedAt: serverTimestamp(),
+      });
+      // Optimistically update local state then recalculate breakdown
+      const updatedLendings = lendings.map(l =>
+        l.id === lendingId ? { ...l, countForZakat: newValue } : l
+      );
+      setLendings(updatedLendings);
+      const breakdown = calculateZakatableWealth({
+        accounts, lendings: updatedLendings, loans, investments, goals, jewellery
+      });
+      setWealthBreakdown(breakdown);
+      showToast(
+        newValue
+          ? 'Lending counted in Zakat wealth.'
+          : 'Lending excluded from Zakat wealth.',
+        'success'
+      );
+    } catch (err) { showToast('Error updating lending: ' + err.message, 'error'); }
+  };
 
   const saveNisabSettings = async (payload) => {
     try {
@@ -903,7 +931,9 @@ export default function ZakatPage() {
 
           <WealthBreakdownCard breakdown={wealthBreakdown} accounts={accounts} lendings={lendings}
             loans={loans} investments={investments} goals={goals} jewellery={jewellery}
-            nisabThreshold={nisabThreshold} fmt={fmt} />
+            ribaTransactions={ribaTransactions}
+            nisabThreshold={nisabThreshold} fmt={fmt}
+            onToggleLending={toggleLendingZakat} />
 
           {/* How Zakat is Calculated */}
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-5">
@@ -911,11 +941,12 @@ export default function ZakatPage() {
               <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
               <div className="text-sm text-blue-800 space-y-1">
                 <p className="font-semibold">How Your Zakat is Calculated</p>
-                <p><strong>Included:</strong> Cash, Bank, Mobile Banking, Gold, Silver accounts + Active investments + Financial goal savings + Jewellery (resale value after 15% deduction).</p>
-                <p><strong>Not Included:</strong> Lendings — money lent to others is NOT in your possession, so it is excluded from zakatable assets.</p>
+                <p><strong>Included:</strong> Purified account balances + Active investments + Savings goal amounts + Jewellery (resale value after 15% deduction) + Lendings you mark as "Count for Zakat".</p>
+                <p><strong>Riba (Interest) Excluded:</strong> Any interest/riba marked on your accounts (<code>ribaBalance</code>) is automatically deducted — it is impure wealth and must be given to charity, not counted in Zakat.</p>
+                <p><strong>Lendings (your choice):</strong> Money you lent out still belongs to you Islamically. Use the toggle on each lending to include or exclude it based on your certainty of recovery. Scholars allow deferring Zakat on uncertain debts.</p>
                 <p><strong>Deducted:</strong> Outstanding loan amounts you owe to others.</p>
                 <p><strong>Rate:</strong> 2.5% of net zakatable wealth, once per Hijri year if wealth stays ≥ Nisab.</p>
-                <p><strong>Nisab at Year End:</strong> The system automatically fetches the latest silver price when your Hijri year completes, for an accurate Zakat calculation. You will see a note on each cycle showing whether it was auto-fetched or manually set.</p>
+                <p><strong>Nisab at Year End:</strong> The system auto-fetches the latest silver price when your Hijri year completes for an accurate calculation.</p>
               </div>
             </div>
           </div>
@@ -1034,7 +1065,7 @@ function ActionBlock({ icon, title, body, action }) {
 
 // ─── Wealth Breakdown Card ────────────────────────────────────────────────────
 
-function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments, goals, jewellery = [], nisabThreshold, fmt }) {
+function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments, goals, jewellery = [], ribaTransactions = [], nisabThreshold, fmt, onToggleLending }) {
   const [openSections, setOpenSections] = useState({});
   if (!breakdown) return null;
 
@@ -1145,17 +1176,93 @@ function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments
             {otherAccs.map(a => <AccRow key={a.id} name={a.name} balance={a.balance} type={a.type} />)}
           </Section>
         )}
-        {breakdown.lendingsTotal > 0 && (
-          <Section sectionKey="lendings" icon={<HandCoins className="w-4 h-4 text-cyan-400" />} label="Lendings (Receivable)"
-            total={breakdown.lendingsTotal} badge={`${activeLendings.length} active`} badgeColor="bg-cyan-50 text-cyan-600" excluded={true}>
-            <p className="text-xs text-gray-400 italic px-3 pt-1">Money lent out is not in your possession — excluded from zakatable wealth.</p>
-            {activeLendings.map(l => (
-              <div key={l.id} className="flex items-center justify-between py-1.5 px-3 bg-white rounded-lg border border-gray-50">
-                <span className="text-xs text-gray-500">{l.borrowerName || l.name || 'Unknown'}{l.dueDate ? ` (due: ${fmtDate(l.dueDate)})` : ''}</span>
-                <span className="text-xs text-gray-300 line-through">{fmt(Number(l.remainingBalance) || Number(l.principalAmount) || 0)}</span>
+        {/* Lendings — per-lending Zakat toggle */}
+        {activeLendings.length > 0 && (
+          <div className="border-b border-gray-50">
+            <div className="w-full flex items-center gap-3 px-6 py-3.5 text-left">
+              <div className="w-8 h-8 rounded-lg bg-cyan-50 flex items-center justify-center flex-shrink-0">
+                <HandCoins className="w-4 h-4 text-cyan-600" />
               </div>
-            ))}
-          </Section>
+              <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
+                <p className="text-sm text-gray-700">Lendings (Receivable)</p>
+                <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-cyan-50 text-cyan-600">
+                  {activeLendings.length} active
+                </span>
+              </div>
+              <div className="flex items-center gap-3 flex-shrink-0 text-xs text-gray-500">
+                {(breakdown.lendingsIncludedTotal || 0) > 0 && (
+                  <span className="text-emerald-700 font-semibold">+ {fmt(breakdown.lendingsIncludedTotal)}</span>
+                )}
+                {(breakdown.lendingsExcludedTotal || 0) > 0 && (
+                  <span className="text-gray-300 line-through">{fmt(breakdown.lendingsExcludedTotal)}</span>
+                )}
+              </div>
+            </div>
+
+            {/* Islamic guidance note */}
+            <div className="mx-6 mb-3 bg-cyan-50 border border-cyan-100 rounded-xl p-3">
+              <p className="text-xs text-cyan-800 leading-relaxed">
+                <strong>Islamic ruling:</strong> Money you lent belongs to you and is technically Zakatable.
+                Toggle each lending based on your certainty of recovery. Scholars permit deferring Zakat on
+                uncertain debts until received.
+              </p>
+            </div>
+
+            {/* Per-lending rows with toggle */}
+            <div className="px-6 pb-4 space-y-2">
+              {activeLendings.map(l => {
+                const amt     = Number(l.remainingBalance ?? l.principalAmount ?? 0);
+                const counted = l.countForZakat === true;
+                return (
+                  <div key={l.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${
+                    counted ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-100'
+                  }`}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">
+                        {l.borrowerName || l.name || 'Unknown borrower'}
+                      </p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <p className={`text-xs font-semibold ${counted ? 'text-emerald-700' : 'text-gray-400 line-through'}`}>
+                          {fmt(amt)}
+                        </p>
+                        {l.dueDate && (
+                          <span className="text-xs text-gray-400">Due: {fmtDate(l.dueDate)}</span>
+                        )}
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          counted ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          {counted ? '✓ Counted' : 'Not counted'}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Toggle button */}
+                    <button
+                      onClick={() => onToggleLending && onToggleLending(l.id, !counted)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all flex-shrink-0 ${
+                        counted
+                          ? 'bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700'
+                          : 'bg-white border-gray-200 text-gray-500 hover:border-emerald-300 hover:text-emerald-600'
+                      }`}
+                      title={counted ? 'Click to exclude from Zakat' : 'Click to include in Zakat'}
+                    >
+                      {counted
+                        ? <><ToggleRight className="w-3.5 h-3.5" /> Include</>
+                        : <><ToggleLeft className="w-3.5 h-3.5" /> Exclude</>
+                      }
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Summary line */}
+            {(breakdown.lendingsIncludedTotal || 0) > 0 && (breakdown.lendingsExcludedTotal || 0) > 0 && (
+              <div className="mx-6 mb-3 text-xs text-gray-500 flex gap-4">
+                <span className="text-emerald-700">✓ {fmt(breakdown.lendingsIncludedTotal)} counted</span>
+                <span className="text-gray-400">{fmt(breakdown.lendingsExcludedTotal)} deferred</span>
+              </div>
+            )}
+          </div>
         )}
         {breakdown.investmentsTotal > 0 && (
           <Section sectionKey="investments" icon={<TrendingUp className="w-4 h-4 text-pink-600" />} label="Investments"
@@ -1201,6 +1308,19 @@ function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments
           <span className="text-sm font-medium text-gray-700">Total Assets</span>
           <span className="font-semibold text-gray-900">{fmt(breakdown.totalAssets)}</span>
         </div>
+        {(breakdown.ribaTotal || 0) > 0 && (
+          <div className="flex items-start gap-3 px-6 py-3 bg-orange-50 border-t border-orange-100">
+            <Ban className="w-4 h-4 text-orange-500 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm text-orange-800 font-medium">Riba (Interest) Excluded</p>
+              <p className="text-xs text-orange-600 mt-0.5">
+                Interest income is impure wealth — excluded from Zakat and must be given to charity without intention of reward.
+                {ribaTransactions.length > 0 && ` (${ribaTransactions.length} transaction${ribaTransactions.length > 1 ? 's' : ''})`}
+              </p>
+            </div>
+            <span className="text-sm font-semibold text-orange-700 flex-shrink-0">− {fmt(breakdown.ribaTotal)}</span>
+          </div>
+        )}
         {breakdown.loansTotal > 0 && (
           <div className="flex items-center justify-between px-6 py-2 text-red-600 text-sm">
             <span>Less: Loans</span>
