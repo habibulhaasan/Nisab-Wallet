@@ -334,14 +334,15 @@ export default function ZakatPage() {
 
   const loadAllAssets = useCallback(async () => {
     try {
-      const [accResult, lendSnap, loanSnap, invSnap, goalSnap, jewResult, ribaSnap] = await Promise.all([
+      const [accResult, lendSnap, loanSnap, invSnap, goalSnap, jewResult, txSnap, catSnap] = await Promise.all([
         getAccounts(user.uid),
         getDocs(collection(db, 'users', user.uid, 'lendings')),
         getDocs(collection(db, 'users', user.uid, 'loans')),
         getDocs(collection(db, 'users', user.uid, 'investments')),
         getDocs(collection(db, 'users', user.uid, 'financialGoals')),
         getJewellery(user.uid),
-        getDocs(query(collection(db, 'users', user.uid, 'transactions'), where('isRiba', '==', true))),
+        getDocs(collection(db, 'users', user.uid, 'transactions')),
+        getDocs(collection(db, 'users', user.uid, 'categories')),
       ]);
       const accs  = accResult.success ? accResult.accounts : [];
       const jws   = jewResult.success ? jewResult.items    : [];
@@ -349,10 +350,19 @@ export default function ZakatPage() {
       const lns   = loanSnap.docs.map(d  => ({ id: d.id, ...d.data() }));
       const invs  = invSnap.docs.map(d   => ({ id: d.id, ...d.data() }));
       const gls   = goalSnap.docs.map(d  => ({ id: d.id, ...d.data() }));
-      const ribas = ribaSnap.docs.map(d  => ({ id: d.id, ...d.data() }));
+      const cats  = catSnap.docs.map(d   => ({ id: d.id, ...d.data() }));
+      // Riba = flagged explicitly OR category name is 'interest' or 'riba' (case-insensitive)
+      const ribaCategories = new Set(
+        cats
+          .filter(c => c.isRiba === true || /^(interest|riba)$/i.test(c.name || ''))
+          .map(c => c.id)
+      );
+      const ribas = txSnap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(t => t.isRiba === true || ribaCategories.has(t.categoryId));
       setAccounts(accs); setLendings(lends); setLoans(lns);
       setInvestments(invs); setGoals(gls); setJewellery(jws); setRibaTransactions(ribas);
-      const breakdown = calculateZakatableWealth({ accounts: accs, lendings: lends, loans: lns, investments: invs, goals: gls, jewellery: jws });
+      const breakdown = calculateZakatableWealth({ accounts: accs, lendings: lends, loans: lns, investments: invs, goals: gls, jewellery: jws, ribaTransactions: ribas });
       setWealthBreakdown(breakdown);
       return breakdown;
     } catch (err) { console.error('loadAllAssets:', err); return null; }
@@ -444,7 +454,7 @@ export default function ZakatPage() {
       );
       setLendings(updatedLendings);
       const breakdown = calculateZakatableWealth({
-        accounts, lendings: updatedLendings, loans, investments, goals, jewellery
+        accounts, lendings: updatedLendings, loans, investments, goals, jewellery, ribaTransactions
       });
       setWealthBreakdown(breakdown);
       showToast(
@@ -942,7 +952,7 @@ export default function ZakatPage() {
               <div className="text-sm text-blue-800 space-y-1">
                 <p className="font-semibold">How Your Zakat is Calculated</p>
                 <p><strong>Included:</strong> Purified account balances + Active investments + Savings goal amounts + Jewellery (resale value after 15% deduction) + Lendings you mark as "Count for Zakat".</p>
-                <p><strong>Riba (Interest) Excluded:</strong> Any interest/riba marked on your accounts (<code>ribaBalance</code>) is automatically deducted — it is impure wealth and must be given to charity, not counted in Zakat.</p>
+                <p><strong>Riba (Interest) Excluded:</strong> Any interest/riba marked on your accounts (<code>Haram Income</code>) is automatically deducted — it is impure wealth and must be given to charity, not counted in Zakat.</p>
                 <p><strong>Lendings (your choice):</strong> Money you lent out still belongs to you Islamically. Use the toggle on each lending to include or exclude it based on your certainty of recovery. Scholars allow deferring Zakat on uncertain debts.</p>
                 <p><strong>Deducted:</strong> Outstanding loan amounts you owe to others.</p>
                 <p><strong>Rate:</strong> 2.5% of net zakatable wealth, once per Hijri year if wealth stays ≥ Nisab.</p>
@@ -1090,7 +1100,7 @@ function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments
   const activeInvestments = investments.filter(i => i.status === 'active');
   const activeGoals       = goals.filter(g => g.status === 'active' && Number(g.currentAmount) > 0);
 
-  const Section = ({ sectionKey, icon, label, total, badge, badgeColor = 'bg-gray-100 text-gray-600', excluded = false, children }) => {
+  const Section = ({ sectionKey, icon, label, total, badge, badgeColor = 'bg-gray-100 text-gray-600', excluded = false, rightSlot, children }) => {
     const isOpen  = !!openSections[sectionKey];
     const hasKids = !!children;
     return (
@@ -1104,9 +1114,11 @@ function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments
             {excluded && <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-gray-100 text-gray-400 italic">not counted</span>}
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <p className={`font-semibold text-sm ${excluded ? 'text-gray-300 line-through' : total < 0 ? 'text-red-600' : 'text-gray-800'}`}>
-              {excluded ? fmt(total) : (total < 0 ? '− ' : '+ ') + fmt(Math.abs(total))}
-            </p>
+            {rightSlot ? rightSlot : (
+              <p className={`font-semibold text-sm ${excluded ? 'text-gray-300 line-through' : total < 0 ? 'text-red-600' : 'text-gray-800'}`}>
+                {excluded ? fmt(total) : (total < 0 ? '− ' : '+ ') + fmt(Math.abs(total))}
+              </p>
+            )}
             {hasKids && (isOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />)}
           </div>
         </button>
@@ -1176,31 +1188,31 @@ function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments
             {otherAccs.map(a => <AccRow key={a.id} name={a.name} balance={a.balance} type={a.type} />)}
           </Section>
         )}
-        {/* Lendings — per-lending Zakat toggle */}
+        {/* Lendings — per-lending Zakat toggle inside accordion */}
         {activeLendings.length > 0 && (
-          <div className="border-b border-gray-50">
-            <div className="w-full flex items-center gap-3 px-6 py-3.5 text-left">
-              <div className="w-8 h-8 rounded-lg bg-cyan-50 flex items-center justify-center flex-shrink-0">
-                <HandCoins className="w-4 h-4 text-cyan-600" />
-              </div>
-              <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-                <p className="text-sm text-gray-700">Lendings (Receivable)</p>
-                <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-cyan-50 text-cyan-600">
-                  {activeLendings.length} active
-                </span>
-              </div>
-              <div className="flex items-center gap-3 flex-shrink-0 text-xs text-gray-500">
+          <Section
+            sectionKey="lendings"
+            icon={<HandCoins className="w-4 h-4 text-cyan-600" />}
+            label="Lendings (Receivable)"
+            total={0}
+            badge={`${activeLendings.length} active`}
+            badgeColor="bg-cyan-50 text-cyan-600"
+            rightSlot={
+              <div className="flex items-center gap-2">
                 {(breakdown.lendingsIncludedTotal || 0) > 0 && (
-                  <span className="text-emerald-700 font-semibold">+ {fmt(breakdown.lendingsIncludedTotal)}</span>
+                  <span className="text-xs font-semibold text-emerald-700">+{fmt(breakdown.lendingsIncludedTotal)}</span>
                 )}
                 {(breakdown.lendingsExcludedTotal || 0) > 0 && (
-                  <span className="text-gray-300 line-through">{fmt(breakdown.lendingsExcludedTotal)}</span>
+                  <span className="text-xs text-gray-300 line-through">{fmt(breakdown.lendingsExcludedTotal)}</span>
+                )}
+                {(breakdown.lendingsIncludedTotal || 0) === 0 && (breakdown.lendingsExcludedTotal || 0) === 0 && (
+                  <span className="text-xs text-gray-400">—</span>
                 )}
               </div>
-            </div>
-
+            }
+          >
             {/* Islamic guidance note */}
-            <div className="mx-6 mb-3 bg-cyan-50 border border-cyan-100 rounded-xl p-3">
+            <div className="bg-cyan-50 border border-cyan-100 rounded-xl p-3 mb-2">
               <p className="text-xs text-cyan-800 leading-relaxed">
                 <strong>Islamic ruling:</strong> Money you lent belongs to you and is technically Zakatable.
                 Toggle each lending based on your certainty of recovery. Scholars permit deferring Zakat on
@@ -1209,13 +1221,13 @@ function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments
             </div>
 
             {/* Per-lending rows with toggle */}
-            <div className="px-6 pb-4 space-y-2">
+            <div className="space-y-2">
               {activeLendings.map(l => {
                 const amt     = Number(l.remainingBalance ?? l.principalAmount ?? 0);
                 const counted = l.countForZakat === true;
                 return (
                   <div key={l.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${
-                    counted ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-100'
+                    counted ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-gray-100'
                   }`}>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-800 truncate">
@@ -1235,7 +1247,6 @@ function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments
                         </span>
                       </div>
                     </div>
-                    {/* Toggle button */}
                     <button
                       onClick={() => onToggleLending && onToggleLending(l.id, !counted)}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all flex-shrink-0 ${
@@ -1247,8 +1258,7 @@ function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments
                     >
                       {counted
                         ? <><ToggleRight className="w-3.5 h-3.5" /> Include</>
-                        : <><ToggleLeft className="w-3.5 h-3.5" /> Exclude</>
-                      }
+                        : <><ToggleLeft className="w-3.5 h-3.5" /> Exclude</>}
                     </button>
                   </div>
                 );
@@ -1257,12 +1267,12 @@ function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments
 
             {/* Summary line */}
             {(breakdown.lendingsIncludedTotal || 0) > 0 && (breakdown.lendingsExcludedTotal || 0) > 0 && (
-              <div className="mx-6 mb-3 text-xs text-gray-500 flex gap-4">
+              <div className="mt-2 pt-2 border-t border-gray-100 text-xs text-gray-500 flex gap-4">
                 <span className="text-emerald-700">✓ {fmt(breakdown.lendingsIncludedTotal)} counted</span>
                 <span className="text-gray-400">{fmt(breakdown.lendingsExcludedTotal)} deferred</span>
               </div>
             )}
-          </div>
+          </Section>
         )}
         {breakdown.investmentsTotal > 0 && (
           <Section sectionKey="investments" icon={<TrendingUp className="w-4 h-4 text-pink-600" />} label="Investments"

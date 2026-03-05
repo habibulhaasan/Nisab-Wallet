@@ -60,14 +60,17 @@ function InlineCategoryForm({ type, onSaved, onCancel }) {
     if (!name.trim()) { showToast('Enter a category name', 'error'); return; }
     setSaving(true);
     try {
+      const trimmedName = name.trim();
+      const isRiba = /^(interest|riba)$/i.test(trimmedName);
       const ref    = collection(db, 'users', user.uid, 'categories');
       const docRef = await addDoc(ref, {
-        name: name.trim(), type, color,
+        name: trimmedName, type, color,
         categoryId: generateId(),
+        isRiba,
         createdAt: serverTimestamp(),
       });
-      showToast(`"${name.trim()}" added!`, 'success');
-      onSaved({ id: docRef.id, name: name.trim(), type, color });
+      showToast(`"${trimmedName}" added!`, 'success');
+      onSaved({ id: docRef.id, name: trimmedName, type, color, isRiba });
     } catch {
       showToast('Failed to add category', 'error');
     } finally {
@@ -631,7 +634,7 @@ export default function TransactionsPage() {
       }
 
       const selectedCat = categories.find(c => c.id === formData.categoryId);
-      const isRiba = selectedCat?.isRiba === true;
+      const isRiba = selectedCat?.isRiba === true || /^(interest|riba)$/i.test(selectedCat?.name || '');
 
       if (editingTransaction) {
         const oldAmount = parseFloat(editingTransaction.amount);

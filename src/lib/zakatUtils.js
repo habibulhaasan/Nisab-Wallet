@@ -114,18 +114,24 @@ export const generateInstallmentSchedule = (totalAmount, numberOfInstallments) =
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const calculateZakatableWealth = ({
-  accounts    = [],
-  lendings    = [],
-  loans       = [],
-  investments = [],
-  goals       = [],
-  jewellery   = [],
+  accounts         = [],
+  lendings         = [],
+  loans            = [],
+  investments      = [],
+  goals            = [],
+  jewellery        = [],
+  ribaTransactions = [],   // transactions with isRiba:true — their amounts are excluded
 }) => {
 
-  // ── 1. Account breakdown ────────────────────────────────────────────────────
+  // ── 1. Riba total from transactions ─────────────────────────────────────────
+  // Sum all income transactions marked isRiba:true.
+  // These represent interest credited to accounts — impure wealth that must be
+  // excluded from Zakatable assets and given to charity.
+  const ribaTotal = ribaTransactions.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+
+  // ── 2. Account breakdown ────────────────────────────────────────────────────
   const accountBreakdown = { cash: 0, bank: 0, mobile_banking: 0, gold: 0, silver: 0, other: 0 };
   let   accountsTotal    = 0;
-  let   ribaTotal        = 0;       // total riba excluded across all accounts
 
   const normalizeType = (raw) => {
     if (!raw) return 'other';
@@ -135,20 +141,16 @@ export const calculateZakatableWealth = ({
   };
 
   for (const acc of accounts) {
-    const raw     = Number(acc.balance) || 0;
-    const riba    = Number(acc.ribaBalance) || 0;   // interest portion tracked on the account
-    const pure    = Math.max(0, raw - riba);         // purified balance (only this is Zakatable)
-
-    ribaTotal    += riba;
-    accountsTotal += pure;
+    const bal = Number(acc.balance) || 0;
+    accountsTotal += bal;
 
     const key = normalizeType(acc.type);
-    if      (key === 'cash')          accountBreakdown.cash          += pure;
-    else if (key === 'bank')          accountBreakdown.bank          += pure;
-    else if (key === 'mobile_banking')accountBreakdown.mobile_banking += pure;
-    else if (key === 'gold')          accountBreakdown.gold          += pure;
-    else if (key === 'silver')        accountBreakdown.silver        += pure;
-    else                              accountBreakdown.other         += pure;
+    if      (key === 'cash')           accountBreakdown.cash           += bal;
+    else if (key === 'bank')           accountBreakdown.bank           += bal;
+    else if (key === 'mobile_banking') accountBreakdown.mobile_banking += bal;
+    else if (key === 'gold')           accountBreakdown.gold           += bal;
+    else if (key === 'silver')         accountBreakdown.silver         += bal;
+    else                               accountBreakdown.other          += bal;
   }
 
   // ── 2. Lendings ─────────────────────────────────────────────────────────────
@@ -189,26 +191,26 @@ export const calculateZakatableWealth = ({
   const jewelleryCount   = pricedJewellery.length;
 
   // ── 7. Net Zakatable Wealth ──────────────────────────────────────────────────
-  // = (purified account balances)
+  // = account balances
   //   + lendingsIncluded (user opted in)
   //   + investments + goals + jewellery
   //   − loans (liability)
-  //   [riba already excluded at account level above]
+  //   − ribaTotal (impure interest from isRiba transactions — must be purified)
 
-  const totalAssets = accountsTotal + lendingsIncludedTotal + investmentsTotal + goalsTotal + jewelleryTotal;
-  const netZakatableWealth = Math.max(0, totalAssets - loansTotal);
+  const totalAssets        = accountsTotal + lendingsIncludedTotal + investmentsTotal + goalsTotal + jewelleryTotal;
+  const netZakatableWealth = Math.max(0, totalAssets - loansTotal - ribaTotal);
 
   return {
     // Account-level
     accountBreakdown,
     accountsTotal,
-    ribaTotal,               // informational: how much riba was excluded
+    ribaTotal,               // how much interest was excluded (from isRiba transactions)
     ribaExcluded: ribaTotal, // alias for UI clarity
 
     // Lendings
-    lendingsTotal:          lendingsIncludedTotal + lendingsExcludedTotal, // total for display
-    lendingsIncludedTotal,  // counted towards Zakat
-    lendingsExcludedTotal,  // deferred / not counted
+    lendingsTotal:         lendingsIncludedTotal + lendingsExcludedTotal,
+    lendingsIncludedTotal,
+    lendingsExcludedTotal,
 
     // Other assets
     investmentsTotal,
