@@ -38,7 +38,7 @@ import {
   CreditCard, CalendarDays, X, Loader2, Info, Banknote,
   Building2, Smartphone, Coins, HandCoins, TrendingUp, Target,
   Minus, ArrowRight, Check, AlertTriangle, CalendarClock,
-  Bell, RefreshCw, Sparkles,
+  Bell, RefreshCw, Sparkles, PlayCircle,
 } from 'lucide-react';
 import NisabSettingsModal from '@/components/zakat/NisabSettingsModal';
 
@@ -127,11 +127,14 @@ function StartCycleModal({ totalWealth, nisabThreshold, fmt, onConfirm, onClose,
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-gray-50 rounded-xl px-4 py-3">
               <p className="text-xs text-gray-400 mb-0.5">Current Wealth</p>
-              <p className="font-bold text-gray-900">{fmt(totalWealth)}</p>
+              <p className="font-bold text-gray-900">{totalWealth > 0 ? fmt(totalWealth) : <span className="text-gray-400 font-normal text-sm">Not calculated yet</span>}</p>
             </div>
             <div className="bg-gray-50 rounded-xl px-4 py-3">
               <p className="text-xs text-gray-400 mb-0.5">Nisab Threshold</p>
-              <p className="font-bold text-emerald-700">{fmt(nisabThreshold)}</p>
+              {nisabThreshold > 0
+                ? <p className="font-bold text-emerald-700">{fmt(nisabThreshold)}</p>
+                : <p className="text-xs text-amber-600 font-medium mt-0.5">Not set — update in Nisab Settings</p>
+              }
             </div>
           </div>
 
@@ -464,6 +467,7 @@ export default function ZakatPage() {
       const startDate         = customStartDate || new Date().toISOString().split('T')[0];
       const hijriDate         = gregorianToHijri(startDate);
       const yearAlreadyPassed = hasOneHijriYearPassed(startDate);
+      const nisabNotSet       = !nisabThreshold || nisabThreshold === 0;
 
       if (yearAlreadyPassed) {
         const today    = new Date().toISOString().split('T')[0];
@@ -476,7 +480,7 @@ export default function ZakatPage() {
           startDateHijri: hijriDate,
           startWealth:    wealthBreakdown?.netZakatableWealth || 0,
           startBreakdown: wealthBreakdown,
-          nisabAtStart:   nisabThreshold,
+          nisabAtStart:   nisabThreshold || 0,
           endDate:        today,
           endDateHijri:   endHijri,
           endWealth:      wealthBreakdown?.netZakatableWealth || 0,
@@ -493,17 +497,21 @@ export default function ZakatPage() {
           startDateHijri: hijriDate,
           startWealth:    wealthBreakdown?.netZakatableWealth || 0,
           startBreakdown: wealthBreakdown,
-          nisabAtStart:   nisabThreshold,
+          nisabAtStart:   nisabThreshold || 0,
           paymentStatus:  'unpaid',
           createdAt:      serverTimestamp(),
         });
         const isBackdated = startDate < new Date().toISOString().split('T')[0];
-        showToast(
-          isBackdated
-            ? `Cycle started from ${fmtDate(startDate)} — ${daysUntilHijriAnniversary(startDate)} days remaining.`
-            : 'Zakat monitoring cycle started!',
-          'success'
-        );
+        if (nisabNotSet) {
+          showToast(`Cycle started from ${fmtDate(startDate)}. Please set your Nisab threshold in settings.`, 'info');
+        } else {
+          showToast(
+            isBackdated
+              ? `Cycle started from ${fmtDate(startDate)} — ${daysUntilHijriAnniversary(startDate)} days remaining.`
+              : 'Zakat monitoring cycle started!',
+            'success'
+          );
+        }
       }
       setShowStartCycleModal(false);
       await loadZakatCycles();
@@ -563,18 +571,21 @@ export default function ZakatPage() {
   let zakatStatus = ZAKAT_STATUS.NOT_MANDATORY;
   let progressPercentage = 0, daysRemaining = 0, yearEndDate = null, zakatAmount = 0;
 
-  if (nisabThreshold > 0) {
+  // Always compute cycle state if there's an active cycle — even before Nisab is set
+  if (activeCycle && activeCycle.status === 'active') {
+    zakatAmount = nisabThreshold > 0 ? calculateZakat(totalWealth) : 0;
+    if (nisabThreshold > 0) progressPercentage = Math.min((totalWealth / nisabThreshold) * 100, 100);
+    if (hasOneHijriYearPassed(activeCycle.startDate)) {
+      zakatStatus = (nisabThreshold > 0 && totalWealth >= nisabThreshold) ? ZAKAT_STATUS.DUE : ZAKAT_STATUS.EXEMPT;
+    } else {
+      zakatStatus   = ZAKAT_STATUS.MONITORING;
+      daysRemaining = daysUntilHijriAnniversary(activeCycle.startDate);
+      yearEndDate   = addOneHijriYear(activeCycle.startDate);
+    }
+  } else if (nisabThreshold > 0) {
     progressPercentage = Math.min((totalWealth / nisabThreshold) * 100, 100);
     zakatAmount = calculateZakat(totalWealth);
-    if (activeCycle && activeCycle.status === 'active') {
-      if (hasOneHijriYearPassed(activeCycle.startDate)) {
-        zakatStatus = totalWealth >= nisabThreshold ? ZAKAT_STATUS.DUE : ZAKAT_STATUS.EXEMPT;
-      } else {
-        zakatStatus     = ZAKAT_STATUS.MONITORING;
-        daysRemaining   = daysUntilHijriAnniversary(activeCycle.startDate);
-        yearEndDate     = addOneHijriYear(activeCycle.startDate);
-      }
-    } else if (dueCycle && !activeCycle) {
+    if (dueCycle && !activeCycle) {
       zakatStatus = ZAKAT_STATUS.DUE;
       zakatAmount = dueCycle.zakatDue || zakatAmount;
     } else if (totalWealth >= nisabThreshold && !activeCycle) {
@@ -608,6 +619,15 @@ export default function ZakatPage() {
             <button onClick={() => setShowPaymentModal(true)}
               className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium">
               <CreditCard className="w-4 h-4" /> Pay Zakat
+            </button>
+          )}
+          {/* Always-accessible manual cycle start — for new users or those below Nisab */}
+          {!activeCycle && zakatStatus !== ZAKAT_STATUS.DUE && (
+            <button
+              onClick={() => { setEditStartCycleMode(false); setShowStartCycleModal(true); }}
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-700 text-white rounded-lg hover:bg-emerald-800 transition-colors text-sm font-medium"
+            >
+              <PlayCircle className="w-4 h-4" /> Start Zakat Cycle
             </button>
           )}
           <button onClick={() => setShowSettingsModal(true)}
@@ -750,10 +770,35 @@ export default function ZakatPage() {
               )}
 
               {zakatStatus === ZAKAT_STATUS.NOT_MANDATORY && (nisabThreshold === 0 || totalWealth < nisabThreshold) && (
-                <ActionBlock icon={<AlertCircle className="w-5 h-5 text-gray-600" />} title="No Active Cycle"
-                  body={nisabThreshold === 0
-                    ? 'Set the Nisab threshold in settings to begin tracking.'
-                    : `Your wealth (${fmt(totalWealth)}) has not reached the Nisab threshold (${fmt(nisabThreshold)}).`} />
+                <div className="bg-white rounded-xl p-5 shadow-sm border border-emerald-100">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-gray-500 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-900 mb-1">No Active Cycle</p>
+                      <p className="text-sm text-gray-600 leading-relaxed mb-4">
+                        {nisabThreshold === 0
+                          ? 'Nisab threshold is not set yet. You can still start your Zakat cycle manually if you were already a Sahib al-Mal before joining this app.'
+                          : `Your current wealth (${fmt(totalWealth)}) has not yet reached the Nisab threshold (${fmt(nisabThreshold)}). If you were already above Nisab before joining, you can start your cycle manually.`}
+                      </p>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <button
+                          onClick={() => { setEditStartCycleMode(false); setShowStartCycleModal(true); }}
+                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-medium"
+                        >
+                          <PlayCircle className="w-4 h-4" /> Start Cycle Manually
+                        </button>
+                        {nisabThreshold === 0 && (
+                          <button
+                            onClick={() => setShowSettingsModal(true)}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors text-sm font-medium"
+                          >
+                            <Settings className="w-4 h-4" /> Set Nisab First
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               )}
 
               {zakatStatus === ZAKAT_STATUS.MONITORING && activeCycle && (
@@ -771,6 +816,22 @@ export default function ZakatPage() {
                         </button>
                       </div>
                       <p className="text-sm text-gray-600 mb-4">Monitoring since your wealth reached Nisab. One Hijri year must pass.</p>
+                      {/* Nisab not set reminder */}
+                      {(!nisabThreshold || nisabThreshold === 0) && (
+                        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
+                          <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1 text-xs text-amber-800">
+                            <p className="font-semibold mb-0.5">Nisab threshold not set</p>
+                            <p>Your cycle is running but Nisab is not configured. Set it now so the system can correctly determine when Zakat is due.</p>
+                          </div>
+                          <button
+                            onClick={() => setShowSettingsModal(true)}
+                            className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold transition-colors"
+                          >
+                            <Settings className="w-3 h-3" /> Set Nisab
+                          </button>
+                        </div>
+                      )}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <MiniInfoCard label="Cycle Started (Hijri)" value={formatHijriDate(activeCycle.startDateHijri)} icon={<Calendar className="w-3 h-3 text-blue-600" />} />
                         <MiniInfoCard label="Started (Gregorian)" value={fmtDate(activeCycle.startDate)} icon={<Calendar className="w-3 h-3 text-blue-600" />} />
