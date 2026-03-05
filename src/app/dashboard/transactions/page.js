@@ -137,7 +137,7 @@ function CategorySelect({ value, onChange, categories, type, disabled, onCategor
       >
         <option value="">Select Category</option>
         {filtered.map(c => (
-          <option key={c.id} value={c.id}>{c.name}{c.isRiba ? ' ⚠' : ''}</option>
+          <option key={c.id} value={c.id}>{c.name}{(c.isRiba === true || /^(interest|riba)$/i.test(c.name || '')) ? ' ⚠' : ''}</option>
         ))}
         <option value="__add_new__">➕ Add new category…</option>
       </select>
@@ -310,7 +310,7 @@ function TransactionDetailPopup({ transaction, onClose, onEdit, onDelete, getAcc
                   <span className="text-white/70 text-[10px] font-bold uppercase tracking-widest">
                     {isTransfer ? 'Transfer' : t.type}
                   </span>
-                  {t.isRiba && (
+                  {(t.isRiba || /^(interest|riba)$/i.test(getCategoryName(t.categoryId))) && (
                     <span className="px-1.5 py-0.5 text-[9px] font-bold bg-white/20 text-white rounded-full">
                       RIBA
                     </span>
@@ -320,7 +320,7 @@ function TransactionDetailPopup({ transaction, onClose, onEdit, onDelete, getAcc
                       FEE
                     </span>
                   )}
-                  {t.isRiba && t.sadaqahDone && (
+                  {(t.isRiba || /^(interest|riba)$/i.test(getCategoryName(t.categoryId))) && t.sadaqahDone && (
                     <span className="px-1.5 py-0.5 text-[9px] font-bold bg-white/20 text-white rounded-full">
                       ✓ Purified
                     </span>
@@ -377,7 +377,7 @@ function TransactionDetailPopup({ transaction, onClose, onEdit, onDelete, getAcc
           </div>
 
           {/* Riba notice */}
-          {t.isRiba && (
+          {(t.isRiba || /^(interest|riba)$/i.test(getCategoryName(t.categoryId))) && (
             <div className="mx-5 mb-3 flex items-start gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
               <AlertCircle size={13} className="text-amber-600 flex-shrink-0 mt-0.5" />
               <p className="text-[11px] text-amber-800 leading-relaxed">
@@ -1052,7 +1052,7 @@ export default function TransactionsPage() {
                 <div
                   key={t.id}
                   className={`px-4 py-3 flex items-center justify-between gap-3 border-b border-gray-100 last:border-b-0 group
-                    ${t.isRiba ? 'bg-amber-50/50' : 'hover:bg-gray-50'} transition-colors cursor-pointer`}
+                    ${(t.isRiba || /^(interest|riba)$/i.test(getCategoryName(t.categoryId))) ? 'bg-amber-50/50' : 'hover:bg-gray-50'} transition-colors cursor-pointer`}
                 >
                   {/* ── Clickable info area → opens detail popup ── */}
                   <button
@@ -1074,13 +1074,13 @@ export default function TransactionsPage() {
                             ? (t.type === 'Income' ? `From ${t.relatedAccountName}` : `To ${t.relatedAccountName}`)
                             : getCategoryName(t.categoryId)}
                         </p>
-                        {t.isRiba && (
+                        {(t.isRiba || /^(interest|riba)$/i.test(getCategoryName(t.categoryId))) && (
                           <span className="px-1.5 py-0.5 text-[9px] font-bold bg-amber-100 text-amber-700 rounded-full border border-amber-200">RIBA</span>
                         )}
                         {t.isCharge && (
                           <span className="px-1.5 py-0.5 text-[9px] font-bold bg-orange-100 text-orange-700 rounded-full border border-orange-200">FEE</span>
                         )}
-                        {t.isRiba && t.sadaqahDone && (
+                        {(t.isRiba || /^(interest|riba)$/i.test(getCategoryName(t.categoryId))) && t.sadaqahDone && (
                           <span className="px-1.5 py-0.5 text-[9px] font-bold bg-green-100 text-green-700 rounded-full border border-green-200">✓ Purified</span>
                         )}
                       </div>
@@ -1292,7 +1292,7 @@ export default function TransactionsPage() {
                   </div>
 
                   {/* Riba warning */}
-                  {modalTab === 'income' && categories.find(c => c.id === formData.categoryId)?.isRiba && (
+                  {modalTab === 'income' && (() => { const c = categories.find(c => c.id === formData.categoryId); return c?.isRiba === true || /^(interest|riba)$/i.test(c?.name || ''); })() && (
                     <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                       <AlertCircle size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
                       <p className="text-xs text-amber-800">
