@@ -101,83 +101,95 @@ function SadaqahModal({ transaction, accounts, onDone, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-        {/* Header */}
-        <div className="bg-gradient-to-br from-emerald-600 to-teal-700 px-5 py-4">
+
+      {/* Modal — slides up on mobile, centered on desktop */}
+      <div className="relative bg-white w-full sm:max-w-sm sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col max-h-[92dvh] sm:max-h-[90vh]">
+
+        {/* ── Sticky header ── */}
+        <div className="flex-shrink-0 bg-gradient-to-br from-emerald-600 to-teal-700 px-5 py-4 rounded-t-2xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Heart className="w-5 h-5 text-white" />
               <h2 className="font-bold text-white">Record Sadaqah</h2>
             </div>
-            <button onClick={onClose} className="text-white/70 hover:text-white"><X className="w-5 h-5" /></button>
+            <button onClick={onClose} className="text-white/70 hover:text-white">
+              <X className="w-5 h-5" />
+            </button>
           </div>
           <p className="text-emerald-100 text-xs mt-1">Donate to purify the Riba income</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          {/* Source reference */}
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
-            <p className="text-[10px] font-bold text-amber-600 uppercase mb-0.5">Riba Source</p>
-            <p className="text-sm font-semibold text-gray-800">{transaction.description || 'Interest Income'}</p>
-            <p className="text-xs text-gray-500">{fmtDate(transaction.date)} · {fmtBDT(transaction.amount)} received</p>
-          </div>
+        {/* ── Scrollable form body ── */}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
 
-          {/* Amount */}
-          <div>
-            <label className="text-xs font-bold text-gray-600 block mb-1">Sadaqah Amount (৳)</label>
-            <input type="number" step="0.01" min="0.01"
-              value={amount} onChange={e => setAmount(e.target.value)}
-              className="w-full px-3 py-2.5 border-2 border-emerald-200 bg-emerald-50 rounded-xl text-xl font-bold text-emerald-700 text-center outline-none focus:ring-2 focus:ring-emerald-400"
-              placeholder="0.00" required />
-            <p className="text-[10px] text-gray-400 text-center mt-1">
-              Full amount: {fmtBDT(transaction.amount)} — you may donate any amount
-            </p>
-          </div>
+            {/* Source reference */}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+              <p className="text-[10px] font-bold text-amber-600 uppercase mb-0.5">Riba Source</p>
+              <p className="text-sm font-semibold text-gray-800">{transaction.description || 'Interest Income'}</p>
+              <p className="text-xs text-gray-500">{fmtDate(transaction.date)} · {fmtBDT(transaction.amount)} received</p>
+            </div>
 
-          {/* Account */}
-          <div>
-            <label className="text-xs font-bold text-gray-600 block mb-1">From Account</label>
-            <select value={accountId} onChange={e => setAccountId(e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-200 bg-gray-50 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-400" required>
-              {accounts.map(a => (
-                <option key={a.id} value={a.id}>{a.name} (৳{(a.balance||0).toLocaleString()})</option>
-              ))}
-            </select>
-            {account && parsed > 0 && (
-              <p className="text-xs text-gray-400 mt-1">
-                Balance after: <span className={parsed > account.balance ? 'text-red-500 font-bold' : 'text-gray-600'}>
-                  {fmtBDT(account.balance - parsed)}
-                </span>
+            {/* Amount */}
+            <div>
+              <label className="text-xs font-bold text-gray-600 block mb-1">Sadaqah Amount (৳)</label>
+              <input type="number" step="0.01" min="0.01"
+                value={amount} onChange={e => setAmount(e.target.value)}
+                className="w-full px-3 py-2.5 border-2 border-emerald-200 bg-emerald-50 rounded-xl text-xl font-bold text-emerald-700 text-center outline-none focus:ring-2 focus:ring-emerald-400"
+                placeholder="0.00" required />
+              <p className="text-[10px] text-gray-400 text-center mt-1">
+                Full amount: {fmtBDT(transaction.amount)} — you may donate any amount
               </p>
-            )}
+            </div>
+
+            {/* Account */}
+            <div>
+              <label className="text-xs font-bold text-gray-600 block mb-1">From Account</label>
+              <select value={accountId} onChange={e => setAccountId(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 bg-gray-50 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-400" required>
+                {accounts.map(a => (
+                  <option key={a.id} value={a.id}>{a.name} (৳{(a.balance||0).toLocaleString()})</option>
+                ))}
+              </select>
+              {account && parsed > 0 && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Balance after:{' '}
+                  <span className={parsed > account.balance ? 'text-red-500 font-bold' : 'text-gray-600'}>
+                    {fmtBDT(account.balance - parsed)}
+                  </span>
+                </p>
+              )}
+            </div>
+
+            {/* Date */}
+            <div>
+              <label className="text-xs font-bold text-gray-600 block mb-1">Date of Donation</label>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 bg-gray-50 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-400" required />
+            </div>
+
+            {/* Note */}
+            <div>
+              <label className="text-xs font-bold text-gray-600 block mb-1">Note (optional)</label>
+              <input type="text" value={note} onChange={e => setNote(e.target.value)}
+                placeholder="e.g. Donated to masjid…"
+                className="w-full px-3 py-2.5 border border-gray-200 bg-gray-50 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
+            </div>
+
+            {/* Islamic note */}
+            <div className="flex gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl">
+              <BookOpen className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-blue-700">
+                Give this in Sadaqah without expecting any reward (Sawab) from Allah. The intention is to rid yourself of what is impermissible, not to gain reward.
+              </p>
+            </div>
           </div>
 
-          {/* Date */}
-          <div>
-            <label className="text-xs font-bold text-gray-600 block mb-1">Date of Donation</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-200 bg-gray-50 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-400" required />
-          </div>
-
-          {/* Note */}
-          <div>
-            <label className="text-xs font-bold text-gray-600 block mb-1">Note (optional)</label>
-            <input type="text" value={note} onChange={e => setNote(e.target.value)}
-              placeholder="e.g. Donated to masjid…"
-              className="w-full px-3 py-2.5 border border-gray-200 bg-gray-50 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
-          </div>
-
-          {/* Islamic note */}
-          <div className="flex gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl">
-            <BookOpen className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-blue-700">
-              Give this in Sadaqah without expecting any reward (Sawab) from Allah. The intention is to rid yourself of what is impermissible, not to gain reward.
-            </p>
-          </div>
-
-          <div className="flex gap-3">
+          {/* ── Sticky footer with action buttons ── */}
+          <div className="flex-shrink-0 px-5 py-4 border-t border-gray-100 bg-white sm:rounded-b-2xl flex gap-3">
             <button type="button" onClick={onClose}
               className="flex-1 py-3 border-2 border-gray-200 text-gray-600 font-semibold text-sm rounded-xl hover:bg-gray-50">
               Cancel
