@@ -397,96 +397,161 @@ export const setupZakatInstallments = async (userId, opts) => {
 };
 
 /**
- * Pay a single installment.
- * Deducts from account, records expense transaction with installment info in note.
+ * Pay toward an installment plan with a custom amount.
+ *
+ * Flexible rules:
+ *  - User can pay any amount (more or less than one installment).
+ *  - Installments are marked paid greedily from the first pending one.
+ *  - If the payment covers multiple installments fully, all are marked paid.
+ *  - If the payment partially covers an installment, it is marked
+ *    'partial' with paidAmount tracked; the remainder stays pending.
+ *  - If the total paid >= totalAmount, the plan is completed early.
+ *  - The cycle is marked 'paid' when the plan completes.
  */
 export const payZakatInstallment = async (userId, opts) => {
-  const { paymentDocId, installmentIndex, accountBalance, accountId } = opts;
+  const {
+    paymentDocId,
+    accountId,
+    accountBalance,
+    paymentAmount,   // custom amount the user chose to pay now
+    paymentDate = new Date().toISOString().split('T')[0],
+    note        = '',
+  } = opts;
+
+  if (!paymentAmount || paymentAmount <= 0)
+    return { success: false, error: 'Enter a valid payment amount.' };
 
   try {
     const planRef  = doc(db, 'users', userId, 'zakatPayments', paymentDocId);
     const planSnap = await getDoc(planRef);
     if (!planSnap.exists()) return { success: false, error: 'Payment plan not found.' };
 
-    const plan         = planSnap.data();
-    const installments = [...plan.installments];
-    const inst         = installments[installmentIndex];
-    if (!inst)                  return { success: false, error: 'Installment not found.' };
-    if (inst.status === 'paid') return { success: false, error: 'Already paid.'          };
+    const plan    = planSnap.data();
+    const accId   = accountId || plan.fromAccountId;
+    const accBal  = typeof accountBalance === 'number' ? accountBalance : 0;
 
-    const accId  = accountId || plan.fromAccountId;
-    const accBal = typeof accountBalance === 'number' ? accountBalance : 0;
-    if (inst.amount > accBal)   return { success: false, error: 'Insufficient balance.'  };
+    if (paymentAmount > accBal)
+      return { success: false, error: 'Insufficient balance in selected account.' };
 
-    const today    = new Date().toISOString().split('T')[0];
-    const instNote = `Installment ${inst.installmentNumber} of ${plan.numberOfInstallments}` +
-                     (plan.note ? ` — ${plan.note}` : '');
+    const remaining = plan.remainingAmount ?? plan.totalAmount;
+    if (remaining <= 0)
+      return { success: false, error: 'This installment plan is already fully paid.' };
 
-    // 1. Deduct from account
-    await updateAccount(userId, accId, { balance: accBal - inst.amount });
+    // ── Greedy installment marking ───────────────────────────────────────────
+    // Walk through pending installments and mark as many as fully covered by
+    // paymentAmount. If a partial payment covers part of an installment,
+    // record it as 'partial'. Never exceed the plan's remaining amount.
 
-    // 2. Expense transaction — installment info goes in description
-    const catId = await getOrCreateZakatCategory(userId);
+    const actualPayment  = Math.min(paymentAmount, remaining); // cap at remaining
+    const installments   = plan.installments.map(i => ({ ...i })); // deep copy
+    let   budget         = actualPayment;
+    const markedNumbers  = [];
+
+    for (let i = 0; i < installments.length; i++) {
+      if (budget <= 0) break;
+      const inst = installments[i];
+      if (inst.status === 'paid') continue; // skip already paid
+
+      const due = inst.amount - (inst.paidAmount || 0); // what's still owed on this slot
+
+      if (budget >= due) {
+        // Fully covers this installment
+        installments[i] = {
+          ...inst,
+          status:     'paid',
+          paidDate:   paymentDate,
+          paidAmount: inst.amount,  // total paid for this slot = full amount
+        };
+        markedNumbers.push(inst.installmentNumber);
+        budget -= due;
+      } else {
+        // Partial payment toward this installment
+        installments[i] = {
+          ...inst,
+          status:     'partial',
+          paidAmount: (inst.paidAmount || 0) + budget,
+          lastPartialDate: paymentDate,
+        };
+        budget = 0;
+      }
+    }
+
+    const newPaidTotal  = (plan.paidAmount || 0) + actualPayment;
+    const newRemaining  = Math.max(0, plan.totalAmount - newPaidTotal);
+    const planCompleted = newRemaining <= 0;
+
+    // ── 1. Deduct from account ───────────────────────────────────────────────
+    await updateAccount(userId, accId, { balance: accBal - actualPayment });
+
+    // ── 2. Expense transaction ───────────────────────────────────────────────
+    const catId     = await getOrCreateZakatCategory(userId);
+    const instRange = markedNumbers.length > 0
+      ? `Installment${markedNumbers.length > 1 ? 's' : ''} ${markedNumbers.join(', ')} of ${plan.numberOfInstallments}`
+      : `Partial toward installment plan`;
+    const txNote = [instRange, note, plan.note].filter(Boolean).join(' — ');
+
     await addDoc(collection(db, 'users', userId, 'transactions'), {
       type:           'Expense',
-      amount:         inst.amount,
+      amount:         actualPayment,
       accountId:      accId,
       categoryId:     catId,
-      description:    `Zakat payment — ${instNote}`,
-      date:           today,
+      description:    `Zakat payment — ${txNote}`,
+      date:           paymentDate,
       isZakatPayment: true,
       zakatCycleId:   plan.cycleDocId,
       zakatPaymentId: paymentDocId,
-      installmentNum: inst.installmentNumber,
       createdAt:      serverTimestamp(),
     });
 
-    // 3. Update installment record
-    installments[installmentIndex] = {
-      ...inst, status: 'paid', paidDate: today, paidAmount: inst.amount,
-    };
-    const newPaid      = (plan.paidAmount || 0) + inst.amount;
-    const newRemaining = Math.max(0, plan.totalAmount - newPaid);
-    const allDone      = installments.every((i) => i.status === 'paid');
-
+    // ── 3. Update plan doc ───────────────────────────────────────────────────
     await updateDoc(planRef, {
       installments,
-      paidAmount:      newPaid,
+      paidAmount:      newPaidTotal,
       remainingAmount: newRemaining,
-      status:          allDone ? 'completed' : 'active',
+      status:          planCompleted ? 'completed' : 'active',
+      ...(planCompleted ? { completedDate: paymentDate } : {}),
     });
 
-    // 4. Append to cycle's payments[]
+    // ── 4. Append to cycle payments[] and optionally mark cycle paid ─────────
     const cycleRef  = doc(db, 'users', userId, 'zakatCycles', plan.cycleDocId);
     const cycleSnap = await getDoc(cycleRef);
-    const cycleData = cycleSnap.exists() ? cycleSnap.data() : {};
-    const prevPmts  = cycleData.payments || [];
+    const prevPmts  = cycleSnap.exists() ? (cycleSnap.data().payments || []) : [];
     const allPmts   = [
       ...prevPmts,
       {
         paymentId:        generateId(),
-        amount:           inst.amount,
+        amount:           actualPayment,
         accountId:        accId,
         accountName:      plan.fromAccountName,
-        date:             today,
-        note:             instNote,
+        date:             paymentDate,
+        note:             txNote,
         isInstallment:    true,
-        installmentNum:   inst.installmentNumber,
+        installmentNums:  markedNumbers,
         installmentTotal: plan.numberOfInstallments,
         recordedAt:       new Date().toISOString(),
       },
     ];
-    const totalPaidNow = allPmts.reduce((s, p) => s + (p.amount || 0), 0);
+    const cyclePaidTotal = allPmts.reduce((s, p) => s + (p.amount || 0), 0);
 
     await updateDoc(cycleRef, {
       payments:        allPmts,
-      totalPaid:       totalPaidNow,
-      zakatPaid:       totalPaidNow,
-      lastPaymentDate: today,
-      ...(allDone ? { status: 'paid', paidAt: serverTimestamp() } : {}),
+      totalPaid:       cyclePaidTotal,
+      zakatPaid:       cyclePaidTotal,
+      lastPaymentDate: paymentDate,
+      ...(planCompleted ? {
+        status:    'paid',
+        paidAt:    serverTimestamp(),
+        endDate:   paymentDate,
+      } : {}),
     });
 
-    return { success: true, allDone, totalPaid: totalPaidNow };
+    return {
+      success:        true,
+      allDone:        planCompleted,
+      totalPaid:      cyclePaidTotal,
+      actualPayment,
+      newRemaining,
+    };
   } catch (err) {
     console.error('payZakatInstallment:', err);
     return { success: false, error: err.message };
@@ -496,13 +561,17 @@ export const payZakatInstallment = async (userId, opts) => {
 /** Get the active installment plan for a cycle (or null). */
 export const getActivePaymentPlan = async (userId, cycleDocId) => {
   try {
+    // Single-field query only — avoids needing a Firestore composite index
     const snap = await getDocs(query(
       collection(db, 'users', userId, 'zakatPayments'),
-      where('cycleDocId', '==', cycleDocId),
-      where('status', '==', 'active')
+      where('cycleDocId', '==', cycleDocId)
     ));
     if (snap.empty) return null;
-    return { id: snap.docs[0].id, ...snap.docs[0].data() };
+    // Filter client-side for active installment plans
+    const active = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .find(p => p.type === 'installment' && p.status === 'active');
+    return active || null;
   } catch (err) {
     console.error('getActivePaymentPlan:', err);
     return null;

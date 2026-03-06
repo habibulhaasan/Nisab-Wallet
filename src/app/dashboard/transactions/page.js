@@ -461,20 +461,28 @@ export default function TransactionsPage() {
   const loadAccounts = async () => {
     const result = await getAccounts(user.uid);
     if (result.success) {
+      // Sort alphabetically, Cash account always first
+      const sorted = [...result.accounts].sort((a, b) => {
+        const aIsCash = a.type?.toLowerCase() === 'cash';
+        const bIsCash = b.type?.toLowerCase() === 'cash';
+        if (aIsCash && !bIsCash) return -1;
+        if (!aIsCash && bIsCash) return 1;
+        return a.name.localeCompare(b.name);
+      });
       const withAvail = await Promise.all(
-        result.accounts.map(async (a) => ({
+        sorted.map(async (a) => ({
           ...a,
           availableBalance: await getAvailableBalance(user.uid, a.id, a.balance),
         }))
       );
-      setAccounts(result.accounts);
+      setAccounts(sorted);
       setAccountsWithAvailable(withAvail);
-      if (result.accounts.length > 0 && !formData.accountId) {
-        setFormData(p => ({ ...p, accountId: result.accounts[0].id }));
+      if (sorted.length > 0 && !formData.accountId) {
+        setFormData(p => ({ ...p, accountId: sorted[0].id }));
         setTransferData(p => ({
           ...p,
-          fromAccountId: result.accounts[0].id,
-          toAccountId: result.accounts.length > 1 ? result.accounts[1].id : '',
+          fromAccountId: sorted[0].id,
+          toAccountId: sorted.length > 1 ? sorted[1].id : '',
         }));
       }
     }
@@ -539,14 +547,16 @@ export default function TransactionsPage() {
   const loadCategories = async () => {
     try {
       const snap = await getDocs(collection(db, 'users', user.uid, 'categories'));
-      setCategories(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const cats = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      cats.sort((a, b) => a.name.localeCompare(b.name));
+      setCategories(cats);
     } catch {
       showToast('Failed to load categories', 'error');
     }
   };
 
   const handleCategoryCreated = (newCat) => {
-    setCategories(prev => [...prev, newCat]);
+    setCategories(prev => [...prev, newCat].sort((a, b) => a.name.localeCompare(b.name)));
   };
 
   // ── Summary ───────────────────────────────────────────────────────────────

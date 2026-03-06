@@ -20,9 +20,13 @@ import {
   formatHijriDate,
   ZAKAT_STATUS,
   calculateZakatableWealth,
+  generateInstallmentSchedule,
 } from '@/lib/zakatUtils';
 import {
   recordZakatPayment,
+  setupZakatInstallments,
+  payZakatInstallment,
+  getActivePaymentPlan,
   getZakatHistory,
   autoCompleteCycleIfYearPassed,
 } from '@/lib/zakatMonitoring';
@@ -316,12 +320,13 @@ export default function ZakatPage() {
   const [dueCycle,        setDueCycle]        = useState(null);
   const [cycleHistory,    setCycleHistory]    = useState([]);
   const [wealthBreakdown, setWealthBreakdown] = useState(null);
+  const [activePayment,   setActivePayment]   = useState(null);
   const [zakatPayments,   setZakatPayments]   = useState([]);
 
   const [loading,             setLoading]             = useState(true);
   const [showSettingsModal,   setShowSettingsModal]   = useState(false);
   const [showPaymentModal,    setShowPaymentModal]    = useState(false);
-  const [prefillPayAmount,    setPrefillPayAmount]    = useState(null);
+  const [showInstallmentModal, setShowInstallmentModal] = useState(false);
   const [showStartCycleModal, setShowStartCycleModal] = useState(false);
   const [editStartCycleMode,  setEditStartCycleMode]  = useState(false);
   const [activeTab,           setActiveTab]           = useState('overview');
@@ -394,13 +399,20 @@ export default function ZakatPage() {
         cycles.push(data);
         if (data.status === 'active' && !foundActive) {
           setActiveCycle(data); foundActive = true;
+          const plan = await getActivePaymentPlan(user.uid, docSnap.id);
+          setActivePayment(plan);
         }
         if (data.status === 'due' && !foundDue) {
           foundDue = data;
+          // Also load plan for due cycles
+          if (!foundActive) {
+            const plan = await getActivePaymentPlan(user.uid, docSnap.id);
+            if (plan) setActivePayment(plan);
+          }
         }
       }
       setCycleHistory(cycles); setDueCycle(foundDue);
-      if (!foundActive) { setActiveCycle(null); }
+      if (!foundActive) { setActiveCycle(null); setActivePayment(null); }
       return { cycles, foundActive, foundDue };
     } catch (err) { console.error('loadZakatCycles:', err); return {}; }
   }, [user]);
@@ -649,10 +661,16 @@ export default function ZakatPage() {
           <p className="text-sm text-gray-500 mt-1">Monitor your Zakat obligations</p>
         </div>
         <div className="flex items-center gap-2">
-          {(zakatStatus === ZAKAT_STATUS.DUE || dueCycle) && (
-            <button onClick={() => { setPrefillPayAmount(null); setShowPaymentModal(true); }}
+          {(zakatStatus === ZAKAT_STATUS.DUE || dueCycle) && activeCycle?.paymentStatus !== 'installment_plan' && (
+            <button onClick={() => setShowPaymentModal(true)}
               className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium">
               <CreditCard className="w-4 h-4" /> Pay Zakat
+            </button>
+          )}
+          {(activeCycle?.paymentStatus === 'installment_plan' || dueCycle?.paymentStatus === 'installment_plan') && (
+            <button onClick={() => setShowInstallmentModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
+              <CreditCard className="w-4 h-4" /> Pay Installment
             </button>
           )}
           {/* Always-accessible manual cycle start — for new users or those below Nisab */}
@@ -888,114 +906,165 @@ export default function ZakatPage() {
               )}
 
               {zakatStatus === ZAKAT_STATUS.DUE && (
-                <div className="bg-white rounded-xl shadow-sm border border-red-200 overflow-hidden">
-                  {/* DUE header */}
-                  <div className="px-5 py-4 flex items-start gap-3">
+                <div className="bg-white rounded-xl p-5 shadow-sm border border-red-200">
+                  <div className="flex items-start gap-3">
                     <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
                     <div className="flex-1">
-                      <p className="text-sm font-semibold text-gray-900 mb-0.5">Zakat Payment Due</p>
-                      <p className="text-sm text-gray-500">One Hijri year has passed. Pay in full or in parts — each payment is recorded separately.</p>
+                      <p className="text-sm font-medium text-gray-900 mb-1">Zakat Payment Due</p>
+                      <p className="text-sm text-gray-600 mb-3">One Hijri year has passed. Zakat is now obligatory.</p>
+                      {/* Show auto-Nisab note on the active/due cycle */}
+                      {(activeCycle?.nisabAtEndNote || dueCycle?.nisabAtEndNote) && (
+                        <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-lg p-3 mb-3">
+                          <Sparkles className="w-3.5 h-3.5 text-blue-600 mt-0.5 flex-shrink-0" />
+                          <p className="text-xs text-blue-700 leading-relaxed">
+                            {activeCycle?.nisabAtEndNote || dueCycle?.nisabAtEndNote}
+                          </p>
+                        </div>
+                      )}
+                      <div className="bg-red-50 rounded-lg p-4 mb-4">
+                        <p className="text-xs text-red-600 font-medium mb-1">Zakat Amount (2.5%)</p>
+                        <p className="text-2xl font-bold text-gray-900">{fmt(zakatAmount)}</p>
+                      </div>
+
+                      {activePayment && activePayment.type === 'installment' && activePayment.status === 'active' ? (
+                        <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800">
+                          <CreditCard className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                          <span>Installment plan is active. See the <strong>Installment Plan</strong> card below to make payments.</span>
+                        </div>
+                      ) : (
+                        <div className="flex gap-3">
+                          <button onClick={() => setShowPaymentModal(true)}
+                            className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium">
+                            Pay Zakat
+                          </button>
+                          <button onClick={markAsExempt}
+                            className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium">
+                            Mark Exempt
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
-
-                  {/* Zakat amount + progress */}
-                  {(() => {
-                    const cycle      = (dueCycle && dueCycle.id !== activeCycle?.id) ? dueCycle : activeCycle;
-                    const dueTotal   = cycle?.zakatDue || zakatAmount;
-                    const paidSoFar  = cycle?.totalPaid || 0;
-                    const remaining  = Math.max(0, dueTotal - paidSoFar);
-                    const pct        = dueTotal > 0 ? Math.min(100, Math.round((paidSoFar / dueTotal) * 100)) : 0;
-                    const payments   = cycle?.payments || [];
-
-                    return (
-                      <div className="px-5 pb-4 space-y-4">
-                        {/* Summary row */}
-                        <div className="grid grid-cols-3 gap-2 text-center">
-                          <div className="bg-red-50 border border-red-100 rounded-xl p-3">
-                            <p className="text-[10px] text-red-500 font-semibold uppercase">Total Due</p>
-                            <p className="text-sm font-bold text-red-700">{fmt(dueTotal)}</p>
-                          </div>
-                          <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
-                            <p className="text-[10px] text-emerald-500 font-semibold uppercase">Paid</p>
-                            <p className="text-sm font-bold text-emerald-700">{fmt(paidSoFar)}</p>
-                          </div>
-                          <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
-                            <p className="text-[10px] text-amber-500 font-semibold uppercase">Remaining</p>
-                            <p className="text-sm font-bold text-amber-700">{fmt(remaining)}</p>
-                          </div>
-                        </div>
-
-                        {/* Progress bar */}
-                        {paidSoFar > 0 && (
-                          <div>
-                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                              <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
-                            </div>
-                            <p className="text-xs text-gray-400 mt-1">{pct}% paid</p>
-                          </div>
-                        )}
-
-                        {/* Payment records accordion */}
-                        {payments.length > 0 && (
-                          <div className="border border-gray-100 rounded-xl overflow-hidden">
-                            <div className="bg-gray-50 px-4 py-2.5 flex items-center justify-between">
-                              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                                Payment Records ({payments.length})
-                              </p>
-                              <p className="text-xs text-emerald-600 font-semibold">{fmt(paidSoFar)} paid</p>
-                            </div>
-                            <div className="divide-y divide-gray-50">
-                              {payments.map((p, i) => (
-                                <div key={p.paymentId || i} className="flex items-center gap-3 px-4 py-3">
-                                  <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                                    <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-gray-800">{fmt(p.amount)}</p>
-                                    <p className="text-xs text-gray-400">
-                                      {fmtDate(p.date)}
-                                      {p.accountName ? ` · ${p.accountName}` : ''}
-                                      {p.recipient   ? ` · to ${p.recipient}` : ''}
-                                      {p.note        ? ` · ${p.note}`         : ''}
-                                    </p>
-                                  </div>
-                                  <span className="text-xs font-semibold text-gray-400">#{i + 1}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Action buttons */}
-                        <div className="flex gap-3">
-                          <button
-                            onClick={() => { setPrefillPayAmount(null); setShowPaymentModal(true); }}
-                            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl transition-colors">
-                            <CreditCard className="w-4 h-4" />
-                            {paidSoFar > 0 ? 'Pay More' : 'Pay Zakat'}
-                          </button>
-                          {paidSoFar > 0 && remaining > 0 && (
-                            <button
-                              onClick={() => { setPrefillPayAmount(Math.round(remaining * 100) / 100); setShowPaymentModal(true); }}
-                              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-xl transition-colors">
-                              <CreditCard className="w-4 h-4" />
-                              Pay Remaining ({fmt(remaining)})
-                            </button>
-                          )}
-                          <button onClick={markAsExempt}
-                            className="px-4 py-2.5 bg-gray-100 text-gray-600 font-medium text-sm rounded-xl hover:bg-gray-200 transition-colors">
-                            Exempt
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })()}
                 </div>
               )}
             </div>
           </div>
 
           {/* ── Installment Plan Card — always visible when plan exists ── */}
+          {(activeCycle?.paymentStatus === 'installment_plan' || dueCycle?.paymentStatus === 'installment_plan') && (
+            <div className="bg-white rounded-xl border border-blue-200 shadow-sm overflow-hidden">
+              {/* Card header */}
+              <div className="bg-blue-600 px-5 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-white" />
+                  <div>
+                    <p className="text-white font-bold text-sm">Zakat Installment Plan</p>
+                    <p className="text-blue-200 text-xs">
+                      {activePayment
+                        ? `${activePayment.installments?.filter(i => i.status === 'paid').length ?? 0} of ${activePayment.numberOfInstallments} installments paid`
+                        : 'Installment plan active'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowInstallmentModal(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-white text-blue-700 font-bold text-sm rounded-lg hover:bg-blue-50 transition-colors">
+                  <CreditCard className="w-4 h-4" /> Pay Now
+                </button>
+              </div>
+
+              {/* Progress bar */}
+              {activePayment && (
+              <div className="px-5 py-3 border-b border-blue-50">
+                <div className="flex justify-between text-xs text-gray-500 mb-1.5">
+                  <span>Paid: {fmt(activePayment.paidAmount || 0)}</span>
+                  <span>Remaining: <span className="font-bold text-blue-700">{fmt(activePayment.remainingAmount ?? activePayment.totalAmount)}</span></span>
+                  <span>Total: {fmt(activePayment.totalAmount)}</span>
+                </div>
+                <div className="h-2.5 bg-blue-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.min(100, Math.round(((activePayment.paidAmount || 0) / activePayment.totalAmount) * 100))}%` }} />
+                </div>
+              </div>
+              )}
+
+              {/* Installment rows — compact */}
+              {activePayment ? (
+              <div className="divide-y divide-gray-50">
+                {(activePayment.installments || []).map((inst) => {
+                  const isPaid    = inst.status === 'paid';
+                  const isPartial = inst.status === 'partial';
+                  return (
+                    <div key={inst.installmentNumber}
+                      className={`flex items-center gap-3 px-5 py-3 ${isPaid ? 'bg-emerald-50/50' : isPartial ? 'bg-amber-50/50' : ''}`}>
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold border-2 ${
+                        isPaid    ? 'bg-emerald-500 border-emerald-500 text-white' :
+                        isPartial ? 'bg-amber-400 border-amber-400 text-white' :
+                                    'bg-white border-gray-300 text-gray-400'
+                      }`}>
+                        {isPaid ? <Check className="w-3.5 h-3.5" /> : inst.installmentNumber}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800">
+                          Installment {inst.installmentNumber}
+                          {isPartial && <span className="ml-1.5 text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full">Partial</span>}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          {isPaid    ? `Paid on ${fmtDate(inst.paidDate)}` :
+                           isPartial ? `${fmt(inst.paidAmount || 0)} paid · Due ${fmtDate(inst.dueDate)}` :
+                                       `Due ${fmtDate(inst.dueDate)}`}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className={`text-sm font-semibold ${isPaid ? 'text-emerald-600' : isPartial ? 'text-amber-600' : 'text-gray-700'}`}>
+                          {fmt(inst.amount)}
+                        </p>
+                        {isPartial && <p className="text-[10px] text-amber-500">{fmt(inst.amount - (inst.paidAmount || 0))} left</p>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              ) : (
+                <div className="px-5 py-6 text-center text-sm text-gray-400">
+                  <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-400" />
+                  Loading plan details…
+                </div>
+              )}
+
+              {/* Footer */}
+              <div className="px-5 py-3 bg-gray-50 border-t border-gray-100">
+                <button
+                  onClick={() => setShowInstallmentModal(true)}
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-lg flex items-center justify-center gap-2 transition-colors">
+                  <CreditCard className="w-4 h-4" /> Pay Next Installment
+                </button>
+              </div>
+            </div>
+          )}
+          {showInstallmentModal && (
+            <InstallmentPayModal
+              userId={user.uid}
+              cycleDocId={(activeCycle || dueCycle)?.id}
+              paymentPlanId={(activeCycle || dueCycle)?.paymentPlanId}
+              accounts={accounts}
+              fmt={fmt}
+              onClose={() => setShowInstallmentModal(false)}
+              onSuccess={async (allDone, actualPayment, newRemaining) => {
+                if (allDone) setShowInstallmentModal(false);
+                showToast(
+                  allDone
+                    ? 'Zakat fully paid! May Allah accept it. 🤲'
+                    : `Payment of ${fmt(actualPayment)} recorded. ${fmt(newRemaining)} remaining.`,
+                  'success'
+                );
+                await loadZakatCycles();
+                await loadAllAssets();
+                await loadPaymentHistory();
+              }}
+            />
+          )}
+
           <WealthBreakdownCard breakdown={wealthBreakdown} accounts={accounts} lendings={lendings}
             loans={loans} investments={investments} goals={goals} jewellery={jewellery}
             ribaTransactions={ribaTransactions}
@@ -1062,25 +1131,14 @@ export default function ZakatPage() {
       )}
 
       {showPaymentModal && (
-        <PayZakatModal
-          zakatDueTotal={dueCycle && dueCycle.id !== activeCycle?.id ? (dueCycle.zakatDue || 0) : zakatAmount}
-          alreadyPaid={(dueCycle && dueCycle.id !== activeCycle?.id ? dueCycle : activeCycle)?.totalPaid || 0}
+        <ZakatPaymentModal
+          zakatAmount={dueCycle && dueCycle.id !== activeCycle?.id ? (dueCycle.zakatDue || 0) : zakatAmount}
           activeCycle={dueCycle && dueCycle.id !== activeCycle?.id ? dueCycle : activeCycle}
           accounts={accounts} userId={user.uid} fmt={fmt}
-          prefillAmount={prefillPayAmount}
-          onClose={() => { setShowPaymentModal(false); setPrefillPayAmount(null); }}
-          onSuccess={async (isFullyPaid, paid, remaining) => {
-            setShowPaymentModal(false);
-            setPrefillPayAmount(null);
-            showToast(
-              isFullyPaid
-                ? 'JazakAllah Khayran! Zakat fully paid. 🤲'
-                : `৳${paid.toLocaleString()} recorded. ৳${remaining.toLocaleString()} remaining.`,
-              'success'
-            );
-            await loadZakatCycles();
-            await loadAllAssets();
-            await loadPaymentHistory();
+          onClose={() => setShowPaymentModal(false)}
+          onSuccess={async () => {
+            setShowPaymentModal(false); showToast('JazakAllah Khayran! Zakat recorded.', 'success');
+            await loadZakatCycles(); await loadAllAssets(); await loadPaymentHistory();
           }} />
       )}
 
@@ -1421,13 +1479,105 @@ function WealthBreakdownCard({ breakdown, accounts, lendings, loans, investments
   );
 }
 
-// ─── Pay Zakat Modal (partial-payment friendly) ───────────────────────────────
+// ─── InstallmentPayModal ──────────────────────────────────────────────────────
+// Fully self-contained: fetches its own plan from Firestore on mount.
+// No dependency on parent's activePayment state.
 
-function PayZakatModal({ zakatDueTotal, alreadyPaid, activeCycle, accounts, userId, fmt, onClose, onSuccess, prefillAmount }) {
-  const totalPaid    = alreadyPaid || 0;
-  const remaining    = Math.max(0, zakatDueTotal - totalPaid);
+function InstallmentPayModal({ userId, cycleDocId, paymentPlanId, accounts, fmt, onClose, onSuccess }) {
+  const [plan,    setPlan]    = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState('');
 
-  const sortedAccounts = [...accounts]
+  // Fetch plan on open
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        let found = null;
+        // Try direct doc fetch if we have the planId
+        if (paymentPlanId) {
+          const snap = await getDoc(doc(db, 'users', userId, 'zakatPayments', paymentPlanId));
+          if (snap.exists()) found = { id: snap.id, ...snap.data() };
+        }
+        // Fallback: query by cycleDocId
+        if (!found && cycleDocId) {
+          const snap = await getDocs(query(
+            collection(db, 'users', userId, 'zakatPayments'),
+            where('cycleDocId', '==', cycleDocId)
+          ));
+          const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          found = docs.find(p => p.type === 'installment' && p.status === 'active') || null;
+        }
+        setPlan(found);
+      } catch (e) {
+        setError('Failed to load plan: ' + e.message);
+      }
+      setLoading(false);
+    };
+    load();
+  }, [userId, cycleDocId, paymentPlanId]);
+
+  const handlePayment = async ({ accountId, accountBalance, paymentAmount }) => {
+    if (!plan) return;
+    const res = await payZakatInstallment(userId, {
+      paymentDocId: plan.id,
+      accountId, accountBalance, paymentAmount,
+    });
+    if (res.success) {
+      // Refresh plan from Firestore after payment
+      const snap = await getDoc(doc(db, 'users', userId, 'zakatPayments', plan.id));
+      if (snap.exists()) setPlan({ id: snap.id, ...snap.data() });
+      await onSuccess(res.allDone, res.actualPayment, res.newRemaining);
+    } else {
+      showToast('Error: ' + res.error, 'error');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col max-h-[92dvh] sm:max-h-[90vh]">
+
+        {/* Header */}
+        <div className="flex-shrink-0 flex items-center justify-between px-5 py-4 bg-blue-600 rounded-t-2xl">
+          <div className="flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-white" />
+            <h3 className="font-bold text-white text-base">Pay Zakat Installment</h3>
+          </div>
+          <button onClick={onClose}>
+            <X className="w-5 h-5 text-white/80 hover:text-white" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+              <p className="text-sm text-gray-500">Loading your installment plan…</p>
+            </div>
+          ) : error ? (
+            <div className="p-6 text-center text-red-500 text-sm">{error}</div>
+          ) : !plan ? (
+            <div className="p-6 text-center text-gray-500 text-sm">No active installment plan found.</div>
+          ) : (
+            <InstallmentTracker payment={plan} accounts={accounts} fmt={fmt} onPayInstallment={handlePayment} />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Installment Tracker ──────────────────────────────────────────────────────
+
+function InstallmentTracker({ payment, accounts, onPayInstallment, fmt }) {
+  const [selectedAccountId, setSelectedAccountId] = useState('');
+  const [payAmount,          setPayAmount]         = useState('');
+  const [paying,             setPaying]            = useState(false);
+  const [error,              setError]             = useState('');
+
+  const payableAccs = accounts
     .filter(a => Number(a.balance) > 0)
     .sort((a, b) => {
       if (a.type?.toLowerCase() === 'cash') return -1;
@@ -1435,196 +1585,444 @@ function PayZakatModal({ zakatDueTotal, alreadyPaid, activeCycle, accounts, user
       return a.name.localeCompare(b.name);
     });
 
-  const [amount,      setAmount]      = useState(prefillAmount != null ? String(prefillAmount) : String(Math.round(remaining * 100) / 100));
-  const [accountId,   setAccountId]   = useState(sortedAccounts[0]?.id || '');
-  const [recipient,   setRecipient]   = useState('');
-  const [note,        setNote]        = useState('');
-  const [date,        setDate]        = useState(new Date().toISOString().split('T')[0]);
-  const [saving,      setSaving]      = useState(false);
-  const [error,       setError]       = useState('');
+  // Pre-select account and amount on load
+  useEffect(() => {
+    if (payableAccs.length > 0 && !selectedAccountId)
+      setSelectedAccountId(payableAccs[0].id);
+  }, [payableAccs.length]);
 
-  const parsed   = parseFloat(amount) || 0;
-  const selAcc   = sortedAccounts.find(a => a.id === accountId);
-  const afterPay = parsed > 0 && selAcc ? selAcc.balance - parsed : null;
-  const newTotal = totalPaid + parsed;
-  const newRemaining = Math.max(0, zakatDueTotal - newTotal);
-  const isFullPay    = newTotal >= zakatDueTotal;
+  useEffect(() => {
+    // Pre-fill with the next unpaid installment amount (minus any partial already paid)
+    const nextPending = payment.installments?.find(
+      i => i.status === 'pending' || i.status === 'partial'
+    );
+    if (nextPending) {
+      const due = nextPending.amount - (nextPending.paidAmount || 0);
+      setPayAmount(String(Math.round(due * 100) / 100));
+    }
+  }, [payment.id]);
+
+  const selectedAcc  = payableAccs.find(a => a.id === selectedAccountId);
+  const parsedAmt    = parseFloat(payAmount) || 0;
+  const remaining    = payment.remainingAmount ?? payment.totalAmount;
+  const totalPaid    = payment.paidAmount || 0;
+  const progressPct  = Math.min(100, Math.round((totalPaid / payment.totalAmount) * 100));
+
+  // Preview: which installments will this payment mark as paid/partial?
+  const previewResult = (() => {
+    if (parsedAmt <= 0) return { marks: [], partial: null };
+    const actual  = Math.min(parsedAmt, remaining);
+    let   budget  = actual;
+    const marks   = [];
+    let   partial = null;
+    for (const inst of (payment.installments || [])) {
+      if (budget <= 0) break;
+      if (inst.status === 'paid') continue;
+      const due = inst.amount - (inst.paidAmount || 0);
+      if (budget >= due) {
+        marks.push(inst.installmentNumber);
+        budget -= due;
+      } else {
+        partial = { num: inst.installmentNumber, pays: budget, of: inst.amount };
+        budget  = 0;
+      }
+    }
+    return { marks, partial, actual };
+  })();
+
+  const insufficientBalance = parsedAmt > (selectedAcc?.balance || 0);
+  const exceedsRemaining    = parsedAmt > remaining;
+  const canPay              = parsedAmt > 0 && selectedAccountId && !insufficientBalance && !paying;
 
   const handlePay = async () => {
     setError('');
-    if (parsed <= 0)               { setError('Enter a valid amount.'); return; }
-    if (!accountId || !selAcc)     { setError('Select an account.'); return; }
-    if (parsed > selAcc.balance)   { setError(`Insufficient balance in ${selAcc.name}.`); return; }
-
-    setSaving(true);
-    const res = await recordZakatPayment(userId, {
-      cycleDocId:        activeCycle.id,
-      zakatDueTotal,
-      paymentAmount:     parsed,
-      fromAccountId:     accountId,
-      fromAccountName:   selAcc.name,
-      fromAccountBalance: selAcc.balance,
-      paymentDate:       date,
-      recipient,
-      note,
+    if (parsedAmt <= 0)         { setError('Enter a valid amount.'); return; }
+    if (!selectedAccountId)     { setError('Select an account.'); return; }
+    if (insufficientBalance)    { setError(`Insufficient balance in ${selectedAcc?.name}.`); return; }
+    setPaying(true);
+    await onPayInstallment({
+      accountId:     selectedAccountId,
+      accountBalance: selectedAcc?.balance || 0,
+      paymentAmount:  parsedAmt,
     });
-    setSaving(false);
-
-    if (res.success) {
-      onSuccess(res.isFullyPaid, parsed, newRemaining);
-    } else {
-      setError(res.error || 'Payment failed.');
-    }
+    setPaying(false);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col max-h-[92dvh] sm:max-h-[88vh]">
+    <div className="bg-white border border-blue-200 rounded-xl overflow-hidden">
 
-        {/* Header */}
-        <div className="flex-shrink-0 bg-emerald-600 px-5 py-4 rounded-t-2xl flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CreditCard className="w-5 h-5 text-white" />
-            <div>
-              <p className="text-white font-bold">Pay Zakat</p>
-              <p className="text-emerald-200 text-xs">
-                {totalPaid > 0 ? `${fmt(totalPaid)} paid · ${fmt(remaining)} remaining` : `Total due: ${fmt(zakatDueTotal)}`}
-              </p>
-            </div>
-          </div>
-          <button onClick={onClose}><X className="w-5 h-5 text-white/80 hover:text-white" /></button>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-
-          {/* Summary bar */}
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="bg-red-50 border border-red-100 rounded-xl p-3">
-              <p className="text-[10px] text-red-500 font-semibold uppercase">Total Due</p>
-              <p className="text-sm font-bold text-red-700">{fmt(zakatDueTotal)}</p>
-            </div>
-            <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
-              <p className="text-[10px] text-emerald-500 font-semibold uppercase">Paid So Far</p>
-              <p className="text-sm font-bold text-emerald-700">{fmt(totalPaid)}</p>
-            </div>
-            <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
-              <p className="text-[10px] text-amber-500 font-semibold uppercase">Remaining</p>
-              <p className="text-sm font-bold text-amber-700">{fmt(remaining)}</p>
-            </div>
-          </div>
-
-          {/* Amount input */}
+      {/* ── Header: progress ── */}
+      <div className="px-5 py-4 border-b border-blue-100 bg-blue-50">
+        <div className="flex items-center justify-between mb-2">
           <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1.5">Payment Amount</label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 font-bold">৳</span>
-              <input
-                type="number" min="0.01" step="0.01"
-                value={amount}
-                onChange={e => { setAmount(e.target.value); setError(''); }}
-                className="w-full pl-8 pr-3 py-3 border-2 border-emerald-200 bg-emerald-50 rounded-xl text-xl font-bold text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                placeholder="0.00"
-              />
-            </div>
-            {/* Quick fill buttons */}
-            <div className="flex gap-2 mt-2">
-              <button onClick={() => setAmount(String(Math.round(remaining * 100) / 100))}
-                className="flex-1 py-1.5 text-xs font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
-                Pay All ({fmt(remaining)})
-              </button>
-              {remaining > 0 && (
-                <button onClick={() => setAmount(String(Math.round(remaining / 2 * 100) / 100))}
-                  className="flex-1 py-1.5 text-xs font-semibold bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
-                  Half ({fmt(remaining / 2)})
-                </button>
-              )}
-            </div>
+            <h3 className="font-semibold text-blue-900 text-sm">Installment Plan Active</h3>
+            <p className="text-xs text-blue-500 mt-0.5">
+              {payment.numberOfInstallments} planned · {fmt(payment.perInstallmentAmount || payment.totalAmount / payment.numberOfInstallments)} each
+            </p>
           </div>
+          <div className="text-right">
+            <p className="text-[10px] text-blue-400 uppercase font-medium">Remaining</p>
+            <p className="font-bold text-blue-800 text-lg">{fmt(remaining)}</p>
+          </div>
+        </div>
+        <div className="h-2.5 bg-blue-200 rounded-full overflow-hidden">
+          <div className="h-full bg-blue-500 rounded-full transition-all duration-500"
+            style={{ width: `${progressPct}%` }} />
+        </div>
+        <div className="flex justify-between text-xs text-blue-400 mt-1">
+          <span>Paid {fmt(totalPaid)}</span>
+          <span>{progressPct}% of {fmt(payment.totalAmount)}</span>
+        </div>
+      </div>
 
-          {/* After-payment preview */}
-          {parsed > 0 && (
-            <div className={`flex items-start gap-3 p-3 rounded-xl border ${isFullPay ? 'bg-emerald-50 border-emerald-200' : 'bg-blue-50 border-blue-100'}`}>
-              <Info className={`w-4 h-4 mt-0.5 flex-shrink-0 ${isFullPay ? 'text-emerald-600' : 'text-blue-500'}`} />
-              <div className="text-xs">
-                {isFullPay ? (
-                  <p className="font-semibold text-emerald-800">✓ This will fully clear your Zakat!</p>
-                ) : (
-                  <>
-                    <p className="font-semibold text-blue-800">After this payment:</p>
-                    <p className="text-blue-700">{fmt(newRemaining)} will still remain due</p>
-                  </>
-                )}
-                {afterPay !== null && (
-                  <p className={`mt-0.5 ${afterPay < 0 ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
-                    {selAcc?.name} balance after: {fmt(Math.max(0, afterPay))}
-                    {afterPay < 0 && ' ⚠ Insufficient!'}
+      {/* ── Installment rows ── */}
+      <div className="px-5 pt-4 pb-2 space-y-2">
+        {(payment.installments || []).map((inst) => {
+          const isPaid    = inst.status === 'paid';
+          const isPartial = inst.status === 'partial';
+          return (
+            <div key={inst.installmentNumber}
+              className={`flex items-center gap-3 p-3 rounded-lg border text-sm ${
+                isPaid    ? 'bg-emerald-50 border-emerald-100' :
+                isPartial ? 'bg-amber-50 border-amber-200'    :
+                            'bg-gray-50 border-gray-200'
+              }`}>
+              {/* Status icon */}
+              <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center
+                bg-white border-2 border-current
+                ${isPaid ? 'text-emerald-500' : isPartial ? 'text-amber-500' : 'text-gray-300'}">
+                {isPaid
+                  ? <Check className="w-3.5 h-3.5 text-emerald-500" />
+                  : isPartial
+                    ? <Clock className="w-3.5 h-3.5 text-amber-500" />
+                    : <span className="text-[10px] font-bold text-gray-400">{inst.installmentNumber}</span>
+                }
+              </div>
+
+              {/* Info */}
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-gray-800">
+                  Installment {inst.installmentNumber}
+                  {isPartial && (
+                    <span className="ml-1.5 text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full">
+                      Partial
+                    </span>
+                  )}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {isPaid
+                    ? `Paid ${fmtDate(inst.paidDate)}${inst.paidAmount !== inst.amount ? ` · ${fmt(inst.paidAmount)} paid` : ''}`
+                    : isPartial
+                      ? `${fmt(inst.paidAmount || 0)} of ${fmt(inst.amount)} paid · Due ${fmtDate(inst.dueDate)}`
+                      : `Due ${fmtDate(inst.dueDate)}`
+                  }
+                </p>
+              </div>
+
+              {/* Amount */}
+              <div className="text-right flex-shrink-0">
+                <p className={`font-semibold ${isPaid ? 'text-emerald-600' : isPartial ? 'text-amber-600' : 'text-gray-700'}`}>
+                  {fmt(inst.amount)}
+                </p>
+                {isPartial && (
+                  <p className="text-[10px] text-amber-500">
+                    {fmt(inst.amount - (inst.paidAmount || 0))} left
                   </p>
                 )}
               </div>
             </div>
-          )}
+          );
+        })}
+      </div>
 
-          {/* Account selector */}
-          <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1.5">Pay From Account</label>
-            <div className="space-y-2">
-              {sortedAccounts.map(acc => (
-                <button key={acc.id} onClick={() => setAccountId(acc.id)}
-                  className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all ${accountId === acc.id ? 'border-emerald-400 bg-emerald-50' : 'border-gray-100 hover:border-gray-200'}`}>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm text-gray-800">{acc.name}
-                      <span className="ml-1.5 text-xs text-gray-400 font-normal">({acc.type})</span>
-                    </p>
-                    <p className="text-xs text-gray-500 mt-0.5">Balance: <span className="font-semibold text-gray-700">{fmt(acc.balance)}</span></p>
-                  </div>
-                  {accountId === acc.id && <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />}
+      {/* ── Payment panel ── */}
+      <div className="px-5 pb-5 pt-3 border-t border-gray-100 space-y-3">
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Make a Payment</p>
+
+        {/* Amount input */}
+        <div>
+          <label className="text-xs text-gray-500 block mb-1">Payment Amount</label>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-semibold text-sm">৳</span>
+              <input
+                type="number" min="1" step="0.01"
+                value={payAmount}
+                onChange={e => { setPayAmount(e.target.value); setError(''); }}
+                className="w-full pl-7 pr-3 py-2.5 border border-gray-200 rounded-lg text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-300"
+                placeholder="0.00"
+              />
+            </div>
+            {/* Quick-fill buttons */}
+            <button
+              onClick={() => setPayAmount(String(Math.round((payment.perInstallmentAmount || payment.totalAmount / payment.numberOfInstallments) * 100) / 100))}
+              className="px-2.5 py-1.5 text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-100 font-medium whitespace-nowrap">
+              1 inst.
+            </button>
+            <button
+              onClick={() => setPayAmount(String(Math.round(remaining * 100) / 100))}
+              className="px-2.5 py-1.5 text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg hover:bg-emerald-100 font-medium whitespace-nowrap">
+              Pay all
+            </button>
+          </div>
+          {/* Hint: overpay capped */}
+          {exceedsRemaining && parsedAmt > 0 && (
+            <p className="text-xs text-amber-600 mt-1">
+              ⚠ Amount exceeds remaining — will be capped at {fmt(remaining)}
+            </p>
+          )}
+        </div>
+
+        {/* Account selector */}
+        <div>
+          <label className="text-xs text-gray-500 block mb-1">From Account</label>
+          <select
+            value={selectedAccountId}
+            onChange={e => { setSelectedAccountId(e.target.value); setError(''); }}
+            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-300">
+            {payableAccs.map(a => (
+              <option key={a.id} value={a.id}>
+                {a.name} — {fmt(a.balance)}
+              </option>
+            ))}
+          </select>
+          {selectedAcc && parsedAmt > 0 && !insufficientBalance && (
+            <p className="text-xs text-gray-400 mt-1">
+              Balance after: {fmt(selectedAcc.balance - Math.min(parsedAmt, remaining))}
+            </p>
+          )}
+          {insufficientBalance && (
+            <p className="text-xs text-red-500 mt-1">
+              Insufficient balance — account has {fmt(selectedAcc?.balance || 0)}
+            </p>
+          )}
+        </div>
+
+        {/* Preview: what gets marked */}
+        {parsedAmt > 0 && (previewResult.marks.length > 0 || previewResult.partial) && (
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-800 space-y-0.5">
+            <p className="font-semibold text-blue-700 mb-1">After this payment:</p>
+            {previewResult.marks.length > 0 && (
+              <p>✓ Installment{previewResult.marks.length > 1 ? 's' : ''} {previewResult.marks.join(', ')} fully paid</p>
+            )}
+            {previewResult.partial && (
+              <p>◑ Installment {previewResult.partial.num} partially paid ({fmt(previewResult.partial.pays)} of {fmt(previewResult.partial.of)})</p>
+            )}
+            {previewResult.actual < parsedAmt && (
+              <p className="text-amber-600">⚠ Payment capped at {fmt(previewResult.actual)} (remaining balance)</p>
+            )}
+          </div>
+        )}
+
+        {error && <p className="text-xs text-red-500">{error}</p>}
+
+        {/* Pay button */}
+        <button
+          onClick={handlePay}
+          disabled={!canPay}
+          className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2 transition-colors">
+          {paying
+            ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing…</>
+            : <><CreditCard className="w-4 h-4" /> Pay {parsedAmt > 0 ? fmt(Math.min(parsedAmt, remaining)) : ''}</>
+          }
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Payment Modal ────────────────────────────────────────────────────────────
+
+function ZakatPaymentModal({ zakatAmount, activeCycle, accounts, userId, fmt, onClose, onSuccess }) {
+  const [mode,           setMode]           = useState('select');
+  const [loading,        setLoading]        = useState(false);
+  const [error,          setError]          = useState('');
+  const [fromAccountId,  setFromAccountId]  = useState('');
+  const [paymentMethod,  setPaymentMethod]  = useState('cash');
+  const [recipient,      setRecipient]      = useState('');
+  const [note,           setNote]           = useState('');
+  const [installments,   setInstallments]   = useState(3);
+  const [previewSched,   setPreviewSched]   = useState([]);
+
+  const allAccounts = accounts.filter(a => Number(a.balance) > 0).sort((a, b) => Number(b.balance) - Number(a.balance));
+  const selectedAcc = allAccounts.find(a => a.id === fromAccountId);
+
+  useEffect(() => {
+    if (mode === 'installment') setPreviewSched(generateInstallmentSchedule(zakatAmount, installments));
+  }, [mode, installments, zakatAmount]);
+
+  const typeLabel = (type) => ({ cash: 'Cash', bank: 'Bank', mobile_banking: 'Mobile', gold: 'Gold', silver: 'Silver' }[type?.toLowerCase?.().replace(/\s+/g, '_')] || type || '');
+
+  const handleInstant = async () => {
+    if (!fromAccountId) { setError('Please select an account.'); return; }
+    if (!selectedAcc || selectedAcc.balance < zakatAmount) { setError('Insufficient balance in selected account.'); return; }
+    setLoading(true); setError('');
+    const res = await recordZakatPayment(userId, {
+      cycleDocId: activeCycle.id, zakatDueTotal: zakatAmount, paymentAmount: zakatAmount,
+      fromAccountId, fromAccountName: selectedAcc.name, fromAccountBalance: selectedAcc.balance,
+      paymentMethod, recipient, note,
+    });
+    setLoading(false);
+    if (res.success) onSuccess(); else setError(res.error || 'Payment failed.');
+  };
+
+  const handleInstallment = async () => {
+    if (!fromAccountId) { setError('Please select an account.'); return; }
+    setLoading(true); setError('');
+    const instNote = [note, `${installments} installments of ${fmt(zakatAmount / installments)} each`].filter(Boolean).join(' — ');
+    const res = await setupZakatInstallments(userId, {
+      cycleDocId: activeCycle.id, zakatAmount, fromAccountId, fromAccountName: selectedAcc?.name || '',
+      numberOfInstallments: installments, paymentMethod, recipient, note: instNote,
+    });
+    setLoading(false);
+    if (res.success) onSuccess(); else setError(res.error || 'Failed to set up installments.');
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white w-full sm:w-[480px] rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center gap-3">
+          {mode !== 'select' && <button onClick={() => setMode('select')} className="text-gray-500 text-sm hover:text-gray-700">← Back</button>}
+          <h3 className="font-bold text-gray-900 flex-1">{mode === 'select' ? 'Pay Zakat' : mode === 'instant' ? 'Full Payment' : 'Installment Plan'}</h3>
+          <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl p-4 text-center">
+            <p className="text-emerald-100 text-sm">Total Zakat Due (2.5%)</p>
+            <p className="text-2xl font-bold">{fmt(zakatAmount)}</p>
+          </div>
+
+          {mode === 'select' && (
+            <>
+              <p className="text-sm text-gray-500 text-center">How would you like to pay?</p>
+              {[
+                { m: 'instant', icon: <CreditCard className="w-5 h-5 text-emerald-600" />, bg: 'bg-emerald-100', title: 'Pay Full Amount Now', sub: `Pay ${fmt(zakatAmount)} from one account`, hover: 'hover:border-emerald-300 hover:bg-emerald-50' },
+                { m: 'installment', icon: <CalendarDays className="w-5 h-5 text-blue-600" />, bg: 'bg-blue-100', title: 'Pay in Installments', sub: 'Split over 2–12 monthly payments', hover: 'hover:border-blue-300 hover:bg-blue-50' },
+              ].map(({ m, icon, bg, title, sub, hover }) => (
+                <button key={m} onClick={() => setMode(m)}
+                  className={`w-full flex items-center gap-4 p-4 border-2 border-gray-100 ${hover} rounded-xl transition-all text-left group`}>
+                  <div className={`w-10 h-10 ${bg} rounded-xl flex items-center justify-center`}>{icon}</div>
+                  <div className="flex-1"><p className="font-semibold text-gray-800">{title}</p><p className="text-xs text-gray-500">{sub}</p></div>
+                  <ArrowRight className="w-4 h-4 text-gray-400" />
                 </button>
               ))}
-              {sortedAccounts.length === 0 && (
-                <p className="text-sm text-red-500 p-3 bg-red-50 rounded-xl">No accounts with balance available.</p>
+              <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-xl">
+                <Info className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-amber-700">Recorded as "Zakat Payment" expense. Balance deducted automatically from your account.</p>
+              </div>
+            </>
+          )}
+
+          {mode === 'instant' && (
+            <>
+              <AccountSelector accounts={allAccounts} fromAccountId={fromAccountId} setFromAccountId={setFromAccountId} requiredAmount={zakatAmount} fmt={fmt} typeLabel={typeLabel} />
+              <CommonFields paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} recipient={recipient} setRecipient={setRecipient} note={note} setNote={setNote} />
+              {error && <p className="text-xs text-red-600 bg-red-50 p-3 rounded-lg">{error}</p>}
+              <button onClick={handleInstant} disabled={loading || !fromAccountId}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2">
+                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                {loading ? 'Processing...' : `Pay ${fmt(zakatAmount)}`}
+              </button>
+            </>
+          )}
+
+          {mode === 'installment' && (
+            <>
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-2">Number of Installments</label>
+                <div className="grid grid-cols-5 gap-2">
+                  {[2, 3, 4, 6, 12].map(n => (
+                    <button key={n} onClick={() => setInstallments(n)}
+                      className={`py-2 rounded-lg text-sm font-semibold border-2 transition-all ${installments === n ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                      {n}x
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400 mt-1">{fmt(zakatAmount / installments)} per month</p>
+              </div>
+              {previewSched.length > 0 && (
+                <div className="bg-gray-50 rounded-xl p-3 max-h-36 overflow-y-auto space-y-1">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Schedule Preview</p>
+                  {previewSched.map(s => (
+                    <div key={s.installmentNumber} className="flex justify-between text-xs">
+                      <span className="text-gray-600">Installment {s.installmentNumber} — {fmtDate(s.dueDate)}</span>
+                      <span className="font-medium text-gray-800">{fmt(s.amount)}</span>
+                    </div>
+                  ))}
+                </div>
               )}
-            </div>
-          </div>
-
-          {/* Recipient */}
-          <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1">Recipient <span className="text-gray-400 font-normal text-xs">(optional)</span></label>
-            <input type="text" value={recipient} onChange={e => setRecipient(e.target.value)}
-              placeholder="e.g. Local mosque, charity name…"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300" />
-          </div>
-
-          {/* Date */}
-          <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1">Payment Date</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300" />
-          </div>
-
-          {/* Note */}
-          <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1">Note <span className="text-gray-400 font-normal text-xs">(optional)</span></label>
-            <input type="text" value={note} onChange={e => setNote(e.target.value)}
-              placeholder="Any notes…"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300" />
-          </div>
-
-          {error && <p className="text-sm text-red-600 bg-red-50 p-3 rounded-xl">{error}</p>}
+              <AccountSelector accounts={allAccounts} fromAccountId={fromAccountId} setFromAccountId={setFromAccountId} requiredAmount={zakatAmount / installments} fmt={fmt} typeLabel={typeLabel} label="Account for Payments" />
+              <CommonFields paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} recipient={recipient} setRecipient={setRecipient} note={note} setNote={setNote} />
+              {error && <p className="text-xs text-red-600 bg-red-50 p-3 rounded-lg">{error}</p>}
+              <button onClick={handleInstallment} disabled={loading || !fromAccountId}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2">
+                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                {loading ? 'Setting up...' : `Start ${installments}-Month Plan`}
+              </button>
+            </>
+          )}
         </div>
+      </div>
+    </div>
+  );
+}
 
-        {/* Footer */}
-        <div className="flex-shrink-0 px-5 py-4 border-t border-gray-100 flex gap-3">
-          <button onClick={onClose}
-            className="flex-1 py-3 border-2 border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 text-sm">
-            Cancel
-          </button>
-          <button onClick={handlePay} disabled={saving || parsed <= 0 || !accountId}
-            className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold rounded-xl flex items-center justify-center gap-2 text-sm transition-colors">
-            {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Recording…</> : <><CreditCard className="w-4 h-4" /> Record Payment</>}
-          </button>
+function AccountSelector({ accounts, fromAccountId, setFromAccountId, requiredAmount, fmt, typeLabel, label = 'Pay From Account' }) {
+  return (
+    <div>
+      <label className="text-sm font-medium text-gray-700 block mb-1.5">{label}</label>
+      {accounts.length === 0 ? (
+        <p className="text-sm text-red-500 p-3 bg-red-50 rounded-xl">No accounts with available balance.</p>
+      ) : (
+        <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+          {accounts.map(acc => {
+            const sufficient = acc.balance >= requiredAmount;
+            return (
+              <button key={acc.id} onClick={() => setFromAccountId(acc.id)}
+                className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all ${fromAccountId === acc.id ? 'border-emerald-400 bg-emerald-50' : 'border-gray-100 hover:border-gray-200'}`}>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-sm text-gray-800">{acc.name}</p>
+                    <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">{typeLabel(acc.type)}</span>
+                  </div>
+                  <p className="text-xs mt-0.5">
+                    Balance: <span className={`font-semibold ${sufficient ? 'text-emerald-700' : 'text-orange-500'}`}>{fmt(acc.balance)}</span>
+                    {!sufficient && <span className="text-orange-400 ml-1">— may be insufficient</span>}
+                  </p>
+                </div>
+                {fromAccountId === acc.id && <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />}
+              </button>
+            );
+          })}
         </div>
+      )}
+    </div>
+  );
+}
+
+function CommonFields({ paymentMethod, setPaymentMethod, recipient, setRecipient, note, setNote }) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-sm font-medium text-gray-700 block mb-1">Payment Method</label>
+        <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300">
+          <option value="cash">Cash</option>
+          <option value="bank_transfer">Bank Transfer</option>
+          <option value="mobile">Mobile Banking</option>
+          <option value="check">Check/Cheque</option>
+        </select>
+      </div>
+      <div>
+        <label className="text-sm font-medium text-gray-700 block mb-1">Recipient <span className="text-gray-400 font-normal">(optional)</span></label>
+        <input type="text" value={recipient} onChange={e => setRecipient(e.target.value)} placeholder="e.g. Local mosque, charity..."
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300" />
+      </div>
+      <div>
+        <label className="text-sm font-medium text-gray-700 block mb-1">Note <span className="text-gray-400 font-normal">(optional)</span></label>
+        <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Any notes..."
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300" />
       </div>
     </div>
   );
