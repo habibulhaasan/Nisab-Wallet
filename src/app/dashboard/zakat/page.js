@@ -1708,28 +1708,73 @@ function ZakatHistoryTab({ cycleHistory, zakatPayments, expandedCycleId, setExpa
                   </button>
 
                   {isExpanded && (
-                    <div className="px-6 pb-5 bg-gray-50 space-y-3">
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3">
-                        {[
-                          { label: 'Start Date',      value: fmtDate(cycle.startDate) },
-                          { label: 'Start (Hijri)',   value: formatHijriDate(cycle.startDateHijri) },
-                          { label: 'Wealth at Start', value: fmt(cycle.startWealth || 0) },
-                          { label: 'Nisab at Start',  value: fmt(cycle.nisabAtStart || 0) },
-                          cycle.endDate     && { label: 'End Date',    value: fmtDate(cycle.endDate) },
-                          cycle.endWealth !== undefined && { label: 'End Wealth', value: fmt(cycle.endWealth) },
-                          cycle.nisabAtEnd  && { label: 'Nisab at Year End', value: fmt(cycle.nisabAtEnd) },
-                          cycle.zakatDue    && { label: 'Zakat Due',   value: fmt(cycle.zakatDue),  highlight: true },
-                          cycle.zakatPaid   && { label: 'Zakat Paid',  value: fmt(cycle.zakatPaid), highlight: true },
-                          { label: 'Status', value: cycle.status },
-                        ].filter(Boolean).map((item, i) => (
-                          <div key={i} className="bg-white rounded-lg p-2.5">
-                            <p className="text-xs text-gray-400 mb-0.5">{item.label}</p>
-                            <p className={`text-sm font-semibold ${item.highlight ? 'text-emerald-700' : 'text-gray-800'}`}>{item.value}</p>
+                    <div className="border-t border-gray-100 bg-gray-50/60 px-5 pb-5 pt-4 space-y-5">
+
+                      {/* ── Cycle summary strip ── */}
+                      {(() => {
+                        const zakatDue  = cycle.zakatDue  || 0;
+                        const zakatPaid = cycle.zakatPaid || cycle.totalPaid || 0;
+                        const remaining = Math.max(0, zakatDue - zakatPaid);
+                        const pct       = zakatDue > 0 ? Math.min(100, Math.round((zakatPaid / zakatDue) * 100)) : 0;
+                        return zakatDue > 0 ? (
+                          <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Zakat Summary</p>
+                            <div className="grid grid-cols-3 gap-3 text-center">
+                              <div>
+                                <p className="text-[10px] text-red-500 font-semibold uppercase mb-0.5">Total Due</p>
+                                <p className="text-base font-bold text-red-700">{fmt(zakatDue)}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] text-emerald-500 font-semibold uppercase mb-0.5">Paid</p>
+                                <p className="text-base font-bold text-emerald-700">{fmt(zakatPaid)}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] text-amber-500 font-semibold uppercase mb-0.5">Remaining</p>
+                                <p className={`text-base font-bold ${remaining > 0 ? 'text-amber-700' : 'text-gray-400'}`}>{fmt(remaining)}</p>
+                              </div>
+                            </div>
+                            {zakatDue > 0 && (
+                              <div>
+                                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                  <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                                </div>
+                                <p className="text-[10px] text-gray-400 mt-1">{pct}% paid</p>
+                              </div>
+                            )}
                           </div>
-                        ))}
+                        ) : null;
+                      })()}
+
+                      {/* ── Cycle dates & wealth ── */}
+                      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide px-4 pt-3 pb-2">Cycle Details</p>
+                        <div className="divide-y divide-gray-50">
+                          {[
+                            { label: 'Started',         value: fmtDate(cycle.startDate),                icon: '📅' },
+                            { label: 'Started (Hijri)', value: formatHijriDate(cycle.startDateHijri),   icon: '🌙' },
+                            cycle.endDate && { label: 'Ended',  value: fmtDate(cycle.endDate),          icon: '📅' },
+                            { label: 'Wealth at Start', value: fmt(cycle.startWealth || 0),             icon: '💰' },
+                            cycle.endWealth !== undefined && { label: 'Wealth at End', value: fmt(cycle.endWealth), icon: '💰' },
+                            { label: 'Nisab at Start',  value: fmt(cycle.nisabAtStart || 0),            icon: '⚖️' },
+                            cycle.nisabAtEnd && { label: 'Nisab at Year End', value: fmt(cycle.nisabAtEnd), icon: '⚖️' },
+                          ].filter(Boolean).map((row, i) => (
+                            <div key={i} className="flex items-center justify-between px-4 py-2.5">
+                              <p className="text-xs text-gray-500 flex items-center gap-1.5">
+                                <span>{row.icon}</span>{row.label}
+                              </p>
+                              <p className="text-xs font-semibold text-gray-800">{row.value}</p>
+                            </div>
+                          ))}
+                          <div className="flex items-center justify-between px-4 py-2.5">
+                            <p className="text-xs text-gray-500 flex items-center gap-1.5"><span>📋</span>Status</p>
+                            <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${statusBadge[cycle.status] || statusBadge.exempt}`}>
+                              {cycle.status === 'paid' ? 'Paid ✓' : cycle.status.charAt(0).toUpperCase() + cycle.status.slice(1)}
+                            </span>
+                          </div>
+                        </div>
                       </div>
 
-                      {/* Auto-Nisab transparency note */}
+                      {/* ── Nisab auto-fetch note ── */}
                       {cycle.nisabAtEndNote && (
                         <div className={`flex items-start gap-2 rounded-xl p-3 text-xs leading-relaxed ${
                           cycle.nisabAtEndFetched
@@ -1740,57 +1785,76 @@ function ZakatHistoryTab({ cycleHistory, zakatPayments, expandedCycleId, setExpa
                           <div>
                             <p className="font-semibold mb-0.5">Nisab at Year End</p>
                             <p>{cycle.nisabAtEndNote}</p>
-                            {cycle.nisabAtEndFetchedAt && (
-                              <p className="text-gray-400 mt-0.5">Fetched: {fmtDate(cycle.nisabAtEndFetchedAt)}</p>
-                            )}
-                            {cycle.silverPerGramAtEnd && (
-                              <p className="text-gray-500 mt-0.5">Silver price: ৳{Number(cycle.silverPerGramAtEnd).toLocaleString()}/gram</p>
-                            )}
+                            {cycle.silverPerGramAtEnd && <p className="text-gray-500 mt-0.5">Silver: ৳{Number(cycle.silverPerGramAtEnd).toLocaleString()}/gram</p>}
                           </div>
                         </div>
                       )}
 
-                      {/* Payment records */}
+                      {/* ── Payment records ── */}
                       {cycle.payments && cycle.payments.length > 0 && (
-                        <div>
-                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Payment Records</p>
-                          <div className="space-y-1.5">
+                        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                          <div className="flex items-center justify-between px-4 pt-3 pb-2">
+                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                              Payments ({cycle.payments.length})
+                            </p>
+                            <p className="text-xs font-semibold text-emerald-600">{fmt(cycle.zakatPaid || cycle.totalPaid || 0)} paid</p>
+                          </div>
+                          <div className="divide-y divide-gray-50">
                             {cycle.payments.map((pmt, pi) => (
-                              <div key={pi} className="bg-white rounded-lg p-2.5 flex items-center gap-3">
-                                <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-medium text-gray-700">
-                                    {pmt.isInstallment ? `Installment ${pmt.installmentNum}/${pmt.installmentTotal}` : 'Full Payment'}
-                                    {pmt.accountName ? ` · ${pmt.accountName}` : ''}
-                                  </p>
-                                  {pmt.note && <p className="text-xs text-gray-400 truncate">{pmt.note}</p>}
-                                  <p className="text-xs text-gray-400">{fmtDate(pmt.date)}</p>
+                              <div key={pmt.paymentId || pi} className="flex items-start gap-3 px-4 py-3">
+                                <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                  <Check className="w-3 h-3 text-emerald-600" />
                                 </div>
-                                <p className="text-xs font-semibold text-emerald-700 flex-shrink-0">{fmt(pmt.amount)}</p>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <p className="text-sm font-semibold text-gray-800">{fmt(pmt.amount)}</p>
+                                    <p className="text-xs text-gray-400 flex-shrink-0">{fmtDate(pmt.date)}</p>
+                                  </div>
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    #{pi + 1}
+                                    {pmt.accountName ? ` · ${pmt.accountName}` : ''}
+                                    {pmt.recipient   ? ` · to ${pmt.recipient}` : ''}
+                                  </p>
+                                  {pmt.note && <p className="text-xs text-gray-400 mt-0.5 italic">"{pmt.note}"</p>}
+                                </div>
                               </div>
                             ))}
                           </div>
                         </div>
                       )}
 
-                      {cycle.startBreakdown && (
-                        <div>
-                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Wealth Breakdown at Cycle Start</p>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                            {[['Accounts', cycle.startBreakdown.accountsTotal], ['Investments', cycle.startBreakdown.investmentsTotal],
-                              ['Goals', cycle.startBreakdown.goalsTotal], ['Jewellery', cycle.startBreakdown.jewelleryTotal],
-                              ['Loans', cycle.startBreakdown.loansTotal]].filter(([, v]) => v > 0).map(([label, value]) => (
-                              <div key={label} className="bg-white rounded-lg p-2 text-xs">
-                                <p className="text-gray-400">{label}</p>
-                                <p className="font-semibold text-gray-800">{fmt(value)}</p>
+                      {/* ── Wealth breakdown at start ── */}
+                      {cycle.startBreakdown && Object.values(cycle.startBreakdown).some(v => v > 0) && (
+                        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide px-4 pt-3 pb-2">Wealth Breakdown at Start</p>
+                          <div className="divide-y divide-gray-50">
+                            {[
+                              ['Accounts',    cycle.startBreakdown.accountsTotal],
+                              ['Investments', cycle.startBreakdown.investmentsTotal],
+                              ['Goals',       cycle.startBreakdown.goalsTotal],
+                              ['Jewellery',   cycle.startBreakdown.jewelleryTotal],
+                              ['Loans (−)',   cycle.startBreakdown.loansTotal],
+                            ].filter(([, v]) => v > 0).map(([label, value]) => (
+                              <div key={label} className="flex items-center justify-between px-4 py-2.5">
+                                <p className="text-xs text-gray-500">{label}</p>
+                                <p className="text-xs font-semibold text-gray-800">{fmt(value)}</p>
                               </div>
                             ))}
                           </div>
                         </div>
                       )}
 
-                      {cycle.status === 'exempt' && <p className="text-xs text-gray-500 bg-gray-100 rounded-lg p-3">ℹ️ Wealth was below Nisab at year end. Zakat was not required for this cycle.</p>}
-                      {cycle.status === 'paid'   && <p className="text-xs text-emerald-700 bg-emerald-50 rounded-lg p-3">✅ Zakat paid. JazakAllah Khayran.</p>}
+                      {/* ── Status note ── */}
+                      {cycle.status === 'exempt' && (
+                        <p className="text-xs text-gray-600 bg-gray-100 rounded-xl p-3">
+                          ℹ️ Wealth was below Nisab at year end — Zakat was not required for this cycle.
+                        </p>
+                      )}
+                      {cycle.status === 'paid' && (
+                        <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+                          ✅ Zakat fully paid. JazakAllah Khayran.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

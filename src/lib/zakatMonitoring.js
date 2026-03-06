@@ -256,11 +256,25 @@ export const recordZakatPayment = async (userId, opts) => {
     });
 
     // 2. Expense transaction
-    const catId = await getOrCreateZakatCategory(userId);
-    const desc  = ['Zakat payment',
+    const catId       = await getOrCreateZakatCategory(userId);
+    const cycleRef    = doc(db, 'users', userId, 'zakatCycles', cycleDocId);
+    const cycleSnap   = await getDoc(cycleRef);
+    const cycleData   = cycleSnap.exists() ? cycleSnap.data() : {};
+    const prevPmts    = cycleData.payments || [];
+    const pmtNumber   = prevPmts.length + 1;
+    const totalPaidSoFar = prevPmts.reduce((s, p) => s + (p.amount || 0), 0);
+    const remaining   = Math.max(0, zakatDueTotal - totalPaidSoFar - paymentAmount);
+
+    const descParts = [
+      `Zakat payment #${pmtNumber}`,
+      zakatDueTotal > 0 ? `(Total due: ${zakatDueTotal.toLocaleString()})` : '',
       recipient ? `to ${recipient}` : '',
-      note       ? `— ${note}`      : '',
-    ].filter(Boolean).join(' ');
+      note ? `— ${note}` : '',
+      remaining > 0
+        ? `Remaining after: ${remaining.toLocaleString()}`
+        : pmtNumber > 1 ? 'Fully cleared' : '',
+    ];
+    const desc = descParts.filter(Boolean).join(' · ');
 
     await addDoc(collection(db, 'users', userId, 'transactions'), {
       type:           'Expense',
@@ -275,10 +289,6 @@ export const recordZakatPayment = async (userId, opts) => {
     });
 
     // 3. Update cycle
-    const cycleRef  = doc(db, 'users', userId, 'zakatCycles', cycleDocId);
-    const cycleSnap = await getDoc(cycleRef);
-    const cycleData = cycleSnap.exists() ? cycleSnap.data() : {};
-    const prevPmts  = cycleData.payments || [];
 
     const newPmt = {
       paymentId:    generateId(),
