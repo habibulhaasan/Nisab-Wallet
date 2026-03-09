@@ -2,24 +2,39 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { checkUserAccess } from '@/lib/subscriptionUtils';
 import { AlertCircle, Clock, XCircle, Lock, Mail } from 'lucide-react';
 
+// Pages accessible even without an active subscription
+const ALLOWED_WITHOUT_SUBSCRIPTION = [
+  '/dashboard/subscription',
+  '/dashboard/settings',
+];
+
 export default function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [accessStatus, setAccessStatus] = useState(null);
   const [checkingAccess, setCheckingAccess] = useState(true);
+
+  // Is this page always accessible (even with expired/no subscription)?
+  const isAlwaysAllowed = ALLOWED_WITHOUT_SUBSCRIPTION.some(p => pathname?.startsWith(p));
 
   useEffect(() => {
     if (!loading && !user) {
       router.push('/login');
     } else if (user) {
-      checkAccess();
+      // Skip subscription check for pages that are always accessible
+      if (isAlwaysAllowed) {
+        setCheckingAccess(false);
+      } else {
+        checkAccess();
+      }
     }
-  }, [user, loading, router]);
+  }, [user, loading, router, isAlwaysAllowed]);
 
   const checkAccess = async () => {
     setCheckingAccess(true);
@@ -43,6 +58,11 @@ export default function ProtectedRoute({ children }) {
   // If not logged in, show nothing (will redirect)
   if (!user) {
     return null;
+  }
+
+  // ✅ Always allow subscription + settings pages through regardless of access status
+  if (isAlwaysAllowed) {
+    return children;
   }
 
   // ✅ FIXED: Check if user has ANY active access (active, trial, or free)
@@ -210,6 +230,16 @@ function NoAccessScreen({ reason, userData, subscription }) {
             }`}
           >
             {content.action}
+          </a>
+        )}
+
+        {/* Settings access — always visible for data export */}
+        {!content.actionLink?.includes('/dashboard/settings') && (
+          <a
+            href="/dashboard/settings"
+            className="inline-block w-full mt-3 px-6 py-3 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors text-sm"
+          >
+            ⬇️ Export / Import My Data
           </a>
         )}
 
