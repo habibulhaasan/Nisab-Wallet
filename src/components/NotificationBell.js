@@ -1,7 +1,8 @@
 // src/components/NotificationBell.js
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Bell, X, Check, Trash2 } from 'lucide-react';
 import { 
@@ -22,8 +23,25 @@ export default function NotificationBell() {
   const [notifications, setNotifications] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
+  const [mounted, setMounted] = useState(false);
   const dropdownRef = useRef(null);
   const buttonRef = useRef(null);
+
+  useEffect(() => { setMounted(true); }, []);
+
+  const openDropdown = useCallback(() => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const DROPDOWN_WIDTH = 384;
+    const viewportWidth = window.innerWidth;
+    let left = rect.left;
+    if (left + DROPDOWN_WIDTH > viewportWidth - 16) {
+      left = viewportWidth - DROPDOWN_WIDTH - 16;
+    }
+    setDropdownPos({ top: rect.bottom + 8, left: Math.max(8, left) });
+    setShowDropdown(true);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -48,24 +66,14 @@ export default function NotificationBell() {
 
   // Close dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event) => {
+    const handler = (e) => {
       if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target) &&
-        buttonRef.current &&
-        !buttonRef.current.contains(event.target)
-      ) {
-        setShowDropdown(false);
-      }
+        dropdownRef.current && !dropdownRef.current.contains(e.target) &&
+        buttonRef.current   && !buttonRef.current.contains(e.target)
+      ) setShowDropdown(false);
     };
-
-    if (showDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    if (showDropdown) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, [showDropdown]);
 
   const markAsRead = async (notificationId) => {
@@ -164,7 +172,7 @@ export default function NotificationBell() {
       {/* Bell Button */}
       <button
         ref={buttonRef}
-        onClick={() => setShowDropdown(!showDropdown)}
+        onClick={() => showDropdown ? setShowDropdown(false) : openDropdown()}
         className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
       >
         <Bell className="w-5 h-5" />
@@ -178,19 +186,20 @@ export default function NotificationBell() {
         )}
       </button>
 
-      {/* Dropdown Panel - IMPROVED POSITIONING */}
-      {showDropdown && (
+      {/* Dropdown — rendered via portal so sidebar stacking context never clips it */}
+      {mounted && showDropdown && createPortal(
         <div
           ref={dropdownRef}
-          className="fixed right-4 lg:right-auto lg:left-auto mt-2 w-80 sm:w-96 bg-white rounded-lg shadow-xl border border-gray-200 max-h-[calc(100vh-100px)] overflow-hidden flex flex-col"
           style={{
-            top: buttonRef.current ? buttonRef.current.getBoundingClientRect().bottom + 8 : '60px',
-            left: window.innerWidth >= 1024 && buttonRef.current 
-              ? buttonRef.current.getBoundingClientRect().left 
-              : 'auto',
-            zIndex: 999999,
-            position: 'fixed'
+            position:  'fixed',
+            top:       dropdownPos.top,
+            left:      dropdownPos.left,
+            width:     '384px',
+            maxWidth:  'calc(100vw - 32px)',
+            maxHeight: 'calc(100vh - 120px)',
+            zIndex:    99999,
           }}
+          className="bg-white rounded-lg shadow-xl border border-gray-200 flex flex-col overflow-hidden"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
@@ -316,7 +325,8 @@ export default function NotificationBell() {
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
