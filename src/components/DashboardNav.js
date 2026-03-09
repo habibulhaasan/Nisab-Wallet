@@ -8,11 +8,12 @@ import Image from 'next/image';
 import { 
   LayoutDashboard, CreditCard, Receipt, FolderOpen, Star, BarChart3, 
   LogOut, Menu, X, ArrowRightLeft, Settings, 
-  Users, Package, DollarSign, Globe, TrendingUp,
+  Users, Package, DollarSign, Globe, Sprout,
   HandCoins, MessageCircleQuestion, Goal, Blend, MessageSquareMore,
-  Home, Repeat ,FileText, ShoppingBag, PiggyBank, AlertTriangle, Gem
+  Home, Repeat ,FileText, ShoppingBag, PiggyBank
 } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
+import AdminNotificationBell from '@/components/AdminNotificationBell';
 import { checkIsAdmin } from '@/lib/adminUtils';
 
 export default function DashboardNav() {
@@ -55,13 +56,11 @@ export default function DashboardNav() {
       { name: 'Loans', href: '/dashboard/loans', icon: HandCoins },
       { name: 'Lend', href: '/dashboard/lendings', icon: Blend },
       { name: 'Goals', href: '/dashboard/goals', icon: Goal },
-      { name: 'Jewellery', href: '/dashboard/jewellery', icon: Gem },
-      { name: 'Investments', href: '/dashboard/investments', icon: TrendingUp },
+      { name: 'Investments', href: '/dashboard/investments', icon: Sprout },
       { name: 'Zakat', href: '/dashboard/zakat', icon: Star },
       { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
       { name: 'Recurring', href: '/dashboard/recurring', icon: Repeat},
-      { name: 'Tax File', href: '/dashboard/tax', icon: FileText},
-      { name: 'Riba Tracker', href: '/dashboard/riba', icon: AlertTriangle },
+      { name: 'Tax File', href: '/dashboard/tax', icon: FileText}
 
     ],
     other: [
@@ -101,7 +100,7 @@ export default function DashboardNav() {
           
           {/* Right Side */}
           <div className="flex items-center gap-2">
-            <NotificationBell />
+            {isAdmin ? <AdminNotificationBell /> : <NotificationBell />}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
@@ -337,7 +336,7 @@ export default function DashboardNav() {
             />
             <span className="text-lg font-bold text-gray-900">NisabWallet</span>
           </div>
-          <NotificationBell />
+          {isAdmin ? <AdminNotificationBell /> : <NotificationBell />}
         </div>
 
         {/* Navigation - Scrollable */}

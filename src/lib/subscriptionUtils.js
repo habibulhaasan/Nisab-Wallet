@@ -2,6 +2,7 @@
 import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs, getDoc, query, where, orderBy, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import { generateId } from './firestoreCollections';
+import { createAdminNotification, ADMIN_NOTIFICATION_TYPES } from './notificationUtils';
 
 // Subscription Status Types
 export const SUBSCRIPTION_STATUS = {
@@ -135,7 +136,29 @@ export const createUserSubscription = async (userId, subscriptionData) => {
       approvedAt: subscriptionData.approvedAt || null,
       createdAt: serverTimestamp()
     });
-    
+
+    // Fire admin notification (non-blocking)
+    try {
+      const userSnap = await getDoc(doc(db, 'users', userId));
+      const ud = userSnap.exists() ? userSnap.data() : {};
+      const userInfo = { userId, userEmail: ud.email || userId, userName: ud.displayName || ud.name || ud.email || userId };
+      const status = subscriptionData.status || SUBSCRIPTION_STATUS.TRIAL;
+
+      if (status === SUBSCRIPTION_STATUS.TRIAL) {
+        createAdminNotification(ADMIN_NOTIFICATION_TYPES.TRIAL_STARTED, {
+          ...userInfo, trialEndDate: subscriptionData.endDate,
+        }).catch(() => {});
+      } else if (status === SUBSCRIPTION_STATUS.PENDING) {
+        createAdminNotification(ADMIN_NOTIFICATION_TYPES.PAYMENT_PENDING_APPROVAL, {
+          ...userInfo,
+          planName:      subscriptionData.planName,
+          amount:        subscriptionData.amount,
+          paymentMethod: subscriptionData.paymentMethod,
+          transactionId: subscriptionData.transactionId,
+        }).catch(() => {});
+      }
+    } catch { /* non-critical */ }
+
     return { success: true, id: docRef.id, subscriptionId };
   } catch (error) {
     console.error('Error creating user subscription:', error);

@@ -8,6 +8,7 @@ import { db } from '@/lib/firebase';
 import { MessageSquare, Star, Send, CheckCircle } from 'lucide-react';
 import { ToastContainer } from '@/components/ToastNotification';
 import { useToast } from '@/hooks/useToast';
+import { createAdminNotification, ADMIN_NOTIFICATION_TYPES } from '@/lib/notificationUtils';
 
 export default function FeedbackPage() {
   const { user } = useAuth();
@@ -57,6 +58,16 @@ export default function FeedbackPage() {
 
       setSubmitted(true);
       addToast('Thank you for your feedback!', 'success');
+
+      // Notify all admins (non-blocking)
+      createAdminNotification(ADMIN_NOTIFICATION_TYPES.NEW_FEEDBACK, {
+        userId:    user.uid,
+        userEmail: user.email,
+        userName:  user.displayName || 'Anonymous',
+        type:      formData.type,
+        rating:    formData.rating,
+        preview:   formData.message.slice(0, 100) + (formData.message.length > 100 ? '…' : ''),
+      }).catch(() => {});
       
       // Reset form after 3 seconds
       setTimeout(() => {

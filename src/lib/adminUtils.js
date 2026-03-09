@@ -1,7 +1,15 @@
 // src/lib/adminUtils.js
-import { collection, getDocs, getDoc, doc, updateDoc, query, orderBy, where, serverTimestamp, addDoc } from 'firebase/firestore';
+import { collection, getDocs, getDoc, doc, updateDoc, setDoc, query, orderBy, where, serverTimestamp, addDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { SUBSCRIPTION_STATUS } from './subscriptionUtils';
+import { createAdminNotification, ADMIN_NOTIFICATION_TYPES } from './notificationUtils';
+
+const _ui = async (userId) => {
+  try {
+    const d = (await getDoc(doc(db, 'users', userId))).data() || {};
+    return { userId, userEmail: d.email || userId, userName: d.displayName || d.name || d.email || userId };
+  } catch { return { userId, userEmail: userId, userName: userId }; }
+};
 
 /**
  * Check if user is admin
@@ -182,7 +190,12 @@ export const approveSubscription = async (userId, subscriptionId, adminId) => {
     } catch (notifError) {
       console.log('Notification error (non-critical):', notifError);
     }
-    
+
+    // Notify all admins
+    _ui(userId).then(ui => createAdminNotification(ADMIN_NOTIFICATION_TYPES.SUBSCRIPTION_APPROVED, {
+      ...ui, planName: subData.planName, amount: subData.amount,
+    })).catch(() => {});
+
     return { success: true };
   } catch (error) {
     console.error('Error approving subscription:', error);
@@ -195,8 +208,10 @@ export const approveSubscription = async (userId, subscriptionId, adminId) => {
  */
 export const rejectSubscription = async (userId, subscriptionId, adminId, reason = '') => {
   try {
-    const subsRef = doc(db, 'users', userId, 'subscriptions', subscriptionId);
-    
+    const subsRef  = doc(db, 'users', userId, 'subscriptions', subscriptionId);
+    const subsSnap = await getDoc(subsRef);
+    const subData  = subsSnap.exists() ? subsSnap.data() : {};
+
     await updateDoc(subsRef, {
       status: SUBSCRIPTION_STATUS.REJECTED,
       rejectedBy: adminId,
@@ -221,7 +236,12 @@ export const rejectSubscription = async (userId, subscriptionId, adminId, reason
     } catch (notifError) {
       console.log('Notification error (non-critical):', notifError);
     }
-    
+
+    // Notify all admins
+    _ui(userId).then(ui => createAdminNotification(ADMIN_NOTIFICATION_TYPES.SUBSCRIPTION_REJECTED, {
+      ...ui, planName: subData.planName, reason,
+    })).catch(() => {});
+
     return { success: true };
   } catch (error) {
     console.error('Error rejecting subscription:', error);
@@ -235,15 +255,21 @@ export const rejectSubscription = async (userId, subscriptionId, adminId, reason
 export const toggleBlockUser = async (userId, isBlocked, adminId, reason = '') => {
   try {
     const userRef = doc(db, 'users', userId);
-    
+
     await updateDoc(userRef, {
       isBlocked,
-      blockedBy: isBlocked ? adminId : null,
-      blockedAt: isBlocked ? serverTimestamp() : null,
+      blockedBy:   isBlocked ? adminId : null,
+      blockedAt:   isBlocked ? serverTimestamp() : null,
       blockReason: reason,
-      updatedAt: serverTimestamp()
+      updatedAt:   serverTimestamp()
     });
-    
+
+    // Notify all admins
+    _ui(userId).then(ui => createAdminNotification(
+      isBlocked ? ADMIN_NOTIFICATION_TYPES.ACCOUNT_BLOCKED : ADMIN_NOTIFICATION_TYPES.ACCOUNT_UNBLOCKED,
+      { ...ui, reason }
+    )).catch(() => {});
+
     return { success: true };
   } catch (error) {
     console.error('Error toggling block user:', error);
@@ -346,7 +372,12 @@ export const grantFreeLifetimeAccess = async (userId, adminId, reason = '', days
         updatedAt: serverTimestamp()
       });
     }
-    
+
+    // Notify all admins about free access grant
+    _ui(userId).then(ui => createAdminNotification(ADMIN_NOTIFICATION_TYPES.FREE_ACCESS_GRANTED, {
+      ...ui, days, reason,
+    })).catch(() => {});
+
     return { success: true };
   } catch (error) {
     console.error('Error granting free access:', error);
@@ -455,9 +486,9 @@ export const getRevenueStatistics = async (startDate = null, endDate = null) => 
 export const updateLastLogin = async (userId) => {
   try {
     const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, {
+    await setDoc(userRef, {
       lastLoginAt: serverTimestamp()
-    });
+    }, { merge: true });
     return { success: true };
   } catch (error) {
     console.error('Error updating last login:', error);

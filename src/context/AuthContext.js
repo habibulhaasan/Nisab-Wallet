@@ -17,6 +17,7 @@ import { auth, db } from '@/lib/firebase';
 import { createUserSubscription, calculateTrialEndDate, SUBSCRIPTION_STATUS } from '@/lib/subscriptionUtils';
 import { updateLastLogin } from '@/lib/adminUtils';
 import { generateId } from '@/lib/firestoreCollections';
+import { createAdminNotification, ADMIN_NOTIFICATION_TYPES } from '@/lib/notificationUtils';
 
 // Default data constants
 const DEFAULT_ACCOUNTS = [
@@ -176,6 +177,14 @@ export const AuthProvider = ({ children }) => {
       }
 
       setUser({ ...userCredential.user, displayName: userData.name });
+
+      // Notify admins of new user registration (non-blocking)
+      createAdminNotification(ADMIN_NOTIFICATION_TYPES.USER_REGISTERED, {
+        userId,
+        userEmail: email,
+        userName: userData.name,
+      }).catch(() => {});
+
       return { success: true };
     } catch (error) {
       console.error('Signup error:', error);

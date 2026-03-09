@@ -131,19 +131,32 @@ export default function NotificationBell() {
     return date.toLocaleDateString();
   };
 
-  const getNotificationIcon = (type) => {
-    switch (type) {
-      case 'zakat_due':
-        return '🕌';
-      case 'zakat_approaching':
-        return '⏰';
-      case 'payment_reminder':
-        return '💰';
-      case 'low_balance':
-        return '⚠️';
-      default:
-        return '📢';
+  const getNotificationIcon = (type, isAdmin) => {
+    if (isAdmin) {
+      if (type?.includes('feedback'))                                       return '💬';
+      if (type?.includes('purchase') || type?.includes('pending'))         return '💳';
+      if (type?.includes('approved'))                                       return '✅';
+      if (type?.includes('rejected'))                                       return '❌';
+      if (type?.includes('trial'))                                          return '⏰';
+      if (type?.includes('expired'))                                        return '📅';
+      if (type?.includes('blocked'))                                        return '🚫';
+      if (type?.includes('unblocked'))                                      return '🔓';
+      if (type?.includes('free') || type?.includes('registered'))          return '🎁';
+      return '🔔';
     }
+    switch (type) {
+      case 'zakat_due':          return '🕌';
+      case 'zakat_approaching':  return '⏰';
+      case 'payment_reminder':   return '💰';
+      case 'low_balance':        return '⚠️';
+      default:                   return '📢';
+    }
+  };
+
+  const getAdminLink = (type) => {
+    if (type?.includes('feedback'))                              return '/dashboard/admin/feedbacks';
+    if (type?.includes('purchase') || type?.includes('pending') || type?.includes('approved') || type?.includes('rejected')) return '/dashboard/admin/users';
+    return '/dashboard/admin';
   };
 
   return (
@@ -234,21 +247,36 @@ export default function NotificationBell() {
                 {notifications.map((notification) => (
                   <div
                     key={notification.id}
-                    className={`px-4 py-3 hover:bg-gray-50 transition-colors ${
-                      !notification.read ? 'bg-blue-50/50' : ''
+                    onClick={() => {
+                      if (!notification.read) markAsRead(notification.id);
+                      if (notification.isAdmin) {
+                        window.location.href = getAdminLink(notification.type);
+                      }
+                    }}
+                    className={`px-4 py-3 transition-colors ${notification.isAdmin ? 'cursor-pointer' : ''} ${
+                      !notification.read
+                        ? notification.isAdmin ? 'bg-blue-50 hover:bg-blue-100' : 'bg-blue-50/50 hover:bg-gray-50'
+                        : 'hover:bg-gray-50'
                     }`}
                   >
                     <div className="flex items-start gap-3">
                       {/* Icon */}
                       <div className="flex-shrink-0 text-xl mt-0.5">
-                        {getNotificationIcon(notification.type)}
+                        {getNotificationIcon(notification.type, notification.isAdmin)}
                       </div>
 
                       {/* Content */}
                       <div className="flex-1 min-w-0">
-                        <p className={`text-sm ${!notification.read ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
-                          {notification.title}
-                        </p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className={`text-sm ${!notification.read ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
+                            {notification.title}
+                          </p>
+                          {notification.isAdmin && (
+                            <span className="px-1.5 py-0.5 bg-blue-600 text-white text-[9px] font-bold rounded-full uppercase tracking-wide flex-shrink-0">
+                              ADMIN
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">
                           {notification.message}
                         </p>
