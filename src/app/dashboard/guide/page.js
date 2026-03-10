@@ -4,944 +4,711 @@
 import { useState } from 'react';
 import {
   BookOpen, CreditCard, Receipt, ArrowRightLeft, FolderOpen,
-  Target, PiggyBank, HandCoins, Blend, Sprout, Star, BarChart3,
+  Target, PiggyBank, HandCoins, Sprout, Star, BarChart3,
   Repeat, FileText, ShoppingBag, ChevronDown, ChevronRight,
   CheckCircle2, AlertCircle, Info, Lightbulb, Wallet, Building2,
   Smartphone, Coins, TrendingUp, TrendingDown, Moon, Shield,
   Clock, Calendar, Search, Filter, Edit2, Trash2, Zap, RefreshCw,
+  Blend, Plus, X, ArrowUpCircle, ArrowDownCircle, Settings,
+  History, Calculator, Tag, Download, Sparkles, Bell,
 } from 'lucide-react';
 
-// ─── All guide data ───────────────────────────────────────────────────────────
-const GUIDES = [
-  {
-    id: 'accounts',
-    icon: CreditCard,
-    color: 'blue',
-    title: 'Accounts',
-    subtitle: 'Your financial containers',
-    summary: 'Accounts are the foundation of everything in Nisab Wallet. Every transaction, transfer, goal, and Zakat calculation is tied to an account balance.',
-    sections: [
-      {
-        heading: 'What is an Account?',
-        type: 'text',
-        content: 'An account represents any place you hold money — your wallet, a bank account, mobile banking app, gold, or silver. Nisab Wallet consolidates all of them into one view so you always know your total wealth.',
-      },
-      {
-        heading: 'Account Types',
-        type: 'list',
-        items: [
-          { icon: Wallet,      label: 'Cash',           desc: 'Physical money in your pocket or home safe' },
-          { icon: Building2,   label: 'Bank Account',   desc: 'Savings or current accounts at any bank (DBBL, Dutch-Bangla, bKash Bank, etc.)' },
-          { icon: Smartphone,  label: 'Mobile Banking', desc: 'bKash, Nagad, Rocket, or any mobile financial service wallet' },
-          { icon: Coins,       label: 'Gold',           desc: 'Enter the current market value in Taka — update when prices change' },
-          { icon: Coins,       label: 'Silver',         desc: 'Enter current market value in Taka — also feeds the Nisab threshold calculation' },
-        ],
-      },
-      {
-        heading: 'How to Get Started',
-        type: 'steps',
-        items: [
-          'Click "Load Defaults" to instantly create Cash, Bank 1, bKash, and Bank 2 with zero balance',
-          'Or click "Add Account", choose a type, name it, and enter your current balance',
-          'Balances update automatically when you record transactions — you can also edit them directly',
-          'Delete an account only when it has no linked transactions, goals, or loans',
-        ],
-      },
-      {
-        heading: 'Goal Allocation on Account Cards',
-        type: 'callout',
-        variant: 'info',
-        content: 'When Goals are linked to an account, the card shows two figures: Total Balance and Available to Spend. Available = Total minus amount reserved for goals. Expense transactions cannot use goal-reserved money — the system blocks this automatically.',
-      },
-      {
-        heading: 'How Accounts Connect to Every Feature',
-        type: 'flow',
-        items: [
-          { label: 'Transactions', desc: 'Every income/expense instantly credits or debits a chosen account' },
-          { label: 'Transfers', desc: 'Move money between accounts — both balances update simultaneously' },
-          { label: 'Goals', desc: 'Funds are ring-fenced inside an account for a goal, reducing Available balance' },
-          { label: 'Loans & Lendings', desc: 'Borrowed/lent amounts are drawn from or added to a selected account' },
-          { label: 'Zakat', desc: 'Sum of ALL account balances = your total wealth compared against Nisab' },
-          { label: 'Analytics', desc: 'Account filter lets you view income/expense for one account only' },
-        ],
-      },
-      {
-        heading: 'Pro Tips',
-        type: 'tips',
-        items: [
-          'Name accounts descriptively — "DBBL Savings" instead of "Bank" makes transaction history much clearer',
-          'Update Gold and Silver account values at least monthly when you check market prices',
-          'You need at least 1 account before recording any transaction',
-          'You need at least 2 accounts to use the Transfer feature',
-          'The "Sparkle" badge marks default accounts — these are just labels, all accounts work identically',
-        ],
-      },
-    ],
-  },
-
-  {
-    id: 'categories',
-    icon: FolderOpen,
-    color: 'violet',
-    title: 'Categories',
-    subtitle: 'Label and organise every transaction',
-    summary: 'Categories organise your money flow into named groups. They are required for every transaction and power Analytics charts, Budget limits, and Tax file sections.',
-    sections: [
-      {
-        heading: 'Why Categories Are Essential',
-        type: 'text',
-        content: 'Every transaction must belong to a category. Categories reveal patterns — how much you spent on food, transport, or health last month. They also feed directly into Budget tracking and Tax file income grouping. Without good categories, Analytics is meaningless.',
-      },
-      {
-        heading: 'Two Types of Categories',
-        type: 'list',
-        items: [
-          { icon: TrendingUp,   label: 'Income Categories',  desc: 'For money coming in: Salary, Bonus, Freelance, Rental Income, Business Revenue, etc.' },
-          { icon: TrendingDown, label: 'Expense Categories', desc: 'For money going out: Food, Transport, Healthcare, Shopping, Utility Bills, etc.' },
-        ],
-      },
-      {
-        heading: 'Load Defaults (Quick Start)',
-        type: 'callout',
-        variant: 'info',
-        content: 'Click "Load Defaults" to instantly add: Income — Salary, Bonus, Loan. Expense — Transportation, Shopping, Foods, Healthcare, Loan Payment. These cover the most common Bangladeshi household flows and get you started in seconds.',
-      },
-      {
-        heading: 'Creating a Custom Category',
-        type: 'steps',
-        items: [
-          'Click "Add Category" and type a name (e.g., "Groceries" or "Freelance Income")',
-          'Choose the type: Income or Expense — you cannot change this later without deleting and recreating',
-          'Pick a colour from 10 preset swatches — this colour appears as a dot in the transaction list and in Analytics charts',
-          'Save — the category is immediately available in the transaction form',
-        ],
-      },
-      {
-        heading: 'Renaming is Completely Safe',
-        type: 'callout',
-        variant: 'success',
-        content: 'Each category has a permanent internal ID. If you rename "Foods" to "Groceries & Dining", all past transactions keep their correct category in analytics and reports. Renaming never breaks historical data.',
-      },
-      {
-        heading: 'Pro Tips',
-        type: 'tips',
-        items: [
-          'Create categories before adding transactions — they are required when logging any income or expense',
-          'Keep categories specific enough to be useful but broad enough to reuse daily (e.g., "Dining Out" not "Biryani from ABC Restaurant")',
-          'Use consistent colours by theme — all food in pink, all transport in red — for faster chart reading',
-          'Categories used in Budgets automatically show actual vs. budgeted spending',
-          'Income categories can be mapped to tax heads in the Tax File feature',
-        ],
-      },
-    ],
-  },
-
-  {
-    id: 'transactions',
-    icon: Receipt,
-    color: 'emerald',
-    title: 'Transactions',
-    subtitle: 'Record every money movement',
-    summary: 'Transactions are the engine of Nisab Wallet. Every time money comes in or goes out, you log it here. Account balances, analytics, budgets, and Zakat wealth all update from this single source of truth.',
-    sections: [
-      {
-        heading: 'Three Transaction Types',
-        type: 'list',
-        items: [
-          { icon: TrendingUp,    label: 'Income',   desc: 'Money received from outside — salary, freelance payment, rental, gift. Increases account balance.' },
-          { icon: TrendingDown,  label: 'Expense',  desc: 'Money you spent — food, transport, bills, shopping. Decreases account balance.' },
-          { icon: ArrowRightLeft,label: 'Transfer', desc: 'Money moved between your own accounts. No net change in total wealth. Both account balances update.' },
-        ],
-      },
-      {
-        heading: 'Recording a Transaction Step by Step',
-        type: 'steps',
-        items: [
-          'Click "Add Transaction" — this button is disabled until you have at least 1 account AND 1 category',
-          'Choose the tab: Income (green), Expense (red), or Transfer (blue)',
-          'Enter the amount in the large field at the top',
-          'Select the Account — dropdown shows each account with its Available balance',
-          'Select the Category — only categories matching the transaction type appear',
-          'Set the date — defaults to today but can be any past date',
-          'Add an optional Note for future reference (e.g., "Rent – March 2026")',
-          'Click Confirm — the account balance updates immediately and the transaction appears in the list',
-        ],
-      },
-      {
-        heading: 'Goal-Aware Balance Protection',
-        type: 'callout',
-        variant: 'warning',
-        content: 'When recording an Expense, the system checks your Available balance (total minus goal allocations). If the expense exceeds available funds — even if the raw account balance looks sufficient — the transaction is blocked with a detailed error message showing how much is reserved for goals and what is truly available.',
-      },
-      {
-        heading: 'Filters and Search',
-        type: 'list',
-        items: [
-          { icon: Filter,   label: 'Type Filter',    desc: 'Show All transactions, Income only, or Expense only' },
-          { icon: Wallet,   label: 'Account Filter', desc: 'View transactions for one specific account' },
-          { icon: Clock,    label: 'Period Filter',  desc: 'Today, This Week (Sat–Fri), This Month, This Year, All Time, or a Custom Date Range' },
-          { icon: Search,   label: 'Search',         desc: 'Search by description, amount, category name, or account name — results update as you type' },
-        ],
-      },
-      {
-        heading: 'Summary Cards at the Top',
-        type: 'text',
-        content: 'Four cards always show: Total Balance (sum of all accounts), Income for the selected period, Expense for the period, and Net (Income minus Expense). Transfers are excluded from Income and Expense totals — they do not inflate or deflate your real financial picture.',
-      },
-      {
-        heading: 'Editing and Deleting Transactions',
-        type: 'steps',
-        items: [
-          'Click the pencil icon on any row to edit it',
-          'The system reverses the original balance effect, then applies the new values — account balance is always kept correct',
-          'Changing the account while editing also correctly adjusts both the old and new account',
-          'Click the trash icon to delete — a confirmation dialog appears first, and the account balance is restored automatically',
-        ],
-      },
-      {
-        heading: 'How Transfers Appear in This List',
-        type: 'callout',
-        variant: 'info',
-        content: 'Each transfer shows as TWO rows: an Expense on the source account and an Income on the destination. They are permanently linked — editing or deleting one side updates the complete transfer. A blue ⇄ icon marks them so they are easy to identify among regular transactions.',
-      },
-      {
-        heading: 'Pro Tips',
-        type: 'tips',
-        items: [
-          'Record transactions the same day for accurate period summaries — backdating works but requires discipline',
-          'Use the Note field for contextual detail: "Eid shopping – Bashundhara City" is much more useful than just "Shopping"',
-          'The weekly period resets on Saturday — standard Bangladesh work week',
-          'The Transfer tab in the modal requires at least 2 accounts and is disabled otherwise',
-          'The transaction list is grouped by date — each date shows a daily income/expense subtotal at the header',
-        ],
-      },
-    ],
-  },
-
-  {
-    id: 'transfer',
-    icon: ArrowRightLeft,
-    color: 'cyan',
-    title: 'Transfer',
-    subtitle: 'Move money between your accounts',
-    summary: 'Transfer moves funds from one of your accounts to another without counting it as income or expense — keeping your total wealth figure accurate.',
-    sections: [
-      {
-        heading: 'When to Use Transfer (Not Expense + Income)',
-        type: 'text',
-        content: 'Use Transfer any time you move money between accounts you own: withdrawing from bank to top up bKash, moving salary to savings, or shifting funds between two bank accounts. Recording this as Expense + Income would double-count your income and over-inflate your expense figure in Analytics.',
-      },
-      {
-        heading: 'How to Transfer',
-        type: 'steps',
-        items: [
-          'Go to Transfer from the sidebar — or use the Transfer tab inside the Add Transaction modal',
-          'Select the "From" account — the dropdown shows its current balance',
-          'Select the "To" account — cannot be the same as From',
-          'Enter the amount — system checks you have sufficient available balance (after goal allocations)',
-          'Set a date — can be backdated',
-          'Add an optional description or note',
-          'Click "Transfer Money" — both account balances update instantly',
-        ],
-      },
-      {
-        heading: 'What Happens Behind the Scenes',
-        type: 'flow',
-        items: [
-          { label: 'From Account', desc: 'Balance decreases by the transfer amount' },
-          { label: 'To Account',   desc: 'Balance increases by the transfer amount' },
-          { label: 'Transfer Record', desc: 'Saved to the transfers collection with both account names, amount, date, and note' },
-          { label: 'Transaction List', desc: 'Appears as two linked rows — an Expense on From and an Income on To, both marked with ⇄' },
-          { label: 'Analytics & Zakat', desc: 'Transfers excluded from income/expense charts — total wealth unchanged' },
-        ],
-      },
-      {
-        heading: 'Pro Tips',
-        type: 'tips',
-        items: [
-          'Always use Transfer (not Expense + Income) when moving between your own accounts — wrong method breaks analytics',
-          'The dedicated Transfer page also shows your full transfer history with both account names and amounts',
-          'You can edit or delete a transfer from the Transaction list — both sides update together',
-          'Transfer requires at least 2 accounts — add more accounts in the Accounts section first',
-        ],
-      },
-    ],
-  },
-
-  {
-    id: 'budgets',
-    icon: PiggyBank,
-    color: 'teal',
-    title: 'Budgets',
-    subtitle: 'Monthly spending limits per category',
-    summary: 'Set a maximum monthly spend for each expense category. The system reads your actual transactions in real time and shows how much of each budget you have used — with colour-coded alerts.',
-    sections: [
-      {
-        heading: 'How Budgets Work',
-        type: 'text',
-        content: 'Each month, you define a spending limit per expense category. Nisab Wallet reads your actual expense transactions for that calendar month and calculates how much of each limit you have used. A progress bar with colour coding shows your status at a glance.',
-      },
-      {
-        heading: 'Setting Up Your Monthly Budgets',
-        type: 'steps',
-        items: [
-          'Go to Budgets — all your Expense categories are listed automatically',
-          'Enter a monthly limit (in Taka) next to each category you want to control',
-          'Leave blank for categories with no limit — their actual spend will still be displayed',
-          'Click "Save All Budgets" — limits immediately apply to the current calendar month',
-          'Budgets are per-month — reset each month and you set new limits at the start of each month',
-        ],
-      },
-      {
-        heading: 'Reading the Budget Progress Cards',
-        type: 'list',
-        items: [
-          { icon: CheckCircle2, label: 'On Track (Green)',  desc: 'Spent less than 80% of the limit — spending is under control' },
-          { icon: AlertCircle,  label: 'Warning (Amber)',   desc: 'Spent 80–99% of limit — consider slowing spending in this category' },
-          { icon: AlertCircle,  label: 'Over Budget (Red)', desc: 'Exceeded the limit — needs immediate attention' },
-          { icon: Info,         label: 'No Limit Set',      desc: 'Category has transactions this month but no budget set — consider adding one' },
-        ],
-      },
-      {
-        heading: 'Copy from Previous Month',
-        type: 'callout',
-        variant: 'info',
-        content: 'If you set budgets last month, a "Copy from Previous Month" option appears at the start of a new month. This saves you from re-entering the same limits. You can then adjust individual categories before saving.',
-      },
-      {
-        heading: 'Drilling into a Budget Category',
-        type: 'text',
-        content: 'Click on any budget card to navigate to the transaction list pre-filtered to that category for the current month. You can see exactly which transactions consumed the budget.',
-      },
-      {
-        heading: 'Pro Tips',
-        type: 'tips',
-        items: [
-          'Create your expense categories first — budget limits can only be set for existing categories',
-          'Even without limits, the Budgets page shows actual spending per category — useful for understanding your habits before setting limits',
-          'Check Analytics → Category Pie Chart to see which categories are largest before deciding which to budget',
-          'Budgets do not block transactions — they are awareness tools, not hard locks',
-        ],
-      },
-    ],
-  },
-
-  {
-    id: 'goals',
-    icon: Target,
-    color: 'orange',
-    title: 'Financial Goals',
-    subtitle: 'Ring-fence money for a purpose',
-    summary: 'Goals let you reserve a portion of an account balance for a specific purpose — a holiday, emergency fund, wedding, or device. Reserved money is protected from accidental spending.',
-    sections: [
-      {
-        heading: 'What a Goal Does',
-        type: 'text',
-        content: 'A goal marks a slice of an account balance as "reserved". The account balance total does not change, but Available to Spend drops by the reserved amount. Any expense or transfer that would dip into goal money is automatically blocked by the system.',
-      },
-      {
-        heading: 'Creating a Goal',
-        type: 'steps',
-        items: [
-          'Click "Add Goal" and enter a name (e.g., "Emergency Fund" or "Eid Shopping 2026")',
-          'Set the Target Amount — the total you want to save toward',
-          'Set the Target Date — your deadline for reaching the goal',
-          'Choose the Linked Account — goal funds sit in this account',
-          'Set Priority: Low, Medium, or High',
-          'Enter a starting amount if you have already set some aside (optional)',
-          'Toggle notifications on to get milestone alerts (25%, 50%, 75%, 100%)',
-          'Save — the goal appears in your Goals list and the linked account card updates',
-        ],
-      },
-      {
-        heading: 'Depositing and Withdrawing',
-        type: 'list',
-        items: [
-          { icon: TrendingUp,   label: 'Deposit into Goal',  desc: 'Allocate more money from the linked account — Available balance on that account decreases' },
-          { icon: TrendingDown, label: 'Withdraw from Goal', desc: 'Release funds back — Available balance on the account increases; use for planned spending from the goal' },
-        ],
-      },
-      {
-        heading: 'Goal Statuses',
-        type: 'list',
-        items: [
-          { icon: Clock,        label: 'In Progress', desc: 'Active — currently saving toward the target amount' },
-          { icon: CheckCircle2, label: 'Completed',   desc: 'Reached 100% of target — well done! Funds remain reserved until you withdraw them' },
-          { icon: AlertCircle,  label: 'Overdue',     desc: 'Past the target date but target not yet reached — consider adjusting the date or adding funds' },
-        ],
-      },
-      {
-        heading: 'How Goals Protect Your Money',
-        type: 'callout',
-        variant: 'warning',
-        content: 'Example: Your Bank Account has ৳50,000 total. You have ৳20,000 allocated to a "New Laptop" goal. Available = ৳30,000. If you try to record a ৳35,000 expense from that account, the system blocks it with an error — even though the raw balance shows ৳50,000.',
-      },
-      {
-        heading: 'Pro Tips',
-        type: 'tips',
-        items: [
-          'The goal card shows a monthly savings target — how much you need to deposit each month to reach the goal on time',
-          'You can link multiple goals to the same account — each one reserves its own slice',
-          'When a goal is complete, withdraw the funds or mark it done to release the Available balance',
-          'Filter goals by In Progress / Completed / All using the status tabs',
-          'Click the eye icon to see the full deposit and withdrawal history for any goal',
-        ],
-      },
-    ],
-  },
-
-  {
-    id: 'loans',
-    icon: HandCoins,
-    color: 'rose',
-    title: 'Loans',
-    subtitle: 'Track money you borrowed',
-    summary: 'Track every loan you have taken — from banks, institutions, or individuals — including repayment schedules, interest calculations, and a complete payment history.',
-    sections: [
-      {
-        heading: 'How Loans Work in Nisab Wallet',
-        type: 'text',
-        content: 'When you borrow money, you record it as a Loan. The borrowed amount is credited to your selected account (increasing its balance). Each repayment you make reduces both the loan balance and the account balance. Full history of all payments is maintained.',
-      },
-      {
-        heading: 'Loan Types Supported',
-        type: 'list',
-        items: [
-          { icon: Shield,     label: 'Qard Hasan (Interest-Free)', desc: 'Islamic lending with zero interest. You repay exactly what you borrowed. Choose this for loans from family, friends, or Islamic banks.' },
-          { icon: TrendingUp, label: 'Conventional (With Interest)', desc: 'Bank or formal loans with an interest rate. Enter rate and either monthly payment or total months — the system auto-calculates the other and total repayment.' },
-        ],
-      },
-      {
-        heading: 'Adding a New Loan',
-        type: 'steps',
-        items: [
-          'Click "Add Loan" and enter the lender name (person or bank)',
-          'Choose loan type: Qard Hasan (0% interest) or Conventional',
-          'Enter the principal amount borrowed',
-          'For conventional loans: enter the interest rate (annual %) and either monthly payment or number of months — the system calculates the other value',
-          'Set the loan start date',
-          'Select which account receives the borrowed amount — that account balance increases immediately',
-          'Enable reminders to receive payment due date alerts',
-          'Save — the loan appears in your active loans list',
-        ],
-      },
-      {
-        heading: 'Recording a Repayment',
-        type: 'steps',
-        items: [
-          'Click "Pay" on any active loan card',
-          'Enter the repayment amount',
-          'Select the account the payment comes from — that account balance decreases',
-          'Set the payment date',
-          'Add an optional note',
-          'Confirm — loan outstanding balance reduces and payment is logged to history',
-          'When fully repaid, loan status changes to "Paid" automatically',
-        ],
-      },
-      {
-        heading: 'Loan Dashboard Summary',
-        type: 'list',
-        items: [
-          { icon: HandCoins,    label: 'Total Borrowed',    desc: 'Sum of all original loan principal amounts' },
-          { icon: TrendingDown, label: 'Total Outstanding', desc: 'How much you still owe across all loans combined' },
-          { icon: CheckCircle2, label: 'Total Repaid',      desc: 'How much you have already paid back in total' },
-          { icon: AlertCircle,  label: 'Overdue',           desc: 'Loans past their scheduled repayment — highlighted in red for attention' },
-        ],
-      },
-      {
-        heading: 'Pro Tips',
-        type: 'tips',
-        items: [
-          'Enable reminders when creating a loan — you will get an in-app notification before the payment is due',
-          'For Qard Hasan loans, add the lender name and any agreed terms in the Notes field',
-          'Filter loans by Active, Paid, or Overdue using the tabs at the top',
-          'Click the eye icon on any loan to view its complete payment history',
-          'Loan balances in accounts count toward your Zakat wealth total — be aware of this when calculating',
-        ],
-      },
-    ],
-  },
-
-  {
-    id: 'lendings',
-    icon: Blend,
-    color: 'amber',
-    title: 'Lend',
-    subtitle: 'Track money others owe you',
-    summary: 'Lend is the mirror of Loans — it tracks money you have given to others (friends, family, colleagues) and monitors repayment status and history.',
-    sections: [
-      {
-        heading: 'Loans vs. Lend — Key Difference',
-        type: 'callout',
-        variant: 'info',
-        content: 'Loans module = money you borrowed (you owe someone else). Lend module = money you gave out (someone owes you). They are completely separate modules. Never mix them up — they affect your account balances in opposite directions.',
-      },
-      {
-        heading: 'Adding a Lending Record',
-        type: 'steps',
-        items: [
-          'Click "Add Lending" and enter the borrower\'s full name',
-          'Add their phone number, email, and address — useful for follow-up if repayment is late',
-          'Set the lending type: Qard Hasan (no interest) or with agreed terms',
-          'Enter the principal amount lent and the lending date',
-          'Set a due date for expected repayment',
-          'Choose repayment type: Full Payment (one lump sum) or Installments (agreed regular amounts)',
-          'For installments, enter the agreed installment amount',
-          'Select which account the money leaves from — balance decreases immediately',
-          'Add notes about any collateral, witnesses, or special conditions',
-        ],
-      },
-      {
-        heading: 'Recording a Repayment Received',
-        type: 'steps',
-        items: [
-          'Find the lending and click "Repayment"',
-          'Enter the amount received back',
-          'Choose which account to deposit it into',
-          'Set the repayment date',
-          'Confirm — outstanding balance decreases, the repayment is logged to history',
-          'When fully repaid, status changes to "Settled" automatically',
-        ],
-      },
-      {
-        heading: 'Repayment Types',
-        type: 'list',
-        items: [
-          { icon: CheckCircle2, label: 'Full Payment',  desc: 'Borrower repays the entire outstanding amount at once — simplest to track' },
-          { icon: Repeat,       label: 'Installments',  desc: 'Borrower repays in agreed chunks — each repayment is logged separately with a running outstanding balance' },
-        ],
-      },
-      {
-        heading: 'Pro Tips',
-        type: 'tips',
-        items: [
-          'Always record borrower contact details — easy follow-up reference if repayment is delayed',
-          'Use the Reminder feature to schedule a follow-up notification near the agreed due date',
-          'Overdue lendings (past due date, not yet settled) are highlighted in red automatically',
-          'The lending detail page (eye icon) shows the full repayment timeline in chronological order',
-        ],
-      },
-    ],
-  },
-
-  {
-    id: 'investments',
-    icon: Sprout,
-    color: 'green',
-    title: 'Investments',
-    subtitle: 'Track your portfolio and returns',
-    summary: 'Track all long-term wealth-building assets — stocks, fixed deposits, savings certificates, real estate, crypto, and more — with automatic return calculations.',
-    sections: [
-      {
-        heading: 'Supported Investment Types',
-        type: 'list',
-        items: [
-          { icon: TrendingUp,  label: 'Stocks',                desc: 'Listed shares — track current market value vs. purchase price for capital gain/loss' },
-          { icon: TrendingUp,  label: 'Mutual Funds',          desc: 'Pooled investment — enter current NAV and units to track total value' },
-          { icon: Coins,       label: 'DPS',                   desc: 'Deposit Pension Scheme — monthly bank savings with maturity amount' },
-          { icon: Coins,       label: 'FDR (Fixed Deposit)',   desc: 'Lump sum with guaranteed return — enter maturity value for return calculation' },
-          { icon: FileText,    label: 'Savings Certificate',   desc: 'Government Sanchayapatra — enter face value and maturity date' },
-          { icon: FileText,    label: 'Bond',                  desc: 'Corporate or government bonds — track coupon payments and maturity' },
-          { icon: Shield,      label: 'PPF',                   desc: 'Public Provident Fund — long-term government-backed scheme' },
-          { icon: Shield,      label: 'Pension Fund',          desc: 'Employer or personal pension contributions and projected value' },
-          { icon: Zap,         label: 'Cryptocurrency',        desc: 'Digital assets — enter purchase price and current value for gain/loss tracking' },
-          { icon: Building2,   label: 'Real Estate',           desc: 'Property — track purchase price and current estimated market value' },
-        ],
-      },
-      {
-        heading: 'Adding an Investment',
-        type: 'steps',
-        items: [
-          'Click "Add Investment" and select the investment type from the dropdown',
-          'Enter the investment name (e.g., "DBBL FDR — 6 months" or "Grameen Phone Stock")',
-          'Enter the amount invested and the purchase/start date',
-          'Enter the current value or expected return — the system calculates gain/loss amount and percentage',
-          'Set the maturity date if applicable (FDR, DPS, Bonds, Savings Certificates)',
-          'Add notes for broker details, account numbers, or terms',
-          'Save — the investment appears in the portfolio summary',
-        ],
-      },
-      {
-        heading: 'Portfolio Summary Cards',
-        type: 'list',
-        items: [
-          { icon: TrendingUp,   label: 'Total Invested',   desc: 'Sum of all capital you have put into all investments' },
-          { icon: Coins,        label: 'Current Value',    desc: 'Total current market/maturity value of your entire portfolio' },
-          { icon: TrendingUp,   label: 'Total Return',     desc: 'Overall gain or loss in both Taka amount and percentage' },
-          { icon: BarChart3,    label: 'Allocation Chart', desc: 'Portfolio breakdown by investment type — see your diversification at a glance' },
-        ],
-      },
-      {
-        heading: 'Investment Statuses',
-        type: 'list',
-        items: [
-          { icon: TrendingUp,   label: 'Active',   desc: 'Currently running investment — being tracked for returns' },
-          { icon: CheckCircle2, label: 'Matured',  desc: 'Reached maturity date — consider withdrawing or renewing' },
-          { icon: Clock,        label: 'Sold',     desc: 'You exited the position — return is locked in and historical record is preserved' },
-        ],
-      },
-      {
-        heading: 'Pro Tips',
-        type: 'tips',
-        items: [
-          'Update the current value of Stocks and Crypto regularly for accurate return calculations — prices change daily',
-          'Filter to Active status and sort by maturity date to spot upcoming FDR/DPS maturities before they happen',
-          'Investment values do not automatically feed into your account balances — record a transaction when you actually withdraw or reinvest returns',
-          'Click any investment to open its detail page with full transaction history and return breakdown',
-          'Use the search box to quickly find a specific investment by name in a large portfolio',
-        ],
-      },
-    ],
-  },
-
-  {
-    id: 'zakat',
-    icon: Star,
-    color: 'indigo',
-    title: 'Zakat',
-    subtitle: 'Automated Islamic obligation tracking',
-    summary: 'The Zakat module fully automates the Hawl cycle — detecting when wealth crosses Nisab, tracking the full Hijri lunar year, calculating 2.5%, and storing complete cycle and payment history.',
-    sections: [
-      {
-        heading: 'Key Islamic Concepts Explained',
-        type: 'list',
-        items: [
-          { icon: Coins, label: 'Nisab',  desc: 'Minimum wealth threshold. Set to 52.5 Tola (612.36 grams) of silver. If your total wealth stays at or above this for one full Hijri year, Zakat is due.' },
-          { icon: Moon,  label: 'Hawl',   desc: 'One complete Hijri lunar year (approximately 354 days) of continuous ownership above Nisab. The Hawl must complete before Zakat becomes obligatory.' },
-          { icon: Star,  label: 'Zakat Rate', desc: '2.5% of your total eligible wealth, calculated once per completed Hawl when both conditions (Nisab and Hawl) are simultaneously met.' },
-        ],
-      },
-      {
-        heading: 'Step 1 — Set Your Nisab Threshold',
-        type: 'steps',
-        items: [
-          'Click the "Settings" button on the Zakat page',
-          'Choose your silver price unit: per Gram or per Vori/Tola',
-          'Enter the current market price of silver in Taka',
-          'The system auto-calculates: Nisab = price × 612.36 grams (or × 52.5 Vori)',
-          'Save — update this whenever you check silver prices for accuracy',
-        ],
-      },
-      {
-        heading: 'Step 2 — The Automatic Hawl Cycle',
-        type: 'flow',
-        items: [
-          { label: 'Nisab Crossed — Cycle Starts', desc: 'System detects Total Wealth (sum of all accounts) ≥ Nisab. Cycle start date recorded in both Hijri and Gregorian calendars automatically.' },
-          { label: 'Monitoring Period (354 days)', desc: 'Your wealth is monitored. It can rise and fall freely — no Zakat obligation is triggered mid-cycle regardless of fluctuations.' },
-          { label: 'Hawl Assessment at Year End',  desc: 'After exactly one Hijri year: if wealth is still ≥ Nisab → Zakat is due (2.5% calculated). If wealth fell below Nisab → cycle ends, no obligation.' },
-          { label: 'Payment and Renewal',          desc: 'Record your Zakat payment (full or instalments). When fully paid, if wealth is still above Nisab, a new cycle begins automatically from the payment date.' },
-        ],
-      },
-      {
-        heading: 'Zakat Status Indicators',
-        type: 'list',
-        items: [
-          { icon: AlertCircle,  label: 'Not Mandatory',           desc: 'Total wealth is currently below Nisab threshold. No action needed — the system will alert you when this changes.' },
-          { icon: Clock,        label: 'Monitoring Cycle Active', desc: 'Wealth is above Nisab. Hawl is running. Shows start date (Hijri and Gregorian), days elapsed, and days remaining.' },
-          { icon: Star,         label: 'Zakat Due',               desc: 'One full Hijri year completed with wealth above Nisab. Shows the calculated 2.5% amount. Payment required.' },
-        ],
-      },
-      {
-        heading: 'Recording Zakat Payment',
-        type: 'steps',
-        items: [
-          'When status shows "Zakat Due", the calculated amount (2.5% of wealth) is displayed prominently',
-          'Click "Record Payment" to log how much you paid and on which date',
-          'You can record partial payments — each reduces the outstanding Zakat amount',
-          'When the full amount is paid, the cycle closes automatically',
-          'If wealth remains above Nisab after payment, a new Hawl cycle begins immediately from the payment date',
-          'All past cycles and payments are stored permanently in Cycle History',
-        ],
-      },
-      {
-        heading: 'Pro Tips',
-        type: 'tips',
-        items: [
-          'Update your silver price setting monthly — an outdated Nisab figure can cause incorrect cycle triggers',
-          'Total wealth for Zakat = ALL account balances combined (Cash + Bank + bKash + Gold + Silver)',
-          'Consult a qualified Islamic scholar to determine which assets are zakatable in your specific situation',
-          'The Hijri calendar is used internally for all date calculations — Gregorian equivalents are always displayed alongside',
-          'Keep Gold and Silver accounts updated — they significantly affect total wealth and Nisab comparison',
-          'Zakat on business goods, receivables, and other assets may also apply — discuss with a scholar',
-        ],
-      },
-    ],
-  },
-
-  {
-    id: 'analytics',
-    icon: BarChart3,
-    color: 'blue',
-    title: 'Analytics',
-    subtitle: 'Visual insights into your money',
-    summary: 'Analytics transforms raw transactions into charts and summaries — income vs. expense comparisons, category breakdowns, and net saving trends over any time period.',
-    sections: [
-      {
-        heading: 'Time Range Options',
-        type: 'list',
-        items: [
-          { icon: Clock,      label: 'This Week',    desc: 'Current week (Saturday to Friday) — daily bar chart showing each day\'s income and expense' },
-          { icon: Calendar,   label: 'This Month',   desc: 'Current calendar month — daily trend chart showing spending pattern across the month' },
-          { icon: TrendingUp, label: 'This Year',    desc: 'All 12 months of the current year — monthly income vs. expense side by side' },
-          { icon: Filter,     label: 'Custom Range', desc: 'Pick any start and end date — great for comparing specific periods like Ramadan vs. regular months' },
-        ],
-      },
-      {
-        heading: 'Charts and What They Show',
-        type: 'list',
-        items: [
-          { icon: BarChart3,  label: 'Income vs. Expense Bar Chart', desc: 'Side-by-side bars across time periods. Immediately shows which months you saved and which you overspent.' },
-          { icon: TrendingUp, label: 'Net Savings Line Chart',       desc: 'Trend line of income minus expenses over time. Upward = saving, downward = deficit.' },
-          { icon: Target,     label: 'Category Expense Pie Chart',   desc: 'What percentage of total spending went to each category. Find your biggest cost drivers instantly.' },
-        ],
-      },
-      {
-        heading: 'How to Use Analytics Effectively',
-        type: 'steps',
-        items: [
-          'Start with the Yearly view to understand your overall pattern — are you net positive or running a deficit?',
-          'Zoom into a specific month where you overspent using the Monthly view — find which week caused it',
-          'Open the Category Pie Chart to identify your biggest expense category — typically food, transport, or shopping',
-          'Use Custom Range to compare two specific periods (e.g., before and after a lifestyle change)',
-          'Use insights from Analytics to set realistic Budget limits in the Budgets section',
-        ],
-      },
-      {
-        heading: 'Transfers Are Always Excluded',
-        type: 'callout',
-        variant: 'info',
-        content: 'Transfers between your own accounts never appear in Analytics income or expense figures. Only real income (money from outside your accounts) and real expenses (money leaving your control permanently) are charted — keeping the numbers truthful and useful.',
-      },
-      {
-        heading: 'Pro Tips',
-        type: 'tips',
-        items: [
-          'Analytics is only as good as your transaction recording — record consistently for meaningful charts',
-          'More specific categories produce more useful pie charts — "Dining Out" is more actionable than just "Food"',
-          'Monthly trend showing expense spikes? Use the filter to see exactly which category caused it',
-          'Share the "This Year" view summary with yourself at year-end as a personal financial review',
-        ],
-      },
-    ],
-  },
-
-  {
-    id: 'recurring',
-    icon: Repeat,
-    color: 'cyan',
-    title: 'Recurring Transactions',
-    subtitle: 'Automate fixed income and expenses',
-    summary: 'Recurring Transactions auto-generates any fixed, repeating payment — salary, rent, subscriptions, utility bills — so you never forget to record them manually.',
-    sections: [
-      {
-        heading: 'What Recurring Does',
-        type: 'text',
-        content: 'Instead of manually entering the same transaction every month, you create one Recurring rule. On each due date, the system generates the transaction automatically — updating your account balance and showing in the transaction list exactly like a manual entry. Nothing is missed.',
-      },
-      {
-        heading: 'Frequency Options',
-        type: 'list',
-        items: [
-          { icon: Calendar, label: 'Daily',   desc: 'Runs every day — e.g., a daily transport allowance or daily savings deposit' },
-          { icon: Calendar, label: 'Weekly',  desc: 'Runs on a chosen day each week — e.g., weekly pocket money' },
-          { icon: Calendar, label: 'Monthly', desc: 'Runs on a chosen date each month — ideal for rent, salary, EMI payments' },
-          { icon: Calendar, label: 'Yearly',  desc: 'Annual transactions — insurance premiums, domain renewals, memberships' },
-        ],
-      },
-      {
-        heading: 'Creating a Recurring Transaction',
-        type: 'steps',
-        items: [
-          'Click "Add Recurring" and give it a descriptive name (e.g., "Monthly House Rent")',
-          'Choose type: Income or Expense',
-          'Enter the fixed amount',
-          'Select the account and category',
-          'Set the frequency and the specific day (day of week for weekly, date of month for monthly)',
-          'Set the start date — the first auto-execution date is shown immediately',
-          'Optionally set an end date if it will stop (e.g., loan EMI ending in 18 months)',
-          'Choose approval mode: Auto (fires silently) or Manual Approval (you confirm each time)',
-          'Save — the recurring entry is live from the next due date',
-        ],
-      },
-      {
-        heading: 'Auto vs. Manual Approval Mode',
-        type: 'callout',
-        variant: 'info',
-        content: 'Auto mode: transaction executes silently on the due date — ideal for truly fixed amounts like rent that never change. Manual Approval mode: creates a Pending entry on the due date that you must approve or skip — ideal for bills that vary slightly each month like electricity or gas.',
-      },
-      {
-        heading: 'Managing Recurring Entries',
-        type: 'list',
-        items: [
-          { icon: Clock,     label: 'Pause',   desc: 'Suspend a recurring temporarily — stops executing but rule is preserved. Resume any time.' },
-          { icon: RefreshCw, label: 'Resume',  desc: 'Reactivate a paused recurring — next execution date recalculates from today forward' },
-          { icon: Edit2,     label: 'Edit',    desc: 'Change amount, account, category, frequency, or schedule at any time' },
-          { icon: Trash2,    label: 'Delete',  desc: 'Permanently removes the rule — past transactions it already created remain in history' },
-        ],
-      },
-      {
-        heading: 'Pending Approvals',
-        type: 'text',
-        content: 'Recurring entries in Manual Approval mode generate Pending logs. These appear with a notification count in the Recurring menu. Open the Pending section to approve (execute the transaction) or skip (dismiss without recording) each one.',
-      },
-      {
-        heading: 'Pro Tips',
-        type: 'tips',
-        items: [
-          'The system processes due recurring transactions when you open the Recurring page — visit at least weekly',
-          'If the app is closed for several days, all overdue recurring entries are queued and processed together when you return',
-          'Use Manual Approval for utility bills so you can enter the actual amount each month before approving',
-          'Pending approval count shows as a badge on the Recurring menu item — you will not miss them',
-          'Set an end date for EMI recurrings so they stop automatically — no manual deletion needed',
-        ],
-      },
-    ],
-  },
-
-  {
-    id: 'shopping',
-    icon: ShoppingBag,
-    color: 'pink',
-    title: 'Shopping List',
-    subtitle: 'Plan purchases before you spend',
-    summary: 'Create smart shopping lists with item prices before going to the market. Track what you buy, compare estimated vs. actual costs, and stay within your budget every time.',
-    sections: [
-      {
-        heading: 'How Shopping Lists Work',
-        type: 'text',
-        content: 'You create a Cart (e.g., "Weekly Groceries" or "Eid Shopping 2026"), then add individual items with names, quantities, and estimated prices. As you shop, tick items off. The app shows your estimated total vs. what you have purchased so far — a live spending tracker in your pocket at the market.',
-      },
-      {
-        heading: 'Creating a New Cart',
-        type: 'steps',
-        items: [
-          'Click "New List" on the Shopping List page',
-          'Give the cart a clear name (e.g., "Monthly Market Run" or "Office Supplies")',
-          'Add an optional description or purpose',
-          'Save — the cart appears on the Shopping List dashboard',
-          'Click the cart to open it and start adding items',
-        ],
-      },
-      {
-        heading: 'Adding Items and Shopping',
-        type: 'steps',
-        items: [
-          'Inside the cart, click "Add Item" and enter the item name',
-          'Set the quantity and estimated price per unit',
-          'The cart shows a running estimated total of all items',
-          'As you shop, tick each item off — it moves to the Purchased section',
-          'The purchased subtotal updates live — you always know where you stand',
-          'When done, note the actual receipt total vs. estimated and record it as an Expense transaction',
-        ],
-      },
-      {
-        heading: 'Cart Statuses',
-        type: 'list',
-        items: [
-          { icon: Clock,        label: 'Pending',   desc: 'Shopping not yet complete — items remain in the To Buy section' },
-          { icon: CheckCircle2, label: 'Completed', desc: 'All items have been ticked off — shopping done for this cart' },
-        ],
-      },
-      {
-        heading: 'Pro Tips',
-        type: 'tips',
-        items: [
-          'Create separate carts for different trip types — weekly groceries, Eid shopping, household supplies, electronics',
-          'Add estimated prices before going to the market to check if the total fits your budget before you leave home',
-          'Keep a rolling "Next Month" cart and add items throughout the month as you remember them',
-          'Compare the estimated cart total with your actual receipt total — a great habit for improving your budgeting accuracy over time',
-          'Completed carts are archived — refer back to them to see what you spent on previous shopping trips',
-        ],
-      },
-    ],
-  },
-
-  {
-    id: 'tax',
-    icon: FileText,
-    color: 'slate',
-    title: 'Tax File',
-    subtitle: 'Organise income for annual returns',
-    summary: 'Tax File organises your income transactions by fiscal year and maps them to official tax heads — giving you a structured, ready-to-use summary for your annual income tax return.',
-    sections: [
-      {
-        heading: 'Who Needs the Tax File Feature',
-        type: 'text',
-        content: 'If you file an annual income tax return in Bangladesh, Tax File does the preparation work. It reads your income transactions, groups them by fiscal year (July 1 to June 30), maps them to the correct tax income heads, and produces a clean summary — saving hours of manual data gathering.',
-      },
-      {
-        heading: 'Step 1 — Set Up Category Mappings (Do This First)',
-        type: 'steps',
-        items: [
-          'Go to Tax → click "Setup Categories" or "Category Mapping"',
-          'Your existing income categories appear in the list',
-          'Map each category to the correct official tax head',
-          'Example: "Salary" → Salaries; "Freelance" → Business/Profession Income; "Rental" → House Property Income',
-          'Save mappings — they apply permanently to all tax year calculations going forward',
-        ],
-      },
-      {
-        heading: 'Step 2 — Create a Tax Year',
-        type: 'steps',
-        items: [
-          'Click "Create Tax Year" — the current fiscal year is pre-selected',
-          'The system pulls all income transactions whose categories are mapped to tax heads',
-          'Income is automatically grouped by tax head with running totals',
-          'A countdown shows days remaining until the November 30 filing deadline',
-          'Click into the tax year to review the complete breakdown by category and month',
-        ],
-      },
-      {
-        heading: 'Tax Year Status',
-        type: 'list',
-        items: [
-          { icon: Clock,        label: 'In Progress', desc: 'Current fiscal year — income continues accumulating. Deadline: November 30.' },
-          { icon: AlertCircle,  label: 'Due Soon',    desc: 'Less than 30 days to the filing deadline — time to act' },
-          { icon: CheckCircle2, label: 'Filed',       desc: 'You have marked this tax year as submitted — stored as a permanent reference' },
-        ],
-      },
-      {
-        heading: 'Export for Your Accountant',
-        type: 'callout',
-        variant: 'info',
-        content: 'Each tax year can be exported as a structured income summary. Use it as a reference when filling your return form, or share it directly with your tax consultant or CA to save them hours of work extracting figures from raw bank statements.',
-      },
-      {
-        heading: 'Pro Tips',
-        type: 'tips',
-        items: [
-          'Set up category mappings at the start of the fiscal year (July) — the system tracks everything automatically from that point',
-          'Only Income-type transactions feed the Tax File — Expense transactions are not included',
-          'Bangladesh fiscal year is July 1 to June 30 — Nisab Wallet uses this automatically, no configuration needed',
-          'Even if you use a tax consultant, Tax File saves significant time in organising and presenting your income data',
-          'Unmapped income categories will not appear in Tax File totals — check mappings if figures look incomplete',
-        ],
-      },
-    ],
-  },
-];
-
-// ─── Color styles ─────────────────────────────────────────────────────────────
+// ─── Color palette ────────────────────────────────────────────────────────────
 const C = {
-  blue:    { bg: 'bg-blue-50',    border: 'border-blue-200',    icon: 'bg-blue-100 text-blue-700',    active: 'bg-blue-700 text-white',    dot: 'bg-blue-600'    },
-  violet:  { bg: 'bg-violet-50',  border: 'border-violet-200',  icon: 'bg-violet-100 text-violet-700',  active: 'bg-violet-700 text-white',  dot: 'bg-violet-600'  },
-  emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', icon: 'bg-emerald-100 text-emerald-700', active: 'bg-emerald-700 text-white', dot: 'bg-emerald-600' },
-  cyan:    { bg: 'bg-cyan-50',    border: 'border-cyan-200',    icon: 'bg-cyan-100 text-cyan-700',    active: 'bg-cyan-700 text-white',    dot: 'bg-cyan-600'    },
-  teal:    { bg: 'bg-teal-50',    border: 'border-teal-200',    icon: 'bg-teal-100 text-teal-700',    active: 'bg-teal-700 text-white',    dot: 'bg-teal-600'    },
-  orange:  { bg: 'bg-orange-50',  border: 'border-orange-200',  icon: 'bg-orange-100 text-orange-700',  active: 'bg-orange-600 text-white',  dot: 'bg-orange-500'  },
-  rose:    { bg: 'bg-rose-50',    border: 'border-rose-200',    icon: 'bg-rose-100 text-rose-700',    active: 'bg-rose-700 text-white',    dot: 'bg-rose-600'    },
-  amber:   { bg: 'bg-amber-50',   border: 'border-amber-200',   icon: 'bg-amber-100 text-amber-700',   active: 'bg-amber-600 text-white',   dot: 'bg-amber-500'   },
-  green:   { bg: 'bg-green-50',   border: 'border-green-200',   icon: 'bg-green-100 text-green-700',   active: 'bg-green-700 text-white',   dot: 'bg-green-600'   },
-  indigo:  { bg: 'bg-indigo-50',  border: 'border-indigo-200',  icon: 'bg-indigo-100 text-indigo-700',  active: 'bg-indigo-700 text-white',  dot: 'bg-indigo-600'  },
-  pink:    { bg: 'bg-pink-50',    border: 'border-pink-200',    icon: 'bg-pink-100 text-pink-700',    active: 'bg-pink-700 text-white',    dot: 'bg-pink-600'    },
-  slate:   { bg: 'bg-slate-50',   border: 'border-slate-200',   icon: 'bg-slate-100 text-slate-700',   active: 'bg-slate-700 text-white',   dot: 'bg-slate-600'   },
+  blue:    { bg: 'bg-blue-50',    border: 'border-blue-200',    icon: 'bg-blue-100 text-blue-700',     active: 'bg-blue-700 text-white'    },
+  violet:  { bg: 'bg-violet-50',  border: 'border-violet-200',  icon: 'bg-violet-100 text-violet-700', active: 'bg-violet-700 text-white'  },
+  emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', icon: 'bg-emerald-100 text-emerald-700',active:'bg-emerald-700 text-white' },
+  cyan:    { bg: 'bg-cyan-50',    border: 'border-cyan-200',    icon: 'bg-cyan-100 text-cyan-700',     active: 'bg-cyan-700 text-white'    },
+  teal:    { bg: 'bg-teal-50',    border: 'border-teal-200',    icon: 'bg-teal-100 text-teal-700',     active: 'bg-teal-700 text-white'    },
+  orange:  { bg: 'bg-orange-50',  border: 'border-orange-200',  icon: 'bg-orange-100 text-orange-700', active: 'bg-orange-600 text-white'  },
+  rose:    { bg: 'bg-rose-50',    border: 'border-rose-200',    icon: 'bg-rose-100 text-rose-700',     active: 'bg-rose-700 text-white'    },
+  amber:   { bg: 'bg-amber-50',   border: 'border-amber-200',   icon: 'bg-amber-100 text-amber-700',   active: 'bg-amber-600 text-white'   },
+  green:   { bg: 'bg-green-50',   border: 'border-green-200',   icon: 'bg-green-100 text-green-700',   active: 'bg-green-700 text-white'   },
+  indigo:  { bg: 'bg-indigo-50',  border: 'border-indigo-200',  icon: 'bg-indigo-100 text-indigo-700', active: 'bg-indigo-700 text-white'  },
+  pink:    { bg: 'bg-pink-50',    border: 'border-pink-200',    icon: 'bg-pink-100 text-pink-700',     active: 'bg-pink-700 text-white'    },
+  slate:   { bg: 'bg-slate-50',   border: 'border-slate-200',   icon: 'bg-slate-100 text-slate-700',   active: 'bg-slate-700 text-white'   },
 };
+
+// ─── Shared mockup browser chrome wrapper ─────────────────────────────────────
+function MockupFrame({ title, children }) {
+  return (
+    <div className="rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+      <div className="bg-gray-100 border-b border-gray-200 px-3 py-2 flex items-center gap-2">
+        <div className="flex gap-1.5">
+          <div className="w-2.5 h-2.5 rounded-full bg-red-400"/>
+          <div className="w-2.5 h-2.5 rounded-full bg-yellow-400"/>
+          <div className="w-2.5 h-2.5 rounded-full bg-green-400"/>
+        </div>
+        <span className="text-[10px] text-gray-500 font-medium mx-auto pr-8 truncate">{title}</span>
+      </div>
+      <div className="p-3 bg-gray-50">{children}</div>
+    </div>
+  );
+}
+
+// ─── Accounts page mockup ─────────────────────────────────────────────────────
+function AccountsMockup() {
+  return (
+    <MockupFrame title="Accounts — /dashboard/accounts">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <div className="text-sm font-semibold text-gray-900">Accounts</div>
+          <div className="text-[10px] text-gray-500">Manage your financial accounts</div>
+        </div>
+        <div className="flex gap-1.5">
+          <div className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-medium">
+            <Download size={10}/> Load Defaults
+          </div>
+          <div className="flex items-center gap-1 px-2.5 py-1.5 bg-gray-900 text-white rounded-lg text-[10px] font-medium">
+            <Plus size={10}/> Add Account
+          </div>
+        </div>
+      </div>
+      <div className="bg-gradient-to-br from-gray-900 to-gray-700 rounded-xl p-3 text-white mb-3">
+        <div className="text-[10px] text-gray-300 mb-0.5">Total Balance</div>
+        <div className="text-xl font-bold">৳1,25,000</div>
+        <div className="text-[10px] text-gray-300 mt-0.5">Across 4 accounts</div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {[
+          { name: 'Cash', type: 'Cash', bal: '25,000', Icon: Wallet, hasGoal: false },
+          { name: 'DBBL Savings', type: 'Bank', bal: '80,000', Icon: Building2, hasGoal: false },
+          { name: 'bKash', type: 'Mobile Banking', bal: '5,000', Icon: Smartphone, hasGoal: true },
+          { name: 'Gold', type: 'Gold', bal: '15,000', Icon: Coins, hasGoal: false },
+        ].map((acc, i) => (
+          <div key={i} className="bg-white rounded-lg border border-gray-200 p-2.5 relative">
+            {i === 1 && (
+              <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full text-[8px] font-medium flex items-center gap-0.5">
+                <Sparkles size={7}/> Default
+              </div>
+            )}
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-7 h-7 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <acc.Icon size={13} className="text-gray-700"/>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-semibold text-gray-900 truncate">{acc.name}</div>
+                <div className="text-[9px] text-gray-500">{acc.type}</div>
+              </div>
+              <div className="flex gap-0.5">
+                <div className="p-1 rounded"><Edit2 size={9} className="text-gray-400"/></div>
+                <div className="p-1 rounded"><Trash2 size={9} className="text-gray-400"/></div>
+              </div>
+            </div>
+            <div className="text-base font-bold text-gray-900">৳{acc.bal}</div>
+            {acc.hasGoal && (
+              <div className="mt-1.5 pt-1.5 border-t border-gray-100">
+                <div className="flex justify-between text-[9px] mb-0.5">
+                  <span className="text-green-600 font-medium">Available to Spend</span>
+                  <span className="font-bold">৳2,000</span>
+                </div>
+                <div className="flex justify-between text-[9px]">
+                  <span className="text-orange-500 font-medium">Allocated to Goals</span>
+                  <span className="font-bold">৳3,000</span>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </MockupFrame>
+  );
+}
+
+// ─── Transactions list mockup ─────────────────────────────────────────────────
+function TransactionsMockup() {
+  return (
+    <MockupFrame title="Transactions — /dashboard/transactions">
+      <div className="grid grid-cols-4 gap-1.5 mb-3">
+        {[
+          { label: 'Total Balance', val: '৳1,25,000', color: 'text-gray-900', Icon: Wallet },
+          { label: 'Income', val: '+৳45,000', color: 'text-green-600', Icon: ArrowUpCircle },
+          { label: 'Expense', val: '-৳18,500', color: 'text-red-600', Icon: ArrowDownCircle },
+          { label: 'Net', val: '+৳26,500', color: 'text-green-600', Icon: TrendingUp },
+        ].map((s, i) => (
+          <div key={i} className="bg-white rounded-lg border border-gray-200 p-2">
+            <div className="flex items-center gap-1 mb-1">
+              <div className="text-[9px] font-medium text-gray-500 uppercase">{s.label}</div>
+              <s.Icon size={9} className={s.color}/>
+            </div>
+            <div className={`text-sm font-bold ${s.color}`}>{s.val}</div>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-1.5 mb-3 flex-wrap">
+        {['All', 'Income', 'Expense'].map((f, i) => (
+          <div key={i} className={`px-2 py-1 rounded-lg text-[10px] font-medium border ${i===0?'bg-gray-900 text-white border-gray-900':'bg-white text-gray-600 border-gray-200'}`}>{f}</div>
+        ))}
+        <div className="px-2 py-1 rounded-lg text-[10px] border border-gray-200 bg-white text-gray-600">This Month ▾</div>
+        <div className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] border border-gray-200 bg-white text-gray-400">
+          <Search size={8}/> Search...
+        </div>
+      </div>
+      <div className="bg-gray-100 rounded px-2 py-1.5 flex justify-between items-center mb-1.5 border border-gray-200">
+        <span className="text-[10px] font-semibold text-gray-700">Today, 10 Mar 2026</span>
+        <div className="flex gap-2 text-[9px]">
+          <span className="text-green-600 font-medium">+৳45,000</span>
+          <span className="text-red-600 font-medium">-৳1,200</span>
+        </div>
+      </div>
+      {[
+        { cat: 'Salary', acc: 'DBBL Savings', amt: '+৳45,000', bg: 'bg-green-50', dot: '#10B981', Icon: ArrowUpCircle, ic: 'text-green-600', ac: 'text-green-600', isT: false },
+        { cat: 'Foods', acc: 'Cash', amt: '-৳1,200', bg: 'bg-red-50', dot: '#EC4899', Icon: ArrowDownCircle, ic: 'text-red-600', ac: 'text-red-600', isT: false },
+        { cat: 'bKash → Cash', acc: 'Transfer', amt: '৳3,000', bg: 'bg-blue-50', dot: '#3B82F6', Icon: ArrowRightLeft, ic: 'text-blue-500', ac: 'text-blue-600', isT: true },
+      ].map((tx, i) => (
+        <div key={i} className={`flex items-center gap-2 px-2 py-2 rounded-lg ${tx.bg} mb-1`}>
+          <div className="w-6 h-6 rounded-full flex items-center justify-center bg-white shadow-sm flex-shrink-0">
+            <tx.Icon size={12} className={tx.ic}/>
+          </div>
+          <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: tx.dot }}/>
+          <div className="flex-1 min-w-0">
+            <div className="text-[11px] font-semibold text-gray-900 flex items-center gap-1">
+              {tx.cat}
+              {tx.isT && <ArrowRightLeft size={9} className="text-blue-400"/>}
+            </div>
+            <div className="text-[9px] text-gray-500">{tx.acc}</div>
+          </div>
+          <div className={`text-xs font-bold ${tx.ac}`}>{tx.amt}</div>
+          <div className="flex gap-0.5">
+            <div className="p-0.5"><Edit2 size={9} className="text-gray-300"/></div>
+            <div className="p-0.5"><Trash2 size={9} className="text-gray-300"/></div>
+          </div>
+        </div>
+      ))}
+    </MockupFrame>
+  );
+}
+
+// ─── Transaction modal mockup (tabbed) ───────────────────────────────────────
+function TransactionModalMockup({ tab = 'expense' }) {
+  const cfg = {
+    income:   { bg: 'bg-green-50',  border: 'border-green-100',  text: 'text-green-600',  btn: 'bg-green-600',  tabBg: 'bg-green-600 text-white'  },
+    expense:  { bg: 'bg-red-50',    border: 'border-red-100',    text: 'text-red-600',    btn: 'bg-red-600',    tabBg: 'bg-red-600 text-white'    },
+    transfer: { bg: 'bg-blue-50',   border: 'border-blue-100',   text: 'text-blue-600',   btn: 'bg-blue-600',   tabBg: 'bg-blue-600 text-white'   },
+  };
+  const c = cfg[tab];
+  const isT = tab === 'transfer';
+  return (
+    <MockupFrame title={`Add Transaction Modal — ${tab} tab`}>
+      <div className="bg-white rounded-xl border border-gray-200 max-w-xs mx-auto p-3">
+        <div className="grid grid-cols-3 gap-1 bg-gray-100 rounded-lg p-0.5 mb-3">
+          {['income','expense','transfer'].map(t => (
+            <button key={t} className={`py-1.5 rounded-md text-[10px] font-bold uppercase flex items-center justify-center gap-0.5 ${tab===t ? c.tabBg : 'text-gray-500'}`}>
+              {t==='income' && <TrendingUp size={9}/>}
+              {t==='expense' && <TrendingDown size={9}/>}
+              {t==='transfer' && <ArrowRightLeft size={9}/>}
+              {t}
+            </button>
+          ))}
+        </div>
+        {isT ? (
+          <>
+            <div className={`text-[10px] font-bold uppercase ${c.text} mb-1`}>Amount (৳)</div>
+            <div className={`w-full rounded-lg p-2.5 text-xl font-bold text-center ${c.bg} ${c.text} border-2 ${c.border} mb-3`}>3,000</div>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <div>
+                <div className={`text-[9px] font-bold uppercase ${c.text} mb-1`}>From Account</div>
+                <div className={`${c.bg} border ${c.border} rounded-lg p-2 text-[10px] font-bold ${c.text}`}>bKash (৳5,000)</div>
+              </div>
+              <div>
+                <div className={`text-[9px] font-bold uppercase ${c.text} mb-1`}>To Account</div>
+                <div className={`${c.bg} border ${c.border} rounded-lg p-2 text-[10px] font-bold ${c.text}`}>Cash (৳25,000)</div>
+              </div>
+            </div>
+            <div className="mb-3">
+              <div className={`text-[9px] font-bold uppercase ${c.text} mb-1`}>Date</div>
+              <div className={`${c.bg} border ${c.border} rounded-lg p-2 text-[10px] ${c.text}`}>10 Mar 2026</div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className={`text-[10px] font-bold uppercase ${c.text} mb-1`}>Amount (৳)</div>
+            <div className={`w-full rounded-lg p-2.5 text-xl font-bold text-center ${c.bg} ${c.text} border-2 ${c.border} mb-3`}>
+              {tab==='income' ? '45,000' : '1,200'}
+            </div>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <div>
+                <div className={`text-[9px] font-bold uppercase ${c.text} mb-1`}>Account</div>
+                <div className={`${c.bg} border ${c.border} rounded-lg p-2 text-[10px] font-bold ${c.text}`}>
+                  {tab==='income' ? 'DBBL Savings' : 'Cash (Avail: ৳22k)'}
+                </div>
+              </div>
+              <div>
+                <div className={`text-[9px] font-bold uppercase ${c.text} mb-1`}>Category</div>
+                <div className={`${c.bg} border ${c.border} rounded-lg p-2 text-[10px] font-bold ${c.text}`}>
+                  {tab==='income' ? 'Salary' : 'Foods'}
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <div>
+                <div className={`text-[9px] font-bold uppercase ${c.text} mb-1`}>Date</div>
+                <div className={`${c.bg} border ${c.border} rounded-lg p-2 text-[10px] ${c.text}`}>10 Mar 2026</div>
+              </div>
+              <div>
+                <div className={`text-[9px] font-bold uppercase ${c.text} mb-1`}>Note</div>
+                <div className={`${c.bg} border ${c.border} rounded-lg p-2 text-[10px] text-gray-400`}>Optional...</div>
+              </div>
+            </div>
+          </>
+        )}
+        <button className={`w-full py-2.5 text-white rounded-lg text-[11px] font-bold uppercase tracking-wider ${c.btn} flex items-center justify-center gap-1.5`}>
+          {isT ? <ArrowRightLeft size={11}/> : tab==='income' ? <TrendingUp size={11}/> : <TrendingDown size={11}/>}
+          Confirm {isT ? 'Transfer' : tab==='income' ? 'Income' : 'Expense'}
+        </button>
+      </div>
+    </MockupFrame>
+  );
+}
+
+// ─── Categories mockup ────────────────────────────────────────────────────────
+function CategoriesMockup() {
+  const income = [{ name: 'Salary', color: '#10B981' }, { name: 'Bonus', color: '#3B82F6' }, { name: 'Freelance', color: '#8B5CF6' }];
+  const expense = [{ name: 'Foods', color: '#EC4899' }, { name: 'Transport', color: '#EF4444' }, { name: 'Shopping', color: '#8B5CF6' }, { name: 'Healthcare', color: '#06B6D4' }];
+  return (
+    <MockupFrame title="Categories — /dashboard/categories">
+      <div className="flex justify-between items-center mb-2">
+        <div className="text-sm font-semibold text-gray-900">Categories</div>
+        <div className="flex gap-1.5">
+          <div className="px-2 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-medium flex items-center gap-1"><Download size={9}/>Load Defaults</div>
+          <div className="px-2 py-1.5 bg-gray-900 text-white rounded-lg text-[10px] font-medium flex items-center gap-1"><Plus size={9}/>Add Category</div>
+        </div>
+      </div>
+      <div className="bg-white rounded-lg border border-gray-200 p-2.5 mb-2">
+        <div className="flex items-center gap-1.5 mb-2 text-[11px] font-semibold text-gray-900"><Tag size={11} className="text-green-600"/> Income Categories ({income.length})</div>
+        <div className="grid grid-cols-3 gap-1.5">
+          {income.map((cat, i) => (
+            <div key={i} className="flex items-center justify-between p-2 border border-gray-200 rounded-lg">
+              <div className="flex items-center gap-1.5">
+                <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ backgroundColor: cat.color+'20' }}>
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }}/>
+                </div>
+                <span className="text-[10px] font-medium text-gray-900">{cat.name}</span>
+              </div>
+              <div className="flex gap-0.5"><Edit2 size={9} className="text-gray-400"/><Trash2 size={9} className="text-gray-400"/></div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="bg-white rounded-lg border border-gray-200 p-2.5">
+        <div className="flex items-center gap-1.5 mb-2 text-[11px] font-semibold text-gray-900"><Tag size={11} className="text-red-600"/> Expense Categories ({expense.length})</div>
+        <div className="grid grid-cols-2 gap-1.5">
+          {expense.map((cat, i) => (
+            <div key={i} className="flex items-center justify-between p-2 border border-gray-200 rounded-lg">
+              <div className="flex items-center gap-1.5">
+                <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ backgroundColor: cat.color+'20' }}>
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }}/>
+                </div>
+                <span className="text-[10px] font-medium text-gray-900">{cat.name}</span>
+              </div>
+              <div className="flex gap-0.5"><Edit2 size={9} className="text-gray-400"/><Trash2 size={9} className="text-gray-400"/></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </MockupFrame>
+  );
+}
+
+// ─── Zakat mockup ─────────────────────────────────────────────────────────────
+function ZakatMockup() {
+  return (
+    <MockupFrame title="Zakat — /dashboard/zakat">
+      <div className="flex justify-between items-center mb-3">
+        <div className="text-sm font-semibold text-gray-900">Zakat Tracker</div>
+        <div className="flex gap-1.5">
+          <div className="px-2 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-[10px] font-medium flex items-center gap-1"><History size={9}/>History</div>
+          <div className="px-2 py-1.5 bg-gray-900 text-white rounded-lg text-[10px] font-medium flex items-center gap-1"><Settings size={9}/>Settings</div>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <div className="bg-gray-900 text-white rounded-xl p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertCircle size={16} className="text-gray-400"/>
+            <div>
+              <div className="text-[9px] text-gray-400 uppercase font-bold tracking-widest">Status</div>
+              <div className="text-sm font-bold">Not Mandatory</div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="bg-white/10 rounded-lg p-2"><div className="text-[9px] text-gray-400 mb-0.5">Total Wealth</div><div className="text-sm font-bold">৳95,000</div></div>
+            <div className="bg-white/10 rounded-lg p-2"><div className="text-[9px] text-gray-400 mb-0.5">Nisab Threshold</div><div className="text-sm font-bold">৳1,20,000</div></div>
+          </div>
+          <div className="mt-2 text-[10px] text-gray-400">Wealth is ৳25,000 below Nisab. No action needed.</div>
+        </div>
+        <div className="bg-blue-600 text-white rounded-xl p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Clock size={16} className="text-blue-200"/>
+            <div>
+              <div className="text-[9px] text-blue-200 uppercase font-bold tracking-widest">Status</div>
+              <div className="text-sm font-bold">Monitoring Cycle Active</div>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-1.5">
+            <div className="bg-white/15 rounded-lg p-1.5"><div className="text-[9px] text-blue-200 mb-0.5">Total Wealth</div><div className="text-xs font-bold">৳1,45,000</div></div>
+            <div className="bg-white/15 rounded-lg p-1.5"><div className="text-[9px] text-blue-200 mb-0.5">Days Remaining</div><div className="text-xs font-bold">287 days</div></div>
+            <div className="bg-white/15 rounded-lg p-1.5"><div className="text-[9px] text-blue-200 mb-0.5">Cycle Start</div><div className="text-xs font-bold">12 Sha'ban</div></div>
+          </div>
+          <div className="mt-2 text-[10px] text-blue-200">Hawl year-end: 12 Sha'ban 1447 (Mar 2026)</div>
+        </div>
+        <div className="bg-red-600 text-white rounded-xl p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Star size={16} className="text-yellow-300"/>
+            <div>
+              <div className="text-[9px] text-red-200 uppercase font-bold tracking-widest">Status</div>
+              <div className="text-sm font-bold">Zakat Due</div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <div className="bg-white/15 rounded-lg p-2"><div className="text-[9px] text-red-200 mb-0.5">Total Wealth</div><div className="text-sm font-bold">৳1,60,000</div></div>
+            <div className="bg-white/15 rounded-lg p-2"><div className="text-[9px] text-red-200 mb-0.5">Zakat Due (2.5%)</div><div className="text-sm font-bold text-yellow-300">৳4,000</div></div>
+          </div>
+          <button className="w-full py-1.5 bg-white text-red-600 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1">
+            <Calculator size={10}/> Record Payment
+          </button>
+        </div>
+      </div>
+    </MockupFrame>
+  );
+}
+
+// ─── Analytics mockup ─────────────────────────────────────────────────────────
+function AnalyticsMockup() {
+  const bars = [
+    { m: 'Oct', i: 60, e: 45 }, { m: 'Nov', i: 72, e: 55 },
+    { m: 'Dec', i: 58, e: 70 }, { m: 'Jan', i: 80, e: 48 },
+    { m: 'Feb', i: 65, e: 52 }, { m: 'Mar', i: 90, e: 40 },
+  ];
+  const pie = [
+    { name: 'Foods', pct: 35, color: '#EC4899' }, { name: 'Transport', pct: 22, color: '#EF4444' },
+    { name: 'Shopping', pct: 18, color: '#8B5CF6' }, { name: 'Healthcare', pct: 15, color: '#06B6D4' },
+    { name: 'Other', pct: 10, color: '#F59E0B' },
+  ];
+  return (
+    <MockupFrame title="Analytics — /dashboard/analytics">
+      <div className="flex gap-1.5 mb-3">
+        {['Week','Month','Year','Custom'].map((r,i) => (
+          <div key={i} className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border ${i===2?'bg-gray-900 text-white border-gray-900':'bg-white text-gray-600 border-gray-200'}`}>{r}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-3 gap-1.5 mb-3">
+        {[{ l:'Total Income',v:'৳5,40,000',c:'text-green-600'},{ l:'Total Expense',v:'৳3,10,000',c:'text-red-600'},{ l:'Net Savings',v:'৳2,30,000',c:'text-green-600'}].map((s,i)=>(
+          <div key={i} className="bg-white rounded-lg border border-gray-200 p-2"><div className="text-[9px] text-gray-500 mb-0.5">{s.l}</div><div className={`text-sm font-bold ${s.c}`}>{s.v}</div></div>
+        ))}
+      </div>
+      <div className="bg-white rounded-lg border border-gray-200 p-2.5 mb-2">
+        <div className="text-[10px] font-semibold text-gray-700 mb-2 flex items-center gap-1"><BarChart3 size={10}/>Income vs Expense (6 months)</div>
+        <div className="flex items-end gap-2 h-16">
+          {bars.map((b,i)=>(
+            <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+              <div className="w-full flex gap-0.5 items-end">
+                <div className="flex-1 bg-emerald-400 rounded-sm" style={{height:`${b.i*0.6}px`}}/>
+                <div className="flex-1 bg-red-400 rounded-sm" style={{height:`${b.e*0.6}px`}}/>
+              </div>
+              <div className="text-[7px] text-gray-400">{b.m}</div>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-3 mt-1">
+          <div className="flex items-center gap-1 text-[9px] text-gray-600"><div className="w-2 h-2 rounded-sm bg-emerald-400"/>Income</div>
+          <div className="flex items-center gap-1 text-[9px] text-gray-600"><div className="w-2 h-2 rounded-sm bg-red-400"/>Expense</div>
+        </div>
+      </div>
+      <div className="bg-white rounded-lg border border-gray-200 p-2.5">
+        <div className="text-[10px] font-semibold text-gray-700 mb-2">Expense by Category (This Year)</div>
+        <div className="flex items-center gap-3">
+          <div className="w-16 h-16 rounded-full flex-shrink-0 relative" style={{background:'conic-gradient(#EC4899 0% 35%, #EF4444 35% 57%, #8B5CF6 57% 75%, #06B6D4 75% 90%, #F59E0B 90% 100%)'}}>
+            <div className="absolute inset-2 bg-white rounded-full"/>
+          </div>
+          <div className="space-y-0.5 flex-1">
+            {pie.map((p,i)=>(
+              <div key={i} className="flex items-center justify-between">
+                <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full" style={{backgroundColor:p.color}}/><span className="text-[9px] text-gray-700">{p.name}</span></div>
+                <span className="text-[9px] font-semibold">{p.pct}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </MockupFrame>
+  );
+}
+
+// ─── Budgets mockup ───────────────────────────────────────────────────────────
+function BudgetsMockup() {
+  const budgets = [
+    { cat: 'Foods', color: '#EC4899', spent: 8500, limit: 10000 },
+    { cat: 'Transport', color: '#EF4444', spent: 4800, limit: 5000 },
+    { cat: 'Shopping', color: '#8B5CF6', spent: 12000, limit: 8000 },
+    { cat: 'Healthcare', color: '#06B6D4', spent: 2000, limit: 6000 },
+  ];
+  return (
+    <MockupFrame title="Budgets — /dashboard/budgets">
+      <div className="flex justify-between items-center mb-3">
+        <div><div className="text-sm font-semibold text-gray-900">Monthly Budgets</div><div className="text-[10px] text-gray-500">March 2026</div></div>
+        <div className="px-2.5 py-1.5 bg-gray-900 text-white rounded-lg text-[10px] font-medium flex items-center gap-1"><CheckCircle2 size={9}/>Save All Budgets</div>
+      </div>
+      <div className="space-y-2">
+        {budgets.map((b, i) => {
+          const pct = Math.min(100, (b.spent / b.limit) * 100);
+          const over = b.spent > b.limit;
+          const warn = pct >= 80 && !over;
+          const barC = over ? '#EF4444' : warn ? '#F59E0B' : '#10B981';
+          return (
+            <div key={i} className="bg-white rounded-lg border border-gray-200 p-2.5">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor:b.color}}/>
+                  <span className="text-[11px] font-semibold text-gray-900">{b.cat}</span>
+                  {over && <span className="px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full text-[8px] font-bold">OVER</span>}
+                  {warn && <span className="px-1.5 py-0.5 bg-amber-100 text-amber-600 rounded-full text-[8px] font-bold">WARNING</span>}
+                </div>
+                <div className="text-right">
+                  <span className={`text-[11px] font-bold ${over?'text-red-600':'text-gray-900'}`}>৳{b.spent.toLocaleString()}</span>
+                  <span className="text-[9px] text-gray-400"> / ৳{b.limit.toLocaleString()}</span>
+                </div>
+              </div>
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full rounded-full" style={{width:`${Math.min(100,pct)}%`,backgroundColor:barC}}/>
+              </div>
+              <div className="flex justify-between mt-1">
+                <span className="text-[8px] text-gray-400">{pct.toFixed(0)}% used</span>
+                {over ? <span className="text-[8px] text-red-500 font-medium">৳{(b.spent-b.limit).toLocaleString()} over</span>
+                      : <span className="text-[8px] text-gray-400">৳{(b.limit-b.spent).toLocaleString()} left</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </MockupFrame>
+  );
+}
+
+// ─── Goals mockup ─────────────────────────────────────────────────────────────
+function GoalsMockup() {
+  return (
+    <MockupFrame title="Goals — /dashboard/goals">
+      <div className="flex justify-between items-center mb-3">
+        <div className="text-sm font-semibold text-gray-900">Financial Goals</div>
+        <div className="px-2.5 py-1.5 bg-gray-900 text-white rounded-lg text-[10px] font-medium flex items-center gap-1"><Plus size={9}/>Add Goal</div>
+      </div>
+      <div className="space-y-2">
+        {[
+          { name:'Emergency Fund', target:100000, current:65000, date:'Dec 2026', color:'#EF4444', done:false },
+          { name:'New Laptop', target:80000, current:80000, date:'Mar 2026', color:'#3B82F6', done:true },
+          { name:'Eid Shopping', target:20000, current:8000, date:'Apr 2026', color:'#10B981', done:false },
+        ].map((g,i)=>{
+          const pct=Math.min(100,(g.current/g.target)*100);
+          return (
+            <div key={i} className={`bg-white rounded-lg border p-2.5 ${g.done?'border-emerald-200 bg-emerald-50/30':'border-gray-200'}`}>
+              <div className="flex items-start justify-between mb-1.5">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-gray-900">{g.name}</span>
+                    {g.done && <CheckCircle2 size={11} className="text-emerald-500"/>}
+                  </div>
+                  <div className="text-[9px] text-gray-500 mt-0.5">Target: {g.date}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-bold text-gray-900">৳{g.current.toLocaleString()}</div>
+                  <div className="text-[9px] text-gray-400">of ৳{g.target.toLocaleString()}</div>
+                </div>
+              </div>
+              <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-1.5">
+                <div className="h-full rounded-full" style={{width:`${pct}%`,backgroundColor:g.done?'#10B981':g.color}}/>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[9px] text-gray-500">{pct.toFixed(0)}% reached</span>
+                {!g.done ? (
+                  <div className="flex gap-1">
+                    <button className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[8px] font-medium">+ Deposit</button>
+                    <button className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-[8px] font-medium">Withdraw</button>
+                  </div>
+                ) : <span className="text-[9px] font-semibold text-emerald-600">Goal Achieved! 🎉</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </MockupFrame>
+  );
+}
+
+// ─── Transfer mockup ──────────────────────────────────────────────────────────
+function TransferMockup() {
+  return (
+    <MockupFrame title="Transfer — /dashboard/transfer">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-white rounded-lg border border-gray-200 p-3">
+          <div className="text-[11px] font-semibold text-gray-900 mb-3">New Transfer</div>
+          {[{ l:'From Account', v:'bKash (৳5,000)' }, { l:'To Account', v:'Cash (৳25,000)' }, { l:'Amount (৳)', v:'3,000' }, { l:'Date', v:'10 Mar 2026' }].map((f,i)=>(
+            <div key={i} className="mb-2">
+              <div className="text-[9px] font-medium text-gray-600 mb-1">{f.l}</div>
+              {i===2 ? (
+                <>
+                  <div className="px-2.5 py-2 bg-gray-50 border border-gray-200 rounded-lg text-[10px] text-gray-700">{f.v}</div>
+                  <div className="text-[8px] text-gray-400 mt-0.5">Available: ৳5,000</div>
+                </>
+              ) : (
+                <>
+                  {i===1 && (
+                    <div className="flex justify-center mb-2">
+                      <div className="w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center">
+                        <ArrowRightLeft size={12} className="text-gray-600"/>
+                      </div>
+                    </div>
+                  )}
+                  <div className="px-2.5 py-2 bg-gray-50 border border-gray-200 rounded-lg text-[10px] text-gray-700">{f.v}</div>
+                </>
+              )}
+            </div>
+          ))}
+          <button className="w-full py-2 bg-gray-900 text-white rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 mt-1">
+            <ArrowRightLeft size={10}/>Transfer Money
+          </button>
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 p-3">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-[11px] font-semibold text-gray-900">Recent Transfers</div>
+            <Clock size={11} className="text-gray-400"/>
+          </div>
+          <div className="space-y-2">
+            {[{ from:'bKash',to:'Cash',amt:'৳3,000',date:'10 Mar'},{ from:'DBBL',to:'bKash',amt:'৳10,000',date:'5 Mar'},{ from:'Cash',to:'DBBL',amt:'৳5,000',date:'28 Feb'}].map((t,i)=>(
+              <div key={i} className="border border-gray-100 rounded-lg p-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-6 h-6 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <ArrowRightLeft size={10} className="text-blue-600"/>
+                    </div>
+                    <div className="flex items-center gap-1 text-[10px] font-medium text-gray-900">
+                      {t.from}<ChevronRight size={8} className="text-gray-400"/>{t.to}
+                    </div>
+                  </div>
+                  <div className="text-[11px] font-bold text-gray-900">{t.amt}</div>
+                </div>
+                <div className="text-[8px] text-gray-400 mt-0.5 ml-7">{t.date}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </MockupFrame>
+  );
+}
+
+// ─── Loans mockup ─────────────────────────────────────────────────────────────
+function LoansMockup() {
+  return (
+    <MockupFrame title="Loans — /dashboard/loans">
+      <div className="flex justify-between items-center mb-2">
+        <div className="text-sm font-semibold text-gray-900">Loans</div>
+        <div className="px-2.5 py-1.5 bg-gray-900 text-white rounded-lg text-[10px] font-medium flex items-center gap-1"><Plus size={9}/>Add Loan</div>
+      </div>
+      <div className="grid grid-cols-3 gap-1.5 mb-3">
+        {[{ l:'Total Borrowed',v:'৳2,00,000',c:'text-gray-900'},{ l:'Outstanding',v:'৳1,50,000',c:'text-red-600'},{ l:'Repaid',v:'৳50,000',c:'text-green-600'}].map((s,i)=>(
+          <div key={i} className="bg-white rounded-lg border border-gray-200 p-2"><div className="text-[9px] text-gray-500 mb-0.5">{s.l}</div><div className={`text-xs font-bold ${s.c}`}>{s.v}</div></div>
+        ))}
+      </div>
+      <div className="space-y-2">
+        {[
+          { lender:'Dutch-Bangla Bank', type:'Conventional', principal:150000, outstanding:120000, overdue:false },
+          { lender:'Uncle Karim', type:'Qard Hasan', principal:50000, outstanding:30000, overdue:true },
+        ].map((loan,i)=>{
+          const paid=((loan.principal-loan.outstanding)/loan.principal)*100;
+          return (
+            <div key={i} className={`bg-white rounded-lg border p-2.5 ${loan.overdue?'border-red-200 bg-red-50/20':'border-gray-200'}`}>
+              <div className="flex items-start justify-between mb-1.5">
+                <div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] font-bold text-gray-900">{loan.lender}</span>
+                    {loan.overdue && <span className="px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full text-[8px] font-bold">OVERDUE</span>}
+                    <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-medium ${loan.type==='Qard Hasan'?'bg-green-100 text-green-700':'bg-blue-100 text-blue-700'}`}>{loan.type}</span>
+                  </div>
+                  <div className="text-[9px] text-gray-500 mt-0.5">Principal: ৳{loan.principal.toLocaleString()}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-bold text-red-600">৳{loan.outstanding.toLocaleString()}</div>
+                  <div className="text-[9px] text-gray-400">outstanding</div>
+                </div>
+              </div>
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-1.5">
+                <div className="h-full bg-green-400 rounded-full" style={{width:`${paid}%`}}/>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] text-gray-500">{paid.toFixed(0)}% repaid</span>
+                <button className="px-2 py-0.5 bg-gray-900 text-white rounded text-[9px] font-medium">Pay</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </MockupFrame>
+  );
+}
+
+// ─── Recurring mockup ─────────────────────────────────────────────────────────
+function RecurringMockup() {
+  return (
+    <MockupFrame title="Recurring — /dashboard/recurring">
+      <div className="flex justify-between items-center mb-3">
+        <div className="text-sm font-semibold text-gray-900">Recurring Transactions</div>
+        <div className="flex gap-1.5">
+          <div className="px-2 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-medium flex items-center gap-1"><Bell size={9}/> 2 Pending</div>
+          <div className="px-2 py-1.5 bg-gray-900 text-white rounded-lg text-[10px] font-medium flex items-center gap-1"><Plus size={9}/>Add</div>
+        </div>
+      </div>
+      <div className="flex gap-1.5 mb-3">
+        {['All','Active','Paused','Completed'].map((s,i)=>(
+          <div key={i} className={`px-2 py-0.5 rounded-full text-[9px] font-medium border ${i===1?'bg-gray-900 text-white border-gray-900':'bg-white text-gray-500 border-gray-200'}`}>{s}</div>
+        ))}
+      </div>
+      <div className="space-y-2">
+        {[
+          { name:'Monthly Rent', type:'Expense', freq:'Monthly · 1st', amt:'৳15,000', status:'active', mode:'Auto', next:'1 Apr' },
+          { name:'Salary Credit', type:'Income', freq:'Monthly · 5th', amt:'৳45,000', status:'active', mode:'Auto', next:'5 Apr' },
+          { name:'Electricity Bill', type:'Expense', freq:'Monthly · 25th', amt:'৳~800', status:'active', mode:'Manual', next:'25 Mar' },
+          { name:'Netflix', type:'Expense', freq:'Monthly · 15th', amt:'৳400', status:'paused', mode:'Auto', next:'Paused' },
+        ].map((r,i)=>(
+          <div key={i} className={`bg-white rounded-lg border p-2.5 ${r.status==='paused'?'border-gray-100 opacity-60':'border-gray-200'}`}>
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2">
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${r.type==='Income'?'bg-green-100':'bg-red-100'}`}>
+                  {r.type==='Income'?<TrendingUp size={13} className="text-green-600"/>:<TrendingDown size={13} className="text-red-600"/>}
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-gray-900">{r.name}</div>
+                  <div className="text-[9px] text-gray-500">{r.freq}</div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className={`text-sm font-bold ${r.type==='Income'?'text-green-600':'text-red-600'}`}>{r.amt}</div>
+                <div className="flex gap-0.5 justify-end mt-0.5">
+                  {r.mode==='Manual' && <span className="px-1 py-0.5 bg-amber-100 text-amber-700 rounded text-[7px] font-bold">MANUAL</span>}
+                  {r.status==='paused' && <span className="px-1 py-0.5 bg-gray-100 text-gray-500 rounded text-[7px] font-bold">PAUSED</span>}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-between mt-1.5">
+              <span className="text-[9px] text-gray-400">Next: {r.next}</span>
+              <div className="flex gap-1">
+                <button className={`p-1 rounded ${r.status==='active'?'bg-amber-50':'bg-green-50'}`}>
+                  {r.status==='active'?<Clock size={9} className="text-amber-500"/>:<TrendingUp size={9} className="text-green-500"/>}
+                </button>
+                <button className="p-1 bg-gray-50 rounded"><Edit2 size={9} className="text-gray-400"/></button>
+                <button className="p-1 bg-red-50 rounded"><Trash2 size={9} className="text-red-400"/></button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </MockupFrame>
+  );
+}
 
 // ─── Section renderers ────────────────────────────────────────────────────────
 function SectionText({ content }) {
   return <p className="text-sm text-gray-700 leading-relaxed">{content}</p>;
 }
-
 function SectionList({ items }) {
   return (
     <div className="space-y-2">
@@ -949,45 +716,34 @@ function SectionList({ items }) {
         const Icon = item.icon;
         return (
           <div key={i} className="flex items-start gap-3 p-3 bg-white rounded-xl border border-gray-100 hover:border-gray-200 transition-colors">
-            {Icon && (
-              <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Icon size={14} className="text-gray-600" />
-              </div>
-            )}
-            <div>
-              <div className="text-sm font-semibold text-gray-900">{item.label}</div>
-              {item.desc && <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{item.desc}</p>}
-            </div>
+            {Icon && <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"><Icon size={14} className="text-gray-600"/></div>}
+            <div><div className="text-sm font-semibold text-gray-900">{item.label}</div>{item.desc && <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{item.desc}</p>}</div>
           </div>
         );
       })}
     </div>
   );
 }
-
 function SectionSteps({ items }) {
   return (
     <ol className="space-y-3">
       {items.map((step, i) => (
         <li key={i} className="flex items-start gap-3">
-          <span className="flex-shrink-0 w-6 h-6 bg-gray-900 text-white rounded-full text-xs font-bold flex items-center justify-center mt-0.5">
-            {i + 1}
-          </span>
+          <span className="flex-shrink-0 w-6 h-6 bg-gray-900 text-white rounded-full text-xs font-bold flex items-center justify-center mt-0.5">{i+1}</span>
           <p className="text-sm text-gray-700 leading-relaxed pt-0.5">{step}</p>
         </li>
       ))}
     </ol>
   );
 }
-
 function SectionFlow({ items }) {
   return (
-    <div className="space-y-0">
+    <div>
       {items.map((item, i) => (
         <div key={i} className="flex items-start gap-3">
           <div className="flex flex-col items-center self-stretch">
-            <div className="w-3 h-3 bg-blue-600 rounded-full flex-shrink-0 mt-1.5 ring-2 ring-blue-100" />
-            {i < items.length - 1 && <div className="w-0.5 bg-blue-200 flex-1 mt-1" style={{ minHeight: 28 }} />}
+            <div className="w-3 h-3 bg-blue-600 rounded-full flex-shrink-0 mt-1.5 ring-2 ring-blue-100"/>
+            {i < items.length-1 && <div className="w-0.5 bg-blue-200 flex-1 mt-1" style={{minHeight:24}}/>}
           </div>
           <div className="pb-4">
             <div className="text-sm font-semibold text-gray-900">{item.label}</div>
@@ -998,32 +754,46 @@ function SectionFlow({ items }) {
     </div>
   );
 }
-
 function SectionCallout({ content, variant }) {
-  const styles = {
-    info:    { bg: 'bg-blue-50',    border: 'border-blue-200',    icon: <Info size={15} className="text-blue-600 flex-shrink-0 mt-0.5" />,          text: 'text-blue-900'    },
-    warning: { bg: 'bg-amber-50',   border: 'border-amber-200',   icon: <AlertCircle size={15} className="text-amber-600 flex-shrink-0 mt-0.5" />,   text: 'text-amber-900'   },
-    success: { bg: 'bg-emerald-50', border: 'border-emerald-200', icon: <CheckCircle2 size={15} className="text-emerald-600 flex-shrink-0 mt-0.5" />, text: 'text-emerald-900' },
-  };
-  const s = styles[variant] || styles.info;
+  const s = {
+    info:    { bg:'bg-blue-50',    border:'border-blue-200',    icon:<Info size={15} className="text-blue-600 flex-shrink-0 mt-0.5"/>,          text:'text-blue-900'    },
+    warning: { bg:'bg-amber-50',   border:'border-amber-200',   icon:<AlertCircle size={15} className="text-amber-600 flex-shrink-0 mt-0.5"/>,   text:'text-amber-900'   },
+    success: { bg:'bg-emerald-50', border:'border-emerald-200', icon:<CheckCircle2 size={15} className="text-emerald-600 flex-shrink-0 mt-0.5"/>, text:'text-emerald-900' },
+  }[variant] || { bg:'bg-blue-50', border:'border-blue-200', icon:<Info size={15} className="text-blue-600 flex-shrink-0 mt-0.5"/>, text:'text-blue-900' };
   return (
     <div className={`flex items-start gap-2.5 p-3.5 rounded-xl border ${s.bg} ${s.border}`}>
-      {s.icon}
-      <p className={`text-sm leading-relaxed ${s.text}`}>{content}</p>
+      {s.icon}<p className={`text-sm leading-relaxed ${s.text}`}>{content}</p>
     </div>
   );
 }
-
 function SectionTips({ items }) {
   return (
     <ul className="space-y-2.5">
       {items.map((tip, i) => (
         <li key={i} className="flex items-start gap-2.5">
-          <Lightbulb size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+          <Lightbulb size={14} className="text-amber-500 flex-shrink-0 mt-0.5"/>
           <p className="text-sm text-gray-700 leading-relaxed">{tip}</p>
         </li>
       ))}
     </ul>
+  );
+}
+function SectionMockupTabs({ mockups }) {
+  const [active, setActive] = useState(mockups[0]?.tab || 0);
+  const cur = mockups.find(m => m.tab === active) || mockups[0];
+  return (
+    <div>
+      <div className="flex gap-1.5 mb-3">
+        {mockups.map(m => (
+          <button key={m.tab} onClick={() => setActive(m.tab)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all ${active===m.tab?'bg-gray-900 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+            {m.tab}
+          </button>
+        ))}
+      </div>
+      <div className="rounded-xl overflow-hidden">{cur?.node}</div>
+      {cur?.caption && <p className="text-[11px] text-gray-400 mt-2 text-center italic leading-relaxed">{cur.caption}</p>}
+    </div>
   );
 }
 
@@ -1031,33 +801,475 @@ function GuideSection({ section }) {
   const [open, setOpen] = useState(true);
   return (
     <div className="border border-gray-100 rounded-xl overflow-hidden">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50/80 hover:bg-gray-100 transition-colors text-left gap-2"
-      >
+      <button onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50/80 hover:bg-gray-100 transition-colors text-left gap-2">
         <span className="text-sm font-semibold text-gray-800">{section.heading}</span>
-        {open
-          ? <ChevronDown size={15} className="text-gray-400 flex-shrink-0" />
-          : <ChevronRight size={15} className="text-gray-400 flex-shrink-0" />}
+        {open ? <ChevronDown size={15} className="text-gray-400 flex-shrink-0"/> : <ChevronRight size={15} className="text-gray-400 flex-shrink-0"/>}
       </button>
       {open && (
         <div className="px-4 py-4 bg-white">
-          {section.type === 'text'    && <SectionText content={section.content} />}
-          {section.type === 'list'    && <SectionList items={section.items} />}
-          {section.type === 'steps'   && <SectionSteps items={section.items} />}
-          {section.type === 'flow'    && <SectionFlow items={section.items} />}
-          {section.type === 'callout' && <SectionCallout content={section.content} variant={section.variant} />}
-          {section.type === 'tips'    && <SectionTips items={section.items} />}
+          {section.type === 'text'       && <SectionText content={section.content}/>}
+          {section.type === 'list'       && <SectionList items={section.items}/>}
+          {section.type === 'steps'      && <SectionSteps items={section.items}/>}
+          {section.type === 'flow'       && <SectionFlow items={section.items}/>}
+          {section.type === 'callout'    && <SectionCallout content={section.content} variant={section.variant}/>}
+          {section.type === 'tips'       && <SectionTips items={section.items}/>}
+          {section.type === 'mockupTabs' && <SectionMockupTabs mockups={section.mockups}/>}
         </div>
       )}
     </div>
   );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+// ─── All guide data ───────────────────────────────────────────────────────────
+const GUIDES = [
+  {
+    id:'accounts', icon:CreditCard, color:'blue', title:'Accounts', subtitle:'Your financial containers',
+    summary:'Accounts are the foundation of everything in Nisab Wallet. Every transaction, transfer, goal, and Zakat calculation is tied to an account balance.',
+    mockup:<AccountsMockup/>,
+    mockupCaption:'The Accounts page — dark gradient Total Balance card, then individual account cards in a grid. The bKash card shows goal allocation (Available vs. Goal Reserved breakdown).',
+    sections:[
+      { heading:'What is an Account?', type:'text', content:'An account represents any place you hold money — your wallet, a bank account, mobile banking app, gold, or silver. Nisab Wallet consolidates all of them into one view.' },
+      { heading:'Account Types', type:'list', items:[
+        { icon:Wallet,     label:'Cash',           desc:'Physical money in your pocket or home safe' },
+        { icon:Building2,  label:'Bank Account',   desc:'Savings or current accounts at any bank (DBBL, Islami Bank, etc.)' },
+        { icon:Smartphone, label:'Mobile Banking', desc:'bKash, Nagad, Rocket, or any MFS wallet' },
+        { icon:Coins,      label:'Gold',           desc:'Enter current market value in Taka — update when prices change' },
+        { icon:Coins,      label:'Silver',         desc:'Enter current market value in Taka — also used for Nisab threshold calculation' },
+      ]},
+      { heading:'Getting Started', type:'steps', items:[
+        'Click "Load Defaults" to instantly create Cash, Bank 1, bKash, and Bank 2 accounts with ৳0 balance',
+        'Or click "Add Account", pick a type, give it a descriptive name, and enter your current balance',
+        'Balances update automatically with every transaction — or edit them directly any time',
+        'Delete an account only when it has no linked transactions, goals, or loans',
+      ]},
+      { heading:'Goal Allocation Breakdown on Account Cards', type:'callout', variant:'info', content:'When Financial Goals are linked to an account, the card shows two figures: Total Balance and Available to Spend. Available = Total minus goal-reserved funds. Expense transactions cannot use goal-reserved money — blocked automatically.' },
+      { heading:'How Accounts Connect to Everything', type:'flow', items:[
+        { label:'Transactions', desc:'Every income/expense instantly credits or debits a chosen account balance' },
+        { label:'Transfers', desc:'Move money between accounts — both balances update simultaneously' },
+        { label:'Goals', desc:'Funds reserved for goals reduce Available to Spend balance on that account' },
+        { label:'Loans & Lendings', desc:'Borrowed/lent amounts are drawn from or added to a selected account' },
+        { label:'Zakat', desc:'Sum of ALL account balances = your total wealth compared against Nisab' },
+      ]},
+      { heading:'Pro Tips', type:'tips', items:[
+        'Name accounts specifically — "DBBL Savings" is much clearer than "Bank" in transaction history',
+        'Update Gold and Silver values monthly when you check market prices',
+        'You need at least 1 account before any transaction — and at least 2 for transfers',
+      ]},
+    ],
+  },
+
+  {
+    id:'categories', icon:FolderOpen, color:'violet', title:'Categories', subtitle:'Label every transaction',
+    summary:'Categories organise your money flow into named groups. Required for every transaction — they power Analytics charts, Budget limits, and Tax file sections.',
+    mockup:<CategoriesMockup/>,
+    mockupCaption:'The Categories page — Income categories (green tag icon) and Expense categories (red tag icon) each in their own card with a grid of colour-coded category pills.',
+    sections:[
+      { heading:'Why Categories Are Required', type:'text', content:'Every transaction must belong to a category. Without categories, there are no charts, no budget tracking, and no tax file grouping. Good categories = meaningful analytics.' },
+      { heading:'Income vs. Expense Categories', type:'list', items:[
+        { icon:TrendingUp,   label:'Income Categories',  desc:'For money coming in: Salary, Bonus, Freelance, Rental, Business Revenue' },
+        { icon:TrendingDown, label:'Expense Categories', desc:'For money going out: Food, Transport, Healthcare, Shopping, Utility Bills' },
+      ]},
+      { heading:'Load Defaults for Instant Setup', type:'callout', variant:'info', content:'Click "Load Defaults" to add: Income — Salary, Bonus, Loan. Expense — Transportation, Shopping, Foods, Healthcare, Loan Payment. These cover the most common flows and get you recording transactions within seconds.' },
+      { heading:'Creating a Custom Category', type:'steps', items:[
+        'Click "Add Category" and type the name (e.g., "Groceries" or "Freelance Income")',
+        'Choose type: Income or Expense',
+        'Pick a colour from 10 preset swatches — appears as a coloured dot in the transaction list and in chart slices',
+        'Click "Add" — immediately available in all transaction forms',
+      ]},
+      { heading:'Renaming is Always Safe', type:'callout', variant:'success', content:'Each category has a permanent internal ID. Renaming "Foods" to "Groceries & Dining" never breaks historical transactions, analytics, or budget history.' },
+      { heading:'Pro Tips', type:'tips', items:[
+        'Create categories before recording transactions — they are required for every entry',
+        'Keep names specific enough to be informative but broad enough to reuse daily',
+        'Consistent colour themes make charts instantly readable',
+        'Categories used in Budgets automatically show actual vs. budgeted spending',
+      ]},
+    ],
+  },
+
+  {
+    id:'transactions', icon:Receipt, color:'emerald', title:'Transactions', subtitle:'Record every money movement',
+    summary:'Transactions are the engine of Nisab Wallet. Every income or expense you record instantly updates account balances, analytics, budgets, and Zakat wealth.',
+    mockup:<TransactionsMockup/>,
+    mockupCaption:'The Transactions page — four summary cards at top, filter bar below, then date-grouped transaction list with colour-coded income (green) and expense (red) rows. Transfer rows show a blue ⇄ icon.',
+    sections:[
+      { heading:'Three Transaction Types', type:'list', items:[
+        { icon:TrendingUp,     label:'Income',   desc:'Money from outside — salary, freelance, gift. Increases account balance.' },
+        { icon:TrendingDown,   label:'Expense',  desc:'Money going out — food, transport, bills. Decreases account balance.' },
+        { icon:ArrowRightLeft, label:'Transfer', desc:'Money between your own accounts. No net wealth change. Both balances update.' },
+      ]},
+      { heading:'The "Add Transaction" Modal — Three Tabs', type:'mockupTabs', mockups:[
+        { tab:'income',   node:<TransactionModalMockup tab="income"/>,   caption:'Income tab (green): large amount field, account and category selectors, date, and optional note. Click Confirm Income to save.' },
+        { tab:'expense',  node:<TransactionModalMockup tab="expense"/>,  caption:'Expense tab (red): identical layout. Blocked if amount exceeds Available balance (total minus goal allocations).' },
+        { tab:'transfer', node:<TransactionModalMockup tab="transfer"/>, caption:'Transfer tab (blue): From and To account selectors with a visual arrow. Requires at least 2 accounts to be enabled.' },
+      ]},
+      { heading:'Recording a Transaction — Step by Step', type:'steps', items:[
+        'Click "Add Transaction" — disabled until you have at least 1 account AND 1 category',
+        'Choose the tab: Income (green), Expense (red), or Transfer (blue)',
+        'Enter the amount in the large central field',
+        'Select Account — shows each account with its Available balance',
+        'Select Category — only shows categories matching the transaction type',
+        'Set the Date — defaults to today, can be any past date',
+        'Add an optional Note (e.g., "Rent – March 2026")',
+        'Click Confirm — account balance updates immediately',
+      ]},
+      { heading:'Balance Protection (Goal-Aware)', type:'callout', variant:'warning', content:'When recording an Expense, the system checks Available balance (total minus goal allocations). If the expense would exceed available funds — even if the raw balance looks sufficient — the transaction is blocked with a detailed breakdown showing total, reserved, and available amounts.' },
+      { heading:'Filters and Search', type:'list', items:[
+        { icon:Filter, label:'Type Filter',   desc:'Show All, Income only, or Expense only' },
+        { icon:Wallet, label:'Account Filter',desc:'View transactions for one specific account' },
+        { icon:Clock,  label:'Period Filter', desc:'Today, This Week (Sat–Fri), Month, Year, All Time, or Custom Date Range' },
+        { icon:Search, label:'Search',        desc:'Matches description, amount, category name, or account name — live as you type' },
+      ]},
+      { heading:'How Transfers Appear in the List', type:'callout', variant:'info', content:'Each transfer shows as TWO linked rows — an Expense on the source and an Income on the destination — both marked with a blue ⇄ icon. Editing or deleting one side updates both together.' },
+      { heading:'Pro Tips', type:'tips', items:[
+        'Record transactions the same day for accurate period summaries',
+        'Use Notes for context: "Eid shopping – Bashundhara" is far more useful than just "Shopping"',
+        'Summary cards exclude transfers — only real income/expense totals are shown',
+        'The week resets on Saturday — standard Bangladesh work week',
+      ]},
+    ],
+  },
+
+  {
+    id:'transfer', icon:ArrowRightLeft, color:'cyan', title:'Transfer', subtitle:'Move money between accounts',
+    summary:'Transfer moves funds from one of your accounts to another without counting it as income or expense — keeping your total wealth accurate.',
+    mockup:<TransferMockup/>,
+    mockupCaption:'The Transfer page — form on the left with From/To selectors and a visual arrow between them, Recent Transfers history panel on the right.',
+    sections:[
+      { heading:'When to Use Transfer', type:'text', content:'Use Transfer any time you move money between your own accounts: bank withdrawal to top up bKash, salary to savings, or between two bank accounts. Recording this as Expense + Income would double-count and corrupt your analytics.' },
+      { heading:'How to Transfer', type:'steps', items:[
+        'Go to Transfer from the sidebar — or use the Transfer tab inside Add Transaction',
+        'Select "From" account — dropdown shows its current balance',
+        'Select "To" account — cannot be the same as From',
+        'Enter the amount — checked against Available balance (after goal allocations)',
+        'Set a date and optional note',
+        'Click "Transfer Money" — both balances update instantly',
+      ]},
+      { heading:'What Happens Behind the Scenes', type:'flow', items:[
+        { label:'From Account', desc:'Balance decreases by the transfer amount' },
+        { label:'To Account', desc:'Balance increases by the transfer amount' },
+        { label:'Transfer Record', desc:'Saved with both account names, amount, date, and note' },
+        { label:'Transaction List', desc:'Appears as two linked rows (Expense + Income) marked with ⇄' },
+        { label:'Analytics', desc:'Excluded from income/expense charts — total wealth unchanged' },
+      ]},
+      { heading:'Pro Tips', type:'tips', items:[
+        'Always use Transfer (not Expense + Income) when moving between your own accounts',
+        'Can be backdated using the date field',
+        'Requires at least 2 accounts — add more in the Accounts section first',
+        'Edit or delete a transfer from the Transaction list — both sides update together',
+      ]},
+    ],
+  },
+
+  {
+    id:'budgets', icon:PiggyBank, color:'teal', title:'Budgets', subtitle:'Monthly spending limits',
+    summary:'Set a maximum monthly spend per expense category. The system reads actual transactions in real time and shows colour-coded progress bars so you always know where you stand.',
+    mockup:<BudgetsMockup/>,
+    mockupCaption:'The Budgets page with four category cards — green (on track), amber (warning at 96%), red (over budget by ৳4,000), and green (well within limit). Each card shows a progress bar and remaining/over amount.',
+    sections:[
+      { heading:'How Budgets Work', type:'text', content:'Each calendar month you define a spending limit per expense category. The system reads your actual expense transactions and shows how much of each limit you have used with a colour-coded progress bar.' },
+      { heading:'Setting Monthly Budgets', type:'steps', items:[
+        'Go to Budgets — all Expense categories appear automatically',
+        'Enter a limit in Taka next to each category to control',
+        'Leave blank for no limit — actual spend still displays',
+        'Click "Save All Budgets" — applies to the current calendar month immediately',
+        'At month-end, set new limits for the next month (or copy from previous)',
+      ]},
+      { heading:'Reading the Colour Codes', type:'list', items:[
+        { icon:CheckCircle2, label:'Green — On Track', desc:'Spent less than 80% of the limit' },
+        { icon:AlertCircle,  label:'Amber — Warning',  desc:'Spent 80–99% of limit — consider slowing down' },
+        { icon:AlertCircle,  label:'Red — Over Budget',desc:'Exceeded the limit' },
+        { icon:Info,         label:'No Limit Set',     desc:'Category has transactions but no budget — shown for awareness' },
+      ]},
+      { heading:'Copy from Previous Month', type:'callout', variant:'info', content:'If you set budgets last month, a "Copy from Previous Month" option appears at the start of the new month — saving you from re-entering every limit.' },
+      { heading:'Pro Tips', type:'tips', items:[
+        'Budgets are awareness tools — they do not block transactions',
+        'Click any budget card to open the transaction list filtered to that category',
+        'Review Analytics → Category Pie Chart first to find which categories need limits',
+      ]},
+    ],
+  },
+
+  {
+    id:'goals', icon:Target, color:'orange', title:'Financial Goals', subtitle:'Ring-fence money for a purpose',
+    summary:'Goals reserve a portion of an account balance for a specific purpose. Reserved money is protected from accidental spending by the transaction system.',
+    mockup:<GoalsMockup/>,
+    mockupCaption:'The Goals page — three goal cards with coloured progress bars. The completed "New Laptop" goal shows a green checkmark and "Goal Achieved!" message. Each card has Deposit and Withdraw action buttons.',
+    sections:[
+      { heading:'What a Goal Does', type:'text', content:'A goal marks a slice of an account balance as "reserved". Account total does not change, but Available to Spend drops by the reserved amount. Expenses that would dip into goal money are automatically blocked.' },
+      { heading:'Creating a Goal', type:'steps', items:[
+        'Click "Add Goal", enter a name (e.g., "Emergency Fund")',
+        'Set the Target Amount and Target Date',
+        'Choose the Linked Account where reserved funds will sit',
+        'Set Priority: Low, Medium, or High',
+        'Toggle notifications for milestone alerts (25%, 50%, 75%, 100%)',
+        'Save — the linked account card immediately shows updated Available balance',
+      ]},
+      { heading:'Depositing and Withdrawing', type:'list', items:[
+        { icon:TrendingUp,   label:'Deposit',  desc:'Allocate more from the linked account — Available balance decreases' },
+        { icon:TrendingDown, label:'Withdraw', desc:'Release funds back — Available balance increases' },
+      ]},
+      { heading:'Balance Protection in Practice', type:'callout', variant:'warning', content:'Bank Account has ৳50,000 total with ৳20,000 reserved for "New Laptop". Available = ৳30,000. A ৳35,000 expense from that account is blocked — even though the raw balance shows ৳50,000.' },
+      { heading:'Pro Tips', type:'tips', items:[
+        'Each card shows a monthly savings target — how much to deposit per month to reach the goal on time',
+        'Multiple goals can share the same account — each reserves its own slice',
+        'When a goal is complete, withdraw or delete it to release the Available balance',
+      ]},
+    ],
+  },
+
+  {
+    id:'loans', icon:HandCoins, color:'rose', title:'Loans', subtitle:'Track money you borrowed',
+    summary:'Track every loan — from banks, institutions, or individuals — with repayment schedules, interest calculations, and complete payment history.',
+    mockup:<LoansMockup/>,
+    mockupCaption:'The Loans page — summary stats at top (Total Borrowed, Outstanding, Repaid), then loan cards with type badges, repayment progress bars, and Pay buttons. Overdue loans show a red OVERDUE badge.',
+    sections:[
+      { heading:'Loan Types Supported', type:'list', items:[
+        { icon:Shield,     label:'Qard Hasan (Interest-Free)', desc:'Islamic lending — zero interest, repay exactly what was borrowed. For family, friends, or Islamic banks.' },
+        { icon:TrendingUp, label:'Conventional (With Interest)', desc:'Formal bank loans — enter rate and either monthly payment or total months. System auto-calculates the other.' },
+      ]},
+      { heading:'Adding a Loan', type:'steps', items:[
+        'Click "Add Loan" and enter lender name (person or bank)',
+        'Choose type: Qard Hasan or Conventional',
+        'Enter the principal amount — for conventional, also enter interest rate and schedule',
+        'Select which account receives the borrowed amount — that account balance increases immediately',
+        'Enable reminders for payment due date alerts',
+      ]},
+      { heading:'Recording a Repayment', type:'steps', items:[
+        'Click "Pay" on any active loan card',
+        'Enter the repayment amount and choose the source account',
+        'That account balance decreases — loan outstanding reduces',
+        'When fully repaid, status changes to "Paid" automatically',
+      ]},
+      { heading:'Pro Tips', type:'tips', items:[
+        'Enable reminders when creating a loan — in-app notification before payment is due',
+        'Filter by Active, Paid, or Overdue using the status tabs',
+        'Loan amounts credited to accounts count toward Zakat wealth calculation',
+      ]},
+    ],
+  },
+
+  {
+    id:'lendings', icon:Blend, color:'amber', title:'Lend', subtitle:'Track money others owe you',
+    summary:'Lend tracks money you have given to others — monitoring borrower details, repayment status, and full payment history.',
+    sections:[
+      { heading:'Loans vs. Lend — Key Difference', type:'callout', variant:'info', content:'Loans = money you borrowed (you owe someone). Lend = money you gave out (someone owes you). Completely separate modules with opposite effects on account balances.' },
+      { heading:'Adding a Lending Record', type:'steps', items:[
+        'Click "Add Lending" — enter borrower name, phone, email, and address',
+        'Enter amount lent, lending date, and due date for repayment',
+        'Choose repayment type: Full Payment or Installments',
+        'Select which account the money leaves from — balance decreases immediately',
+        'Add notes for collateral or agreed conditions',
+      ]},
+      { heading:'Recording a Repayment', type:'steps', items:[
+        'Click "Repayment" on the lending record',
+        'Enter the amount received and choose destination account',
+        'Outstanding balance decreases — when zero, status becomes "Settled"',
+      ]},
+      { heading:'Pro Tips', type:'tips', items:[
+        'Always record borrower contact details — essential for follow-up',
+        'Use Reminders to schedule a notification near the due date',
+        'Overdue lendings are highlighted in red automatically',
+      ]},
+    ],
+  },
+
+  {
+    id:'investments', icon:Sprout, color:'green', title:'Investments', subtitle:'Track portfolio returns',
+    summary:'Track all long-term assets — stocks, FDR, DPS, savings certificates, real estate, crypto — with automatic return calculations and portfolio analytics.',
+    sections:[
+      { heading:'Supported Investment Types', type:'list', items:[
+        { icon:TrendingUp, label:'Stocks & Mutual Funds',           desc:'Purchase price vs. current NAV/market price for capital gain/loss' },
+        { icon:Coins,      label:'DPS & FDR',                       desc:'Deposit schemes — enter maturity value for automatic return calculation' },
+        { icon:FileText,   label:'Savings Certificate (Sanchayapatra)', desc:'Government-backed bonds with face value and maturity date' },
+        { icon:Zap,        label:'Cryptocurrency',                  desc:'Digital assets — track purchase price vs. current market value' },
+        { icon:Building2,  label:'Real Estate',                     desc:'Property — track purchase price and current estimated value' },
+      ]},
+      { heading:'Adding an Investment', type:'steps', items:[
+        'Click "Add Investment" and select the type',
+        'Enter name, amount invested, and purchase/start date',
+        'Enter current value or expected return — system calculates gain/loss and percentage',
+        'Set maturity date if applicable (FDR, DPS, Bonds)',
+        'Save — appears in portfolio summary immediately',
+      ]},
+      { heading:'Portfolio Summary Cards', type:'list', items:[
+        { icon:TrendingUp, label:'Total Invested',  desc:'Sum of all capital deployed' },
+        { icon:Coins,      label:'Current Value',   desc:'Total current market/maturity value' },
+        { icon:TrendingUp, label:'Total Return',    desc:'Overall gain/loss in Taka and percentage' },
+        { icon:BarChart3,  label:'Allocation Chart',desc:'Portfolio breakdown by investment type' },
+      ]},
+      { heading:'Pro Tips', type:'tips', items:[
+        'Update Stocks and Crypto values regularly — prices change daily',
+        'Investment values do NOT auto-feed account balances — record a transaction when you withdraw returns',
+        'Investment values are not included in Zakat wealth automatically — only account balances count',
+      ]},
+    ],
+  },
+
+  {
+    id:'zakat', icon:Star, color:'indigo', title:'Zakat', subtitle:'Automated Islamic obligation tracking',
+    summary:'Fully automates the Hawl cycle — detecting when wealth crosses Nisab, tracking the full Hijri lunar year, calculating 2.5%, and storing complete payment history.',
+    mockup:<ZakatMockup/>,
+    mockupCaption:'The three Zakat status states: dark card (Not Mandatory — below Nisab), blue card (Monitoring Active — shows days remaining in Hawl cycle), red card (Zakat Due — shows 2.5% amount and Record Payment button).',
+    sections:[
+      { heading:'Key Islamic Concepts', type:'list', items:[
+        { icon:Coins, label:'Nisab',      desc:'Minimum wealth threshold — 52.5 Tola (612.36g) of silver. Must stay at or above this for one full Hijri year.' },
+        { icon:Moon,  label:'Hawl',       desc:'One complete Hijri lunar year (~354 days) of continuous ownership above Nisab. Must complete before Zakat is obligatory.' },
+        { icon:Star,  label:'Zakat Rate', desc:'2.5% of total eligible wealth, paid once per completed Hawl.' },
+      ]},
+      { heading:'Step 1 — Set Your Nisab Threshold', type:'steps', items:[
+        'Click "Settings" on the Zakat page',
+        'Choose price unit: per Gram or per Vori/Tola',
+        'Enter the current market price of silver in Taka',
+        'Nisab is auto-calculated: price × 612.36g (or × 52.5 Vori)',
+        'Save — update this whenever you check silver prices',
+      ]},
+      { heading:'The Automatic Hawl Cycle', type:'flow', items:[
+        { label:'Nisab Crossed → Cycle Starts', desc:'System detects Total Wealth ≥ Nisab. Cycle start date recorded in both Hijri and Gregorian calendars automatically.' },
+        { label:'Monitoring Period (354 days)', desc:'Wealth can fluctuate freely — no Zakat is triggered mid-cycle regardless of temporary dips below Nisab.' },
+        { label:'Hawl Assessment at Year End', desc:'After exactly one Hijri year: if wealth ≥ Nisab → Zakat Due (2.5% calculated). If below Nisab → cycle ends, no obligation.' },
+        { label:'Payment and Auto-Renewal', desc:'Record payment (full or instalments). If wealth still above Nisab after full payment, a new cycle begins immediately.' },
+      ]},
+      { heading:'The Three Status Cards Explained', type:'callout', variant:'info', content:'Dark card = Not Mandatory (below Nisab). Blue card = Monitoring Active (shows days remaining and Hijri cycle start date). Red card = Zakat Due (shows 2.5% calculated amount and Record Payment button). Status updates automatically as wealth and time change.' },
+      { heading:'Recording Payment', type:'steps', items:[
+        'When status shows "Zakat Due", click "Record Payment"',
+        'Enter how much you paid and the payment date',
+        'Partial payments are supported — each reduces the outstanding Zakat amount',
+        'When fully paid, the cycle closes — a new one begins if wealth is still above Nisab',
+        'All cycles and payments stored permanently in Cycle History',
+      ]},
+      { heading:'Pro Tips', type:'tips', items:[
+        'Update silver price monthly for an accurate Nisab figure',
+        'Total Zakat wealth = ALL account balances (Cash + Bank + bKash + Gold + Silver)',
+        'Consult a scholar about which assets are zakatable in your specific situation',
+        'Hijri calendar used internally — Gregorian equivalents always displayed alongside',
+      ]},
+    ],
+  },
+
+  {
+    id:'analytics', icon:BarChart3, color:'blue', title:'Analytics', subtitle:'Visual financial insights',
+    summary:'Transforms raw transactions into charts — income vs. expense comparisons, category breakdowns, and net saving trends over any time period.',
+    mockup:<AnalyticsMockup/>,
+    mockupCaption:'The Analytics page — time range tabs (Year selected), three summary cards (Income/Expense/Net), Income vs Expense bar chart for 6 months with green/red bars, and a Category expense donut chart with legend.',
+    sections:[
+      { heading:'Time Range Options', type:'list', items:[
+        { icon:Clock,      label:'Week',         desc:'Current week (Sat–Fri) — daily bar chart per day' },
+        { icon:Calendar,   label:'Month',        desc:'Current calendar month — income vs. expense pattern' },
+        { icon:TrendingUp, label:'Year',         desc:'12 months of the current year compared side by side' },
+        { icon:Filter,     label:'Custom Range', desc:'Any start/end date — compare Ramadan vs. regular months etc.' },
+      ]},
+      { heading:'Charts Available', type:'list', items:[
+        { icon:BarChart3,  label:'Income vs. Expense Bar Chart', desc:'Side-by-side green/red bars per period — instantly shows which months you saved vs. overspent' },
+        { icon:TrendingUp, label:'Net Savings Line',             desc:'Income minus expenses over time — upward = saving, downward = deficit' },
+        { icon:Target,     label:'Category Expense Pie',         desc:'Percentage of total spending per expense category — find your biggest cost drivers' },
+      ]},
+      { heading:'How to Use Analytics Effectively', type:'steps', items:[
+        'Start with Yearly view — understand your overall saving or deficit pattern',
+        'Zoom into any month where you overspent — find which week caused it',
+        'Open the Category Pie Chart — identify your largest expense category',
+        'Use insights from Analytics to set realistic Budget limits in the Budgets section',
+      ]},
+      { heading:'Transfers Are Always Excluded', type:'callout', variant:'info', content:'Transfers between your own accounts never appear in Analytics income or expense figures. Only real income (from outside) and real expenses (permanently leaving your control) are charted — keeping figures accurate.' },
+      { heading:'Pro Tips', type:'tips', items:[
+        'Analytics quality depends on consistent transaction recording — record every expense',
+        'More specific categories produce more actionable pie charts',
+        'Share the Yearly summary with yourself at year-end as a personal financial review',
+      ]},
+    ],
+  },
+
+  {
+    id:'recurring', icon:Repeat, color:'cyan', title:'Recurring Transactions', subtitle:'Automate fixed payments',
+    summary:'Recurring Transactions auto-generates any fixed, repeating payment — salary, rent, subscriptions, utility bills — so you never forget to record them manually.',
+    mockup:<RecurringMockup/>,
+    mockupCaption:'The Recurring page — status filter tabs, then four entries: Monthly Rent (auto), Salary (auto), Electricity Bill (manual approval mode), Netflix (paused). Each shows next execution date and pause/edit/delete buttons.',
+    sections:[
+      { heading:'Frequency Options', type:'list', items:[
+        { icon:Calendar, label:'Daily',   desc:'Every day — daily transport allowance, daily savings deposit' },
+        { icon:Calendar, label:'Weekly',  desc:'Chosen day each week — weekly pocket money' },
+        { icon:Calendar, label:'Monthly', desc:'Chosen date each month — rent, salary, EMI payments' },
+        { icon:Calendar, label:'Yearly',  desc:'Annual — insurance premiums, memberships, renewals' },
+      ]},
+      { heading:'Creating a Recurring Transaction', type:'steps', items:[
+        'Click "Add Recurring" and give it a clear name (e.g., "Monthly House Rent")',
+        'Choose type: Income or Expense, enter amount, account, category',
+        'Set frequency and specific day/date',
+        'Set start date — first execution date is shown immediately',
+        'Optionally set an end date (e.g., EMI ending in 18 months)',
+        'Choose: Auto (fires silently) or Manual Approval (you confirm each time)',
+        'Save — active from the next due date',
+      ]},
+      { heading:'Auto vs. Manual Approval', type:'callout', variant:'info', content:'Auto mode executes silently on due date — ideal for truly fixed amounts like rent. Manual Approval creates a Pending entry you must approve or skip — ideal for utility bills that vary month to month.' },
+      { heading:'Managing Entries', type:'list', items:[
+        { icon:Clock,     label:'Pause',  desc:'Suspend without deleting — preserves the rule, resumes from next due date when reactivated' },
+        { icon:RefreshCw, label:'Resume', desc:'Reactivate — next due date recalculates from today forward' },
+        { icon:Edit2,     label:'Edit',   desc:'Change amount, account, category, or schedule any time' },
+        { icon:Trash2,    label:'Delete', desc:'Remove the rule permanently — past transactions it created remain in history' },
+      ]},
+      { heading:'Pro Tips', type:'tips', items:[
+        'Open the Recurring page at least weekly — it processes overdue entries on page load',
+        'Pending approval count shows as a badge on the Recurring menu item',
+        'Set an end date for EMI recurrings so they stop automatically — no manual deletion needed',
+      ]},
+    ],
+  },
+
+  {
+    id:'shopping', icon:ShoppingBag, color:'pink', title:'Shopping List', subtitle:'Plan before you spend',
+    summary:'Create smart shopping lists with item prices before going to the market. Track purchases in real time and compare estimated vs. actual costs.',
+    sections:[
+      { heading:'How Shopping Lists Work', type:'text', content:'Create a Cart (e.g., "Weekly Groceries"), add items with quantities and estimated prices, then tick them off as you shop. Shows estimated total vs. purchased total live — a budget tracker in your pocket at the market.' },
+      { heading:'Creating and Using a Cart', type:'steps', items:[
+        'Click "New List", give it a name and optional description',
+        'Open the cart and add items with name, quantity, and estimated price',
+        'The cart shows a running estimated total',
+        'At the market, tick items off as you buy them — purchased subtotal updates live',
+        'After shopping, use the final total to record an Expense transaction',
+      ]},
+      { heading:'Pro Tips', type:'tips', items:[
+        'Create separate carts for different trip types — weekly groceries, Eid shopping, household supplies',
+        'Add estimated prices before leaving home to check if the total fits your budget',
+        'Compare estimated vs. actual receipt total to improve future budgeting accuracy',
+      ]},
+    ],
+  },
+
+  {
+    id:'tax', icon:FileText, color:'slate', title:'Tax File', subtitle:'Organise income for annual returns',
+    summary:'Organises your income transactions by fiscal year and maps them to official tax heads — a structured summary ready for your annual income tax return.',
+    sections:[
+      { heading:'Step 1 — Map Categories to Tax Heads', type:'steps', items:[
+        'Go to Tax → "Setup Categories" or "Category Mapping"',
+        'Your Income categories appear — map each to an official tax head',
+        'Example: "Salary" → Salaries; "Freelance" → Business Income; "Rental" → House Property',
+        'Save — mappings apply to all future tax year calculations',
+      ]},
+      { heading:'Step 2 — Create a Tax Year', type:'steps', items:[
+        'Click "Create Tax Year" — current fiscal year (July–June) is pre-selected',
+        'System pulls all income transactions for mapped categories',
+        'Income grouped by tax head with totals',
+        'Countdown shows days until November 30 filing deadline',
+      ]},
+      { heading:'Tax Year Status', type:'list', items:[
+        { icon:Clock,        label:'In Progress', desc:'Current fiscal year — income accumulating until June 30' },
+        { icon:AlertCircle,  label:'Due Soon',    desc:'Less than 30 days to November 30 filing deadline' },
+        { icon:CheckCircle2, label:'Filed',       desc:'Marked as submitted — permanent historical record' },
+      ]},
+      { heading:'Pro Tips', type:'tips', items:[
+        'Set up category mappings at the start of July — system tracks automatically from that point',
+        'Only Income-type transactions feed Tax File — Expenses are excluded',
+        'Bangladesh fiscal year is July 1 to June 30 — used automatically',
+        'Unmapped income categories will not appear in Tax File totals — check mappings if figures look incomplete',
+      ]},
+    ],
+  },
+];
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function UserGuidePage() {
   const [activeId, setActiveId] = useState('accounts');
-  const [search, setSearch] = useState('');
+  const [search, setSearch]     = useState('');
 
   const activeGuide = GUIDES.find(g => g.id === activeId);
   const c = C[activeGuide?.color] || C.blue;
@@ -1074,31 +1286,27 @@ export default function UserGuidePage() {
 
   return (
     <div className="max-w-7xl mx-auto pb-10">
-      {/* Header */}
+      {/* Page header */}
       <div className="mb-6">
-        <div className="flex items-center gap-3 mb-1">
-          <div className="w-9 h-9 bg-gray-900 rounded-xl flex items-center justify-center">
-            <BookOpen size={17} className="text-white" />
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-gray-900 rounded-xl flex items-center justify-center flex-shrink-0">
+            <BookOpen size={17} className="text-white"/>
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900 leading-tight">User Guide</h1>
-            <p className="text-sm text-gray-500">Complete workflow guides for every feature</p>
+            <p className="text-sm text-gray-500">Step-by-step workflows with live UI previews for every feature</p>
           </div>
         </div>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-5">
-        {/* Sidebar */}
+        {/* Sidebar navigation */}
         <aside className="lg:w-60 flex-shrink-0">
           <div className="relative mb-3">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search guides…"
-              value={search}
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+            <input type="text" placeholder="Search guides…" value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-200 bg-white"
-            />
+              className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-200 bg-white"/>
           </div>
 
           <nav className="space-y-0.5">
@@ -1107,77 +1315,93 @@ export default function UserGuidePage() {
               const gc = C[guide.color] || C.blue;
               const isActive = activeId === guide.id && !search;
               return (
-                <button
-                  key={guide.id}
-                  onClick={() => selectGuide(guide.id)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all ${
-                    isActive ? `${gc.active} shadow-sm` : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
+                <button key={guide.id} onClick={() => selectGuide(guide.id)}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all ${isActive ? `${gc.active} shadow-sm` : 'text-gray-700 hover:bg-gray-100'}`}>
                   <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${isActive ? 'bg-white/25' : gc.icon}`}>
-                    <Icon size={14} />
+                    <Icon size={14}/>
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className={`text-sm font-semibold truncate ${isActive ? '' : 'text-gray-900'}`}>{guide.title}</div>
                     <div className={`text-[10px] truncate leading-tight ${isActive ? 'opacity-75' : 'text-gray-400'}`}>{guide.subtitle}</div>
                   </div>
+                  {guide.mockup && (
+                    <div className={`flex-shrink-0 w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white/60' : 'bg-emerald-400'}`} title="UI preview available"/>
+                  )}
                 </button>
               );
             })}
-            {filtered.length === 0 && (
-              <p className="text-xs text-gray-400 text-center py-6">No guides match</p>
-            )}
+            {filtered.length === 0 && <p className="text-xs text-gray-400 text-center py-6">No guides match</p>}
           </nav>
+
+          <div className="mt-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
+            <div className="flex items-center gap-1.5 mb-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"/>
+              <span className="text-[10px] font-semibold text-gray-600">UI Preview Available</span>
+            </div>
+            <p className="text-[9px] text-gray-400 leading-relaxed">Guides with a green dot include a live mockup of the real page built from the actual source code.</p>
+          </div>
         </aside>
 
-        {/* Main content */}
+        {/* Main content area */}
         <main className="flex-1 min-w-0">
           {search.trim() ? (
+            /* Search results */
             <div className="space-y-2.5">
               <p className="text-xs text-gray-400 mb-3">{filtered.length} guide{filtered.length !== 1 ? 's' : ''} found</p>
               {filtered.map(guide => {
                 const Icon = guide.icon;
                 const gc = C[guide.color] || C.blue;
                 return (
-                  <button
-                    key={guide.id}
-                    onClick={() => selectGuide(guide.id)}
-                    className={`w-full text-left p-4 rounded-xl border ${gc.border} ${gc.bg} hover:shadow-sm transition-all flex items-start gap-3`}
-                  >
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${gc.icon}`}>
-                      <Icon size={18} />
-                    </div>
+                  <button key={guide.id} onClick={() => selectGuide(guide.id)}
+                    className={`w-full text-left p-4 rounded-xl border ${gc.border} ${gc.bg} hover:shadow-sm transition-all flex items-start gap-3`}>
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${gc.icon}`}><Icon size={18}/></div>
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold text-gray-900 text-sm">{guide.title}</div>
                       <div className="text-xs text-gray-500 mt-0.5">{guide.subtitle}</div>
                       <div className="text-xs text-gray-600 mt-1.5 line-clamp-2 leading-relaxed">{guide.summary}</div>
                     </div>
-                    <ChevronRight size={15} className="text-gray-300 flex-shrink-0 mt-1" />
+                    <ChevronRight size={15} className="text-gray-300 flex-shrink-0 mt-1"/>
                   </button>
                 );
               })}
             </div>
           ) : activeGuide ? (
+            /* Guide detail */
             <div>
               {/* Guide header card */}
-              <div className={`rounded-2xl border-2 ${c.border} ${c.bg} p-6 mb-4`}>
+              <div className={`rounded-2xl border-2 ${c.border} ${c.bg} p-5 mb-4`}>
                 <div className="flex items-start gap-4">
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${c.icon}`}>
-                    <activeGuide.icon size={22} />
+                    <activeGuide.icon size={22}/>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-0.5">Feature Guide</div>
                     <h2 className="text-xl font-bold text-gray-900 mb-0.5">{activeGuide.title}</h2>
-                    <p className="text-sm text-gray-500 mb-3">{activeGuide.subtitle}</p>
+                    <p className="text-sm text-gray-500 mb-2">{activeGuide.subtitle}</p>
                     <p className="text-sm text-gray-700 leading-relaxed">{activeGuide.summary}</p>
                   </div>
                 </div>
               </div>
 
-              {/* Sections */}
+              {/* Top-level mockup (page preview) */}
+              {activeGuide.mockup && (
+                <div className="mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"/>
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Live Page Preview</span>
+                    <div className="flex-1 h-px bg-gray-100"/>
+                  </div>
+                  {activeGuide.mockup}
+                  {activeGuide.mockupCaption && (
+                    <p className="text-[11px] text-gray-400 mt-2 text-center italic leading-relaxed px-4">{activeGuide.mockupCaption}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Section accordion */}
               <div className="space-y-2">
                 {activeGuide.sections.map((section, i) => (
-                  <GuideSection key={i} section={section} />
+                  <GuideSection key={i} section={section}/>
                 ))}
               </div>
 
@@ -1191,16 +1415,14 @@ export default function UserGuidePage() {
                     <>
                       {prev ? (
                         <button onClick={() => selectGuide(prev.id)} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 transition-colors">
-                          <ChevronRight size={14} className="rotate-180" />
-                          <span>{prev.title}</span>
+                          <ChevronRight size={14} className="rotate-180"/><span>{prev.title}</span>
                         </button>
-                      ) : <div />}
+                      ) : <div/>}
                       {next ? (
                         <button onClick={() => selectGuide(next.id)} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 transition-colors">
-                          <span>{next.title}</span>
-                          <ChevronRight size={14} />
+                          <span>{next.title}</span><ChevronRight size={14}/>
                         </button>
-                      ) : <div />}
+                      ) : <div/>}
                     </>
                   );
                 })()}
