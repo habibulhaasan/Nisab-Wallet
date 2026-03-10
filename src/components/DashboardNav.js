@@ -56,11 +56,13 @@ export default function DashboardNav() {
       { name: 'Loans', href: '/dashboard/loans', icon: HandCoins },
       { name: 'Lend', href: '/dashboard/lendings', icon: Blend },
       { name: 'Goals', href: '/dashboard/goals', icon: Goal },
+      { name: 'Jewellery', href: '/dashboard/jewellery', icon: Gem },
       { name: 'Investments', href: '/dashboard/investments', icon: Sprout },
       { name: 'Zakat', href: '/dashboard/zakat', icon: Star },
       { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
       { name: 'Recurring', href: '/dashboard/recurring', icon: Repeat},
-      { name: 'Tax File', href: '/dashboard/tax', icon: FileText}
+      { name: 'Tax File', href: '/dashboard/tax', icon: FileText},
+      { name: 'Riba Tracker', href: '/dashboard/riba', icon: AlertTriangle }
 
     ],
     other: [
