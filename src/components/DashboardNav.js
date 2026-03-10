@@ -85,7 +85,7 @@ export default function DashboardNav() {
   return (
     <>
       {/* Mobile Header */}
-      <div className="lg:hidden bg-white border-b sticky top-0 z-50 shadow-sm">
+      <div className="lg:hidden bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-100 sticky top-0 z-50 shadow-sm">
         <div className="flex items-center justify-between px-4 h-16">
           {/* Logo */}
           <div className="flex items-center gap-2">
