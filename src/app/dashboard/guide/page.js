@@ -972,119 +972,345 @@ const GUIDES = [
 ];
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
+
+// ─── Mobile Accordion TOC ─────────────────────────────────────────────────────
+function MobileTOC({ guides, activeId, search, setSearch, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const activeGuide = guides.find(g => g.id === activeId);
+  const ActiveIcon  = activeGuide?.icon || BookOpen;
+  const ac          = C[activeGuide?.color] || C.blue;
+
+  const filtered = search.trim()
+    ? guides.filter(g =>
+        g.title.toLowerCase().includes(search.toLowerCase()) ||
+        g.subtitle.toLowerCase().includes(search.toLowerCase()))
+    : guides;
+
+  const handleSelect = (id) => { onSelect(id); setOpen(false); };
+
+  return (
+    <div className="lg:hidden mb-4">
+      {/* Trigger pill — shows active guide, tap to open */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl border-2 ${ac.border} ${ac.bg} shadow-sm transition-all active:scale-[0.99]`}
+      >
+        <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${ac.icon}`}>
+          <ActiveIcon size={16} />
+        </div>
+        <div className="flex-1 min-w-0 text-left">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 leading-none mb-0.5">
+            {open ? 'Select a guide' : 'Currently reading'}
+          </div>
+          <div className="text-sm font-bold text-gray-900 truncate">{activeGuide?.title}</div>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="text-[10px] text-gray-400 hidden sm:inline">
+            {guides.findIndex(g => g.id === activeId) + 1} / {guides.length}
+          </span>
+          <div className={`w-7 h-7 rounded-lg flex items-center justify-center bg-white/60 border border-gray-200 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}>
+            <ChevronDown size={14} className="text-gray-600" />
+          </div>
+        </div>
+      </button>
+
+      {/* Dropdown panel */}
+      {open && (
+        <div className="mt-2 bg-white rounded-2xl border border-gray-200 shadow-xl overflow-hidden">
+          {/* Search */}
+          <div className="p-3 border-b border-gray-100">
+            <div className="relative">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search guides…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                autoFocus
+                className="w-full pl-8 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300 bg-gray-50"
+              />
+            </div>
+          </div>
+
+          {/* Scrollable guide list */}
+          <div className="max-h-72 overflow-y-auto overscroll-contain">
+            {filtered.length === 0 && (
+              <p className="text-xs text-gray-400 text-center py-8">No guides match</p>
+            )}
+            {filtered.map(guide => {
+              const Icon     = guide.icon;
+              const gc       = C[guide.color] || C.blue;
+              const isActive = guide.id === activeId && !search.trim();
+              return (
+                <button
+                  key={guide.id}
+                  onClick={() => handleSelect(guide.id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-left border-b border-gray-50 last:border-0 transition-colors ${
+                    isActive ? gc.active : 'hover:bg-gray-50 active:bg-gray-100'
+                  }`}
+                >
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${isActive ? 'bg-white/25' : gc.icon}`}>
+                    <Icon size={14} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className={`text-sm font-semibold ${isActive ? '' : 'text-gray-900'}`}>{guide.title}</div>
+                    <div className={`text-[10px] leading-tight mt-0.5 ${isActive ? 'opacity-75' : 'text-gray-400'}`}>{guide.subtitle}</div>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {guide.mockup && (
+                      <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white/70' : 'bg-emerald-400'}`} />
+                    )}
+                    {isActive && <CheckCircle2 size={13} className="opacity-80" />}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Footer */}
+          <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span className="text-[10px] text-gray-400">green dot = live UI preview</span>
+            </div>
+            <span className="text-[10px] text-gray-400">{guides.length} guides</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Desktop sidebar (unchanged, hidden on mobile) ────────────────────────────
+function DesktopSidebar({ guides, activeId, search, setSearch, onSelect }) {
+  const filtered = search.trim()
+    ? guides.filter(g =>
+        g.title.toLowerCase().includes(search.toLowerCase()) ||
+        g.subtitle.toLowerCase().includes(search.toLowerCase()) ||
+        g.summary.toLowerCase().includes(search.toLowerCase()))
+    : guides;
+
+  return (
+    <aside className="hidden lg:block lg:w-64 flex-shrink-0">
+      <div className="relative mb-3">
+        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input
+          type="text"
+          placeholder="Search guides…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-200 bg-white"
+        />
+      </div>
+      <nav className="space-y-0.5">
+        {filtered.map(guide => {
+          const Icon     = guide.icon;
+          const gc       = C[guide.color] || C.blue;
+          const isActive = activeId === guide.id && !search;
+          return (
+            <button
+              key={guide.id}
+              onClick={() => onSelect(guide.id)}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all ${
+                isActive ? `${gc.active} shadow-sm` : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${isActive ? 'bg-white/25' : gc.icon}`}>
+                <Icon size={14} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className={`text-sm font-semibold truncate ${isActive ? '' : 'text-gray-900'}`}>{guide.title}</div>
+                <div className={`text-[10px] truncate leading-tight ${isActive ? 'opacity-75' : 'text-gray-400'}`}>{guide.subtitle}</div>
+              </div>
+              {guide.mockup && (
+                <div className={`flex-shrink-0 w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white/60' : 'bg-emerald-400'}`} />
+              )}
+            </button>
+          );
+        })}
+        {filtered.length === 0 && <p className="text-xs text-gray-400 text-center py-6">No guides match</p>}
+      </nav>
+      <div className="mt-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
+        <div className="flex items-center gap-1.5 mb-1">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+          <span className="text-[10px] font-semibold text-gray-600">UI Preview Available</span>
+        </div>
+        <p className="text-[9px] text-gray-400 leading-relaxed">Guides with a green dot include a pixel-accurate mockup built from the real source code.</p>
+        <div className="mt-2 pt-2 border-t border-gray-200">
+          <p className="text-[10px] font-semibold text-gray-600 mb-1">{guides.length} total guides</p>
+          <p className="text-[9px] text-gray-400">{guides.filter(g => g.mockup).length} with UI preview · {guides.length - guides.filter(g => g.mockup).length} text-only</p>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function UserGuidePage() {
   const [activeId, setActiveId] = useState('accounts');
   const [search,   setSearch]   = useState('');
 
-  const activeGuide = GUIDES.find(g=>g.id===activeId);
-  const c = C[activeGuide?.color]||C.blue;
+  const activeGuide = GUIDES.find(g => g.id === activeId);
+  const c = C[activeGuide?.color] || C.blue;
 
-  const filtered = search.trim()
-    ? GUIDES.filter(g=>g.title.toLowerCase().includes(search.toLowerCase())||g.subtitle.toLowerCase().includes(search.toLowerCase())||g.summary.toLowerCase().includes(search.toLowerCase()))
+  const desktopFiltered = search.trim()
+    ? GUIDES.filter(g =>
+        g.title.toLowerCase().includes(search.toLowerCase()) ||
+        g.subtitle.toLowerCase().includes(search.toLowerCase()) ||
+        g.summary.toLowerCase().includes(search.toLowerCase()))
     : GUIDES;
 
-  const selectGuide = (id)=>{setActiveId(id);setSearch('');};
+  const selectGuide = (id) => {
+    setActiveId(id);
+    setSearch('');
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 50);
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto pb-10">
-      {/* Header */}
-      <div className="mb-6">
+
+      {/* ── Page header ── */}
+      <div className="mb-4 lg:mb-6">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-gray-900 rounded-xl flex items-center justify-center flex-shrink-0"><BookOpen size={17} className="text-white"/></div>
+          <div className="w-9 h-9 bg-gray-900 rounded-xl flex items-center justify-center flex-shrink-0">
+            <BookOpen size={17} className="text-white" />
+          </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 leading-tight">User Guide</h1>
-            <p className="text-sm text-gray-500">Step-by-step workflows with live UI previews for all 15 features</p>
+            <h1 className="text-xl lg:text-2xl font-bold text-gray-900 leading-tight">User Guide</h1>
+            <p className="text-xs lg:text-sm text-gray-500">
+              Step-by-step workflows with live UI previews for all {GUIDES.length} features
+            </p>
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-5">
-        {/* Sidebar */}
-        <aside className="lg:w-64 flex-shrink-0">
-          <div className="relative mb-3">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
-            <input type="text" placeholder="Search guides…" value={search} onChange={e=>setSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-200 bg-white"/>
-          </div>
-          <nav className="space-y-0.5">
-            {filtered.map(guide=>{
-              const Icon=guide.icon;const gc=C[guide.color]||C.blue;const isActive=activeId===guide.id&&!search;
-              return(
-                <button key={guide.id} onClick={()=>selectGuide(guide.id)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all ${isActive?`${gc.active} shadow-sm`:'text-gray-700 hover:bg-gray-100'}`}>
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${isActive?'bg-white/25':gc.icon}`}><Icon size={14}/></div>
-                  <div className="min-w-0 flex-1">
-                    <div className={`text-sm font-semibold truncate ${isActive?'':'text-gray-900'}`}>{guide.title}</div>
-                    <div className={`text-[10px] truncate leading-tight ${isActive?'opacity-75':'text-gray-400'}`}>{guide.subtitle}</div>
-                  </div>
-                  {guide.mockup&&<div className={`flex-shrink-0 w-1.5 h-1.5 rounded-full ${isActive?'bg-white/60':'bg-emerald-400'}`} title="UI preview available"/>}
-                </button>
-              );
-            })}
-            {filtered.length===0&&<p className="text-xs text-gray-400 text-center py-6">No guides match</p>}
-          </nav>
-          <div className="mt-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
-            <div className="flex items-center gap-1.5 mb-1"><div className="w-1.5 h-1.5 rounded-full bg-emerald-400"/><span className="text-[10px] font-semibold text-gray-600">UI Preview Available</span></div>
-            <p className="text-[9px] text-gray-400 leading-relaxed">Guides with a green dot include a pixel-accurate mockup built from the real source code.</p>
-            <div className="mt-2 pt-2 border-t border-gray-200"><p className="text-[10px] font-semibold text-gray-600 mb-1">{GUIDES.length} total guides</p><p className="text-[9px] text-gray-400">{GUIDES.filter(g=>g.mockup).length} with UI preview · {GUIDES.length - GUIDES.filter(g=>g.mockup).length} text-only</p></div>
-          </div>
-        </aside>
+      {/* ── Mobile accordion TOC (hidden on lg+) ── */}
+      <MobileTOC
+        guides={GUIDES}
+        activeId={activeId}
+        search={search}
+        setSearch={setSearch}
+        onSelect={selectGuide}
+      />
 
-        {/* Main content */}
+      <div className="flex flex-col lg:flex-row gap-5">
+
+        {/* ── Desktop sidebar (hidden on mobile) ── */}
+        <DesktopSidebar
+          guides={GUIDES}
+          activeId={activeId}
+          search={search}
+          setSearch={setSearch}
+          onSelect={selectGuide}
+        />
+
+        {/* ── Main content area ── */}
         <main className="flex-1 min-w-0">
-          {search.trim()?(
+
+          {/* Search results view */}
+          {search.trim() ? (
             <div className="space-y-2.5">
-              <p className="text-xs text-gray-400 mb-3">{filtered.length} guide{filtered.length!==1?'s':''} found</p>
-              {filtered.map(guide=>{const Icon=guide.icon;const gc=C[guide.color]||C.blue;return(
-                <button key={guide.id} onClick={()=>selectGuide(guide.id)}
-                  className={`w-full text-left p-4 rounded-xl border ${gc.border} ${gc.bg} hover:shadow-sm transition-all flex items-start gap-3`}>
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${gc.icon}`}><Icon size={18}/></div>
-                  <div className="flex-1 min-w-0"><div className="font-semibold text-gray-900 text-sm">{guide.title}</div><div className="text-xs text-gray-500 mt-0.5">{guide.subtitle}</div><div className="text-xs text-gray-600 mt-1.5 line-clamp-2 leading-relaxed">{guide.summary}</div></div>
-                  <ChevronRight size={15} className="text-gray-300 flex-shrink-0 mt-1"/>
-                </button>
-              );})}
+              <p className="text-xs text-gray-400 mb-3">
+                {desktopFiltered.length} guide{desktopFiltered.length !== 1 ? 's' : ''} found
+              </p>
+              {desktopFiltered.map(guide => {
+                const Icon = guide.icon;
+                const gc   = C[guide.color] || C.blue;
+                return (
+                  <button
+                    key={guide.id}
+                    onClick={() => selectGuide(guide.id)}
+                    className={`w-full text-left p-4 rounded-xl border ${gc.border} ${gc.bg} hover:shadow-sm transition-all flex items-start gap-3`}
+                  >
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${gc.icon}`}>
+                      <Icon size={18} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-gray-900 text-sm">{guide.title}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">{guide.subtitle}</div>
+                      <div className="text-xs text-gray-600 mt-1.5 line-clamp-2 leading-relaxed">{guide.summary}</div>
+                    </div>
+                    <ChevronRight size={15} className="text-gray-300 flex-shrink-0 mt-1" />
+                  </button>
+                );
+              })}
             </div>
-          ):activeGuide?(
+
+          ) : activeGuide ? (
             <div>
-              {/* Guide header */}
-              <div className={`rounded-2xl border-2 ${c.border} ${c.bg} p-5 mb-4`}>
-                <div className="flex items-start gap-4">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${c.icon}`}><activeGuide.icon size={22}/></div>
+
+              {/* Guide header card */}
+              <div className={`rounded-2xl border-2 ${c.border} ${c.bg} p-4 lg:p-5 mb-4`}>
+                <div className="flex items-start gap-3 lg:gap-4">
+                  <div className={`w-10 h-10 lg:w-12 lg:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${c.icon}`}>
+                    <activeGuide.icon size={20} />
+                  </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-0.5">Feature Guide</div>
-                    <h2 className="text-xl font-bold text-gray-900 mb-0.5">{activeGuide.title}</h2>
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-0.5">Feature Guide</div>
+                    <h2 className="text-lg lg:text-xl font-bold text-gray-900 mb-0.5">{activeGuide.title}</h2>
                     <p className="text-sm text-gray-500 mb-2">{activeGuide.subtitle}</p>
                     <p className="text-sm text-gray-700 leading-relaxed">{activeGuide.summary}</p>
                   </div>
                 </div>
               </div>
 
-              {/* Page preview mockup */}
-              {activeGuide.mockup&&(
+              {/* Live page preview mockup */}
+              {activeGuide.mockup && (
                 <div className="mb-4">
-                  <div className="flex items-center gap-2 mb-2"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"/><span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Live Page Preview</span><div className="flex-1 h-px bg-gray-100"/></div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Live Page Preview</span>
+                    <div className="flex-1 h-px bg-gray-100" />
+                  </div>
                   {activeGuide.mockup}
-                  {activeGuide.mockupCaption&&<p className="text-[11px] text-gray-400 mt-2 text-center italic leading-relaxed px-4">{activeGuide.mockupCaption}</p>}
+                  {activeGuide.mockupCaption && (
+                    <p className="text-[11px] text-gray-400 mt-2 text-center italic leading-relaxed px-4">
+                      {activeGuide.mockupCaption}
+                    </p>
+                  )}
                 </div>
               )}
 
-              {/* Sections */}
+              {/* Collapsible sections */}
               <div className="space-y-2">
-                {activeGuide.sections.map((section,i)=><GuideSection key={i} section={section}/>)}
+                {activeGuide.sections.map((section, i) => <GuideSection key={i} section={section} />)}
               </div>
 
-              {/* Prev / Next */}
+              {/* Prev / Next navigation */}
               <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-100">
-                {(()=>{
-                  const idx=GUIDES.findIndex(g=>g.id===activeId);const prev=GUIDES[idx-1];const next=GUIDES[idx+1];
-                  return(<>
-                    {prev?<button onClick={()=>selectGuide(prev.id)} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 transition-colors"><ChevronRight size={14} className="rotate-180"/><span>{prev.title}</span></button>:<div/>}
-                    {next?<button onClick={()=>selectGuide(next.id)} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 transition-colors"><span>{next.title}</span><ChevronRight size={14}/></button>:<div/>}
-                  </>);
+                {(() => {
+                  const idx  = GUIDES.findIndex(g => g.id === activeId);
+                  const prev = GUIDES[idx - 1];
+                  const next = GUIDES[idx + 1];
+                  return (
+                    <>
+                      {prev ? (
+                        <button
+                          onClick={() => selectGuide(prev.id)}
+                          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 transition-colors min-w-0 max-w-[45%]"
+                        >
+                          <ChevronRight size={14} className="rotate-180 flex-shrink-0" />
+                          <span className="truncate">{prev.title}</span>
+                        </button>
+                      ) : <div />}
+                      {next ? (
+                        <button
+                          onClick={() => selectGuide(next.id)}
+                          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 transition-colors min-w-0 max-w-[45%]"
+                        >
+                          <span className="truncate">{next.title}</span>
+                          <ChevronRight size={14} className="flex-shrink-0" />
+                        </button>
+                      ) : <div />}
+                    </>
+                  );
                 })()}
               </div>
+
             </div>
-          ):null}
+          ) : null}
         </main>
       </div>
     </div>
