@@ -8,8 +8,8 @@ import Image from 'next/image';
 import { 
   LayoutDashboard, CreditCard, Receipt, FolderOpen, Star, BarChart3, 
   LogOut, Menu, X, ArrowRightLeft, Settings, 
-  Users, Package, DollarSign, Globe, Sprout,
-  HandCoins, MessageCircleQuestion, Goal, Blend, MessageSquareMore,
+  Users, Package, DollarSign, Globe, Sprout, AlertTriangle,
+  HandCoins, MessageCircleQuestion, Goal,Gem, Blend, MessageSquareMore,
   Home, Repeat ,FileText, ShoppingBag, PiggyBank, BookOpen
 } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
