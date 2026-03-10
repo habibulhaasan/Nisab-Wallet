@@ -8,9 +8,10 @@ import Image from 'next/image';
 import { 
   LayoutDashboard, CreditCard, Receipt, FolderOpen, Star, BarChart3, 
   LogOut, Menu, X, ArrowRightLeft, Settings, 
-  Users, Package, DollarSign, Globe, Sprout, AlertTriangle,
-  HandCoins, MessageCircleQuestion, Goal,Gem, Blend, MessageSquareMore,
-  Home, Repeat ,FileText, ShoppingBag, PiggyBank, BookOpen
+  Users, Package, DollarSign, Globe, Sprout,
+  HandCoins, MessageCircleQuestion, Goal, Blend, MessageSquareMore,
+  Home, Repeat ,FileText, ShoppingBag, PiggyBank, BookOpen,
+  Gem, AlertTriangle
 } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
 import AdminNotificationBell from '@/components/AdminNotificationBell';
@@ -56,13 +57,13 @@ export default function DashboardNav() {
       { name: 'Loans', href: '/dashboard/loans', icon: HandCoins },
       { name: 'Lend', href: '/dashboard/lendings', icon: Blend },
       { name: 'Goals', href: '/dashboard/goals', icon: Goal },
-      { name: 'Jewellery', href: '/dashboard/jewellery', icon: Gem },
       { name: 'Investments', href: '/dashboard/investments', icon: Sprout },
+      { name: 'Jewellery', href: '/dashboard/jewellery', icon: Gem },
       { name: 'Zakat', href: '/dashboard/zakat', icon: Star },
+      { name: 'Riba Tracker', href: '/dashboard/riba', icon: AlertTriangle },
       { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
       { name: 'Recurring', href: '/dashboard/recurring', icon: Repeat},
-      { name: 'Tax File', href: '/dashboard/tax', icon: FileText},
-      { name: 'Riba Tracker', href: '/dashboard/riba', icon: AlertTriangle }
+      { name: 'Tax File', href: '/dashboard/tax', icon: FileText}
 
     ],
     other: [
