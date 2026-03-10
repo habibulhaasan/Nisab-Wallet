@@ -10,7 +10,7 @@ import {
   LogOut, Menu, X, ArrowRightLeft, Settings, 
   Users, Package, DollarSign, Globe, Sprout,
   HandCoins, MessageCircleQuestion, Goal, Blend, MessageSquareMore,
-  Home, Repeat ,FileText, ShoppingBag, PiggyBank
+  Home, Repeat ,FileText, ShoppingBag, PiggyBank, BookOpen
 } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
 import AdminNotificationBell from '@/components/AdminNotificationBell';
@@ -64,6 +64,7 @@ export default function DashboardNav() {
 
     ],
     other: [
+      { name: 'User Guide', href: '/dashboard/guide', icon: BookOpen },
       { name: 'Feedback', href: '/dashboard/feedback', icon: MessageCircleQuestion },
       { name: 'Settings', href: '/dashboard/settings', icon: Settings },
     ]
