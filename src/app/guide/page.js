@@ -1169,7 +1169,7 @@ export default function UserGuidePage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto pb-10">
+    <div className="max-w-7xl mx-auto px-4 lg:px-8 pt-6 pb-10">
 
       {/* ── Page header ── */}
       <div className="mb-4 lg:mb-6">
