@@ -1503,7 +1503,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="grid md:grid-cols-12 gap-10 pb-12 border-b border-white/5">
             <div className="md:col-span-4">
-              <div className="flex items-center gap-2.5 mb-4"><Image src="/nisab-logo.png" alt="Nisab Wallet" width={36} height={36} className="rounded-xl"/><span className="text-lg font-extrabold text-white">Nisab<span className="text-blue-400">Wallet</span></span></div>
+              <div className="flex items-center gap-2.5 mb-4"><Image src="/nisab-logo-white.png" alt="Nisab Wallet" width={36} height={36} className="rounded-xl"/><span className="text-lg font-extrabold text-white">Nisab<span className="text-blue-400">Wallet</span></span></div>
               <p className="text-sm leading-relaxed text-gray-500 mb-5 max-w-sm">A Shariah-compliant personal finance platform designed to help Muslims manage their wealth, track spending, grow their investments, and fulfil their Zakat obligations — all in one secure place.</p>
               <div className="flex gap-2">
                 {[{Icon:Mail,href:'mailto:support@nisabwallet.com',tip:'Email'},{Icon:Phone,href:null,tip:'WhatsApp (Coming Soon)'},{Icon:Globe,href:'#',tip:'Website'}].map(({Icon,href,tip})=>(
