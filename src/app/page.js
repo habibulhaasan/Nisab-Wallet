@@ -118,12 +118,12 @@ const FAQS = [
 ];
 
 const TESTIMONIALS_FALLBACK = [
-  { id:1, name:'Ahmed Al-Rashid',  role:'Business Owner, Dhaka',     rating:5, msg:"For the first time I'm completely confident about my Zakat. The system started the cycle automatically when my wealth hit Nisab and reminded me exactly 354 days later. Nothing else does this." },
-  { id:2, name:'Fatima Begum',     role:'Teacher, Chittagong',        rating:5, msg:"I was nervous about finance apps — too complicated. This one is different. Large buttons, clear labels, everything explained. My elderly mother can use it too." },
-  { id:3, name:'Mohammad Hasan',   role:'IT Professional, Sylhet',    rating:5, msg:"The investment tracker is superb. I manage stocks, an FDR, and savings certificates all in one place. The PDF reports are professional enough to hand to my accountant." },
-  { id:4, name:'Nadia Rahman',     role:'Homemaker, Rajshahi',        rating:5, msg:"The live Nisab threshold update is what sold me. I don't have to look up silver prices manually anymore. The system just knows and adjusts the calculation." },
-  { id:5, name:'Karim Uddin',      role:'Pharmacist, Khulna',         rating:4, msg:"Budgets + recurring transactions is a killer combo. I set my monthly limits, automate salary and fixed costs, and the app tells me exactly what I have left to spend." },
-  { id:6, name:'Sarah Ahmed',      role:'Entrepreneur, Cumilla',      rating:5, msg:"Switched from a spreadsheet six months ago. The Zakat history alone — being able to see every cycle, payment, and amount over the years — is worth the subscription." },
+  { id:1, name:'Ahmed Al-Rashid',  role:'Business Owner · Bangladesh 🇧🇩',  rating:5, msg:"For the first time I'm completely confident about my Zakat. The system started the cycle automatically when my wealth hit Nisab and reminded me exactly 354 days later. Nothing else does this." },
+  { id:2, name:'Fatima Begum',     role:'Teacher · Bangladesh 🇧🇩',          rating:5, msg:"I was nervous about finance apps — too complicated. This one is different. Large buttons, clear labels, everything explained. My elderly mother can use it too." },
+  { id:3, name:'Mohammad Hasan',   role:'IT Professional · Bangladesh 🇧🇩',  rating:5, msg:"The investment tracker is superb. I manage stocks, an FDR, and savings certificates all in one place. The PDF reports are professional enough to hand to my accountant." },
+  { id:4, name:'Nadia Rahman',     role:'Homemaker · Bangladesh 🇧🇩',        rating:5, msg:"The live Nisab threshold update is what sold me. I don't have to look up silver prices manually anymore. The system just knows and adjusts the calculation." },
+  { id:5, name:'Karim Uddin',      role:'Pharmacist · Bangladesh 🇧🇩',       rating:4, msg:"Budgets + recurring transactions is a killer combo. I set my monthly limits, automate salary and fixed costs, and the app tells me exactly what I have left to spend." },
+  { id:6, name:'Sarah Ahmed',      role:'Entrepreneur · Bangladesh 🇧🇩',     rating:5, msg:"Switched from a spreadsheet six months ago. The Zakat history alone — being able to see every cycle, payment, and amount over the years — is worth the subscription." },
 ];
 
 const COLOR = {
@@ -585,6 +585,144 @@ const FEATURE_DETAILS = {
   },
 };
 
+
+// ─── Gradient colours cycling per card ────────────────────────────────────────
+const CARD_GRADIENTS = [
+  'from-blue-600 to-indigo-700',
+  'from-violet-600 to-purple-700',
+  'from-cyan-600 to-blue-700',
+  'from-emerald-500 to-teal-600',
+  'from-rose-500 to-pink-600',
+  'from-amber-500 to-orange-600',
+];
+
+// ─── Single Review Card ────────────────────────────────────────────────────────
+function ReviewCard({ t, idx }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-2xl p-6 h-full flex flex-col shadow-sm select-none">
+      <div className="flex gap-0.5 mb-3">
+        {[1,2,3,4,5].map(s=>(
+          <Star key={s} size={14} className={s<=t.rating?'text-amber-400 fill-amber-400':'text-gray-200 fill-gray-200'}/>
+        ))}
+      </div>
+      <p className="text-sm text-gray-700 leading-relaxed flex-1 mb-5">"{t.msg}"</p>
+      <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
+        <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${CARD_GRADIENTS[idx % CARD_GRADIENTS.length]} flex items-center justify-center text-white font-extrabold text-sm flex-shrink-0`}>
+          {t.name.charAt(0)}
+        </div>
+        <div>
+          <div className="text-sm font-bold text-gray-900">{t.name}</div>
+          <div className="text-xs text-gray-500">{t.role}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Reviews Carousel ──────────────────────────────────────────────────────────
+function ReviewsCarousel({ reviews, onShowAll }) {
+  const [idx, setIdx] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [dragDelta, setDragDelta] = useState(0);
+  const timerRef = useRef(null);
+  const VISIBLE = 3; // cards visible at once on desktop
+
+  // How many "pages" of cards exist
+  const total = reviews.length;
+
+  const resetTimer = () => {
+    clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => setIdx(i => (i + 1) % total), 4000);
+  };
+
+  useEffect(() => {
+    resetTimer();
+    return () => clearInterval(timerRef.current);
+  }, [total]);
+
+  const prev = () => { setIdx(i => (i - 1 + total) % total); resetTimer(); };
+  const next = () => { setIdx(i => (i + 1) % total); resetTimer(); };
+
+  // Touch / mouse drag
+  const onDragStart = (e) => {
+    setDragging(true);
+    setStartX(e.touches ? e.touches[0].clientX : e.clientX);
+    setDragDelta(0);
+    clearInterval(timerRef.current);
+  };
+  const onDragMove = (e) => {
+    if (!dragging) return;
+    const x = e.touches ? e.touches[0].clientX : e.clientX;
+    setDragDelta(x - startX);
+  };
+  const onDragEnd = () => {
+    if (!dragging) return;
+    if (dragDelta < -50) next();
+    else if (dragDelta > 50) prev();
+    setDragging(false);
+    setDragDelta(0);
+    resetTimer();
+  };
+
+  // Build ordered list of reviews starting from idx
+  const ordered = Array.from({length: total}, (_, i) => reviews[(idx + i) % total]);
+
+  return (
+    <div>
+      {/* Carousel wrapper */}
+      <div className="relative"
+        onMouseDown={onDragStart} onMouseMove={onDragMove} onMouseUp={onDragEnd} onMouseLeave={onDragEnd}
+        onTouchStart={onDragStart} onTouchMove={onDragMove} onTouchEnd={onDragEnd}>
+
+        {/* Cards — show 1 on mobile, 2 on md, 3 on lg */}
+        <div className="overflow-hidden">
+          <div
+            className="flex gap-5 transition-transform duration-500 ease-out cursor-grab active:cursor-grabbing"
+            style={{ transform: `translateX(calc(-${idx * (100 / VISIBLE)}% - ${idx * (20 / VISIBLE)}px + ${dragDelta * 0.4}px))` }}>
+            {[...reviews, ...reviews, ...reviews].map((t, i) => (
+              <div key={i}
+                className="flex-shrink-0 w-full md:w-[calc(50%-10px)] lg:w-[calc(33.333%-14px)]">
+                <ReviewCard t={t} idx={i % CARD_GRADIENTS.length}/>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Prev / Next arrows */}
+        <button onClick={prev}
+          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 w-9 h-9 bg-white border border-gray-200 rounded-full shadow-md flex items-center justify-center hover:bg-gray-50 hover:border-blue-300 transition-all z-10 hidden sm:flex">
+          <ChevronRight size={16} className="rotate-180 text-gray-600"/>
+        </button>
+        <button onClick={next}
+          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 w-9 h-9 bg-white border border-gray-200 rounded-full shadow-md flex items-center justify-center hover:bg-gray-50 hover:border-blue-300 transition-all z-10 hidden sm:flex">
+          <ChevronRight size={16} className="text-gray-600"/>
+        </button>
+      </div>
+
+      {/* Dot indicators */}
+      <div className="flex justify-center gap-2 mt-8">
+        {reviews.map((_,i) => (
+          <button key={i} onClick={()=>{setIdx(i);resetTimer();}}
+            className={`rounded-full transition-all ${i===idx?'w-6 h-2.5 bg-blue-600':'w-2.5 h-2.5 bg-gray-300 hover:bg-gray-400'}`}/>
+        ))}
+      </div>
+
+      {/* Show All button */}
+      {reviews.length > 3 && (
+        <div className="flex justify-center mt-8">
+          <button onClick={onShowAll}
+            className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border-2 border-blue-200 text-blue-700 rounded-xl text-sm font-bold hover:bg-blue-50 hover:border-blue-400 transition-all shadow-sm">
+            <Star size={14} className="fill-amber-400 text-amber-400"/>
+            View All {reviews.length} Reviews
+            <ArrowRight size={14}/>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // LANDING PAGE
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -599,6 +737,7 @@ export default function LandingPage() {
   const [openFaq, setOpenFaq] = useState(null);
   const [modal, setModal] = useState(null);        // 'about' | 'contact' | 'privacy' | 'terms'
   const [featModal, setFeatModal] = useState(null); // feature title string
+  const [reviewsModal, setReviewsModal] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
 
   useEffect(() => {
@@ -641,7 +780,16 @@ export default function LandingPage() {
       for (const u of snap.docs) {
         if (list.length >= 6) break;
         const fs = await getDocs(query(collection(db,'users',u.id,'feedback'), where('featured','==',true), limit(2)));
-        fs.forEach(d => { const data = d.data(); if (data.message && list.length < 6) list.push({ id:d.id, name:data.userName||'User', role:data.userRole||'Nisab Wallet User', rating:data.rating||5, msg:data.message }); });
+        fs.forEach(d => {
+          const data = d.data();
+          if (data.message && list.length < 6) {
+            const desig    = data.userDesignation || '';
+            const location = data.userLocation   || '';
+            const roleParts = [desig, location].filter(Boolean);
+            const role = roleParts.length > 0 ? roleParts.join(' · ') : (data.userRole || 'Nisab Wallet User');
+            list.push({ id:d.id, name:data.userName||'User', role, rating:data.rating||5, msg:data.message });
+          }
+        });
       }
       if (list.length >= 3) setTestimonials(list);
     } catch {}
@@ -1261,20 +1409,7 @@ export default function LandingPage() {
             <h2 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-4">Trusted Across Bangladesh</h2>
             <p className="text-lg text-gray-600">Real feedback from Muslims who use Nisab Wallet every day.</p>
           </Fade>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {displayT.slice(0,6).map((t,i)=>(
-              <Fade key={t.id||i} delay={i*60}>
-                <div className="card-hover bg-white border border-gray-200 rounded-2xl p-6 h-full flex flex-col">
-                  <Stars n={t.rating}/>
-                  <p className="text-sm text-gray-700 mt-4 mb-5 leading-relaxed flex-1">"{t.msg}"</p>
-                  <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-extrabold text-sm flex-shrink-0">{t.name.charAt(0)}</div>
-                    <div><div className="text-sm font-bold text-gray-900">{t.name}</div><div className="text-xs text-gray-500">{t.role}</div></div>
-                  </div>
-                </div>
-              </Fade>
-            ))}
-          </div>
+          <ReviewsCarousel reviews={displayT} onShowAll={()=>setReviewsModal(true)}/>
         </div>
       </section>
 
@@ -1333,7 +1468,7 @@ export default function LandingPage() {
               <div className="flex items-center gap-2.5 mb-4"><Image src="/nisab-logo.png" alt="Nisab Wallet" width={36} height={36} className="rounded-xl"/><span className="text-lg font-extrabold text-white">Nisab<span className="text-blue-400">Wallet</span></span></div>
               <p className="text-sm leading-relaxed text-gray-500 mb-5 max-w-sm">A Shariah-compliant personal finance platform designed to help Muslims manage their wealth, track spending, grow their investments, and fulfil their Zakat obligations — all in one secure place.</p>
               <div className="flex gap-2">
-                {[{Icon:Mail,href:'mailto:support@nisabwallet.com',tip:'Email'},{Icon:Phone,href:'tel:+8801234567890',tip:'Phone'},{Icon:Globe,href:'#',tip:'Website'}].map(({Icon,href,tip})=>(
+                {[{Icon:Mail,href:'mailto:support@nisabwallet.com',tip:'Email'},{Icon:Phone,href:null,tip:'WhatsApp (Coming Soon)'},{Icon:Globe,href:'#',tip:'Website'}].map(({Icon,href,tip})=>(
                   <a key={tip} href={href} title={tip} className="w-9 h-9 bg-white/5 hover:bg-blue-700 border border-white/10 rounded-lg flex items-center justify-center transition-colors"><Icon size={15}/></a>
                 ))}
               </div>
@@ -1366,7 +1501,7 @@ export default function LandingPage() {
             <div className="md:col-span-2">
               <h4 className="text-white font-bold text-sm mb-4">Contact</h4>
               <ul className="space-y-3 text-sm">
-                {[{Icon:Mail,t:'support@nisabwallet.com',h:'mailto:support@nisabwallet.com'},{Icon:Phone,t:'+880 1234-567890',h:'tel:+8801234567890'},{Icon:MapPin,t:'Dhaka, Bangladesh',h:null},{Icon:Clock,t:'Mon–Fri 9AM–6PM (GMT+6)',h:null}].map(({Icon,t,h},i)=>(
+                {[{Icon:Mail,t:'support@nisabwallet.com',h:'mailto:support@nisabwallet.com'},{Icon:Phone,t:'WhatsApp · Coming Soon',h:null},{Icon:MapPin,t:'Bangladesh 🇧🇩',h:null},{Icon:Clock,t:'Mon–Fri 9AM–6PM (GMT+6)',h:null}].map(({Icon,t,h},i)=>(
                   <li key={i} className="flex items-start gap-2"><Icon size={13} className="mt-0.5 flex-shrink-0 text-blue-500"/>{h?<a href={h} className="hover:text-white transition-colors">{t}</a>:<span>{t}</span>}</li>
                 ))}
               </ul>
@@ -1392,7 +1527,7 @@ export default function LandingPage() {
       {modal==='contact' && (
         <Modal title="Contact Us">
           <div className="space-y-4">
-            {[{Icon:Mail,title:'Email Support',sub:'Response within 24 hours',val:'support@nisabwallet.com',href:'mailto:support@nisabwallet.com'},{Icon:Phone,title:'Phone Support',sub:'Mon–Fri, 9AM–6PM (GMT+6)',val:'+880 1234-567890',href:'tel:+8801234567890'},{Icon:MapPin,title:'Office',sub:'Dhaka, Bangladesh',val:'House #123, Road #4, Dhanmondi, Dhaka 1209',href:null}].map(({Icon,title,sub,val,href})=>(
+            {[{Icon:Mail,title:'Email Support',sub:'Response within 24 hours',val:'support@nisabwallet.com',href:'mailto:support@nisabwallet.com'},{Icon:Phone,title:'WhatsApp',sub:'Service coming soon',val:'WhatsApp support launching shortly',href:null},{Icon:MapPin,title:'Location',sub:'Our home base',val:'Bangladesh 🇧🇩',href:null}].map(({Icon,title,sub,val,href})=>(
               <div key={title} className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl border border-gray-200"><div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0"><Icon size={18} className="text-blue-700"/></div><div><div className="font-semibold text-gray-900 text-sm mb-0.5">{title}</div><div className="text-xs text-gray-500 mb-1">{sub}</div>{href?<a href={href} className="text-sm text-blue-600 hover:underline">{val}</a>:<span className="text-sm text-gray-700">{val}</span>}</div></div>
             ))}
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-900"><strong>Already a user?</strong> Use the Feedback section in your dashboard for the fastest response.</div>
@@ -1414,6 +1549,29 @@ export default function LandingPage() {
             {[['1. Acceptance','By using Nisab Wallet you agree to these Terms. Please do not use the platform if you disagree.'],['2. Use of Service','You agree to use the service lawfully. You are responsible for maintaining account security and confidentiality.'],['3. Subscription & Payments','All plans include a 5-day free trial. Payments are verified manually within 24 hours. Prices are in BDT and subject to 30-days notice for changes.'],['4. Zakat Calculations','We follow accepted fiqh methodology and aim for full accuracy. However, we recommend consulting a qualified Islamic scholar for your final obligation.'],['5. Limitation of Liability','Nisab Wallet is provided "as is". We are not liable for financial decisions made based on platform data.'],['6. Termination','We may terminate access for violations of these Terms.'],['7. Contact','legal@nisabwallet.com']].map(([h,b])=><div key={h}><h3 className="font-bold text-gray-900 mb-1">{h}</h3><p>{b}</p></div>)}
           </div>
         </Modal>
+      )}
+
+
+      {/* ── All Reviews Modal ─────────────────────────────────────────────── */}
+      {reviewsModal && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={()=>setReviewsModal(false)}>
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <Star size={18} className="fill-amber-400 text-amber-400"/> All User Reviews
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">{displayT.length} reviews from verified users</p>
+              </div>
+              <button onClick={()=>setReviewsModal(false)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors"><X size={18}/></button>
+            </div>
+            <div className="p-6 overflow-y-auto grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {displayT.map((t,i)=>(
+                <ReviewCard key={t.id||i} t={t} idx={i}/>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Feature detail modal ── */}
