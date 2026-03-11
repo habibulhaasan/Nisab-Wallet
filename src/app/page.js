@@ -597,13 +597,21 @@ const CARD_GRADIENTS = [
 ];
 
 // ─── Single Review Card ────────────────────────────────────────────────────────
-function ReviewCard({ t, idx }) {
+function ReviewCard({ t, idx, featured = false }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl p-6 h-full flex flex-col shadow-sm select-none">
-      <div className="flex gap-0.5 mb-3">
-        {[1,2,3,4,5].map(s=>(
-          <Star key={s} size={14} className={s<=t.rating?'text-amber-400 fill-amber-400':'text-gray-200 fill-gray-200'}/>
-        ))}
+    <div className={`bg-white rounded-2xl p-6 flex flex-col h-full select-none
+      ${featured
+        ? 'border-2 border-blue-300 shadow-lg shadow-blue-100/60 ring-1 ring-blue-200'
+        : 'border border-gray-200 shadow-sm'}`}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex gap-0.5">
+          {[1,2,3,4,5].map(s=>(
+            <Star key={s} size={13} className={s<=t.rating?'text-amber-400 fill-amber-400':'text-gray-200 fill-gray-200'}/>
+          ))}
+        </div>
+        <span className="text-[10px] text-blue-500 font-semibold bg-blue-50 px-2 py-0.5 rounded-full">
+          Verified User
+        </span>
       </div>
       <p className="text-sm text-gray-700 leading-relaxed flex-1 mb-5">"{t.msg}"</p>
       <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
@@ -620,97 +628,134 @@ function ReviewCard({ t, idx }) {
 }
 
 // ─── Reviews Carousel ──────────────────────────────────────────────────────────
+// Strategy: render all cards in a flex row, slide by exactly one card-width + gap.
+// Uses a ref to measure the real pixel width so there is ZERO clipping at any breakpoint.
 function ReviewsCarousel({ reviews, onShowAll }) {
-  const [idx, setIdx] = useState(0);
+  const [active, setActive] = useState(0);
+  const [cols, setCols] = useState(3);           // columns visible
+  const [cardW, setCardW] = useState(0);         // measured card pixel width
+  const [gap] = useState(20);                    // gap between cards (px)
   const [dragging, setDragging] = useState(false);
   const [startX, setStartX] = useState(0);
-  const [dragDelta, setDragDelta] = useState(0);
+  const [liveOffset, setLiveOffset] = useState(0); // drag live offset
+  const trackRef = useRef(null);
   const timerRef = useRef(null);
-  const VISIBLE = 3; // cards visible at once on desktop
-
-  // How many "pages" of cards exist
   const total = reviews.length;
+
+  // Measure card width + decide column count on resize
+  useEffect(() => {
+    const measure = () => {
+      const w = trackRef.current?.offsetWidth || 0;
+      const c = w < 640 ? 1 : w < 1024 ? 2 : 3;
+      setCols(c);
+      setCardW((w - gap * (c - 1)) / c);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (trackRef.current) ro.observe(trackRef.current);
+    return () => ro.disconnect();
+  }, [gap]);
+
+  const maxActive = Math.max(0, total - cols);
 
   const resetTimer = () => {
     clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => setIdx(i => (i + 1) % total), 4000);
+    timerRef.current = setInterval(() => {
+      setActive(i => i >= maxActive ? 0 : i + 1);
+    }, 4000);
   };
 
-  useEffect(() => {
-    resetTimer();
-    return () => clearInterval(timerRef.current);
-  }, [total]);
+  useEffect(() => { resetTimer(); return () => clearInterval(timerRef.current); }, [maxActive]);
 
-  const prev = () => { setIdx(i => (i - 1 + total) % total); resetTimer(); };
-  const next = () => { setIdx(i => (i + 1) % total); resetTimer(); };
+  const goTo = (i) => { setActive(Math.min(Math.max(i, 0), maxActive)); resetTimer(); };
+  const prev = () => goTo(active - 1);
+  const next = () => goTo(active + 1);
 
-  // Touch / mouse drag
+  // Drag / swipe handlers
   const onDragStart = (e) => {
     setDragging(true);
     setStartX(e.touches ? e.touches[0].clientX : e.clientX);
-    setDragDelta(0);
+    setLiveOffset(0);
     clearInterval(timerRef.current);
   };
   const onDragMove = (e) => {
     if (!dragging) return;
     const x = e.touches ? e.touches[0].clientX : e.clientX;
-    setDragDelta(x - startX);
+    setLiveOffset(x - startX);
   };
   const onDragEnd = () => {
     if (!dragging) return;
-    if (dragDelta < -50) next();
-    else if (dragDelta > 50) prev();
+    if (liveOffset < -50) next();
+    else if (liveOffset > 50) prev();
     setDragging(false);
-    setDragDelta(0);
+    setLiveOffset(0);
     resetTimer();
   };
 
-  // Build ordered list of reviews starting from idx
-  const ordered = Array.from({length: total}, (_, i) => reviews[(idx + i) % total]);
+  // Pixel offset for the track
+  const baseOffset = -(active * (cardW + gap));
+  const totalOffset = baseOffset + (dragging ? liveOffset * 0.35 : 0);
 
   return (
     <div>
-      {/* Carousel wrapper */}
-      <div className="relative"
-        onMouseDown={onDragStart} onMouseMove={onDragMove} onMouseUp={onDragEnd} onMouseLeave={onDragEnd}
-        onTouchStart={onDragStart} onTouchMove={onDragMove} onTouchEnd={onDragEnd}>
-
-        {/* Cards — show 1 on mobile, 2 on md, 3 on lg */}
-        <div className="overflow-hidden">
+      <div className="relative px-10" ref={trackRef}>
+        {/* ── Track ─────────────────────────────────────────────────────── */}
+        <div className="overflow-hidden rounded-2xl"
+          onMouseDown={onDragStart} onMouseMove={onDragMove}
+          onMouseUp={onDragEnd}   onMouseLeave={onDragEnd}
+          onTouchStart={onDragStart} onTouchMove={onDragMove} onTouchEnd={onDragEnd}>
           <div
-            className="flex gap-5 transition-transform duration-500 ease-out cursor-grab active:cursor-grabbing"
-            style={{ transform: `translateX(calc(-${idx * (100 / VISIBLE)}% - ${idx * (20 / VISIBLE)}px + ${dragDelta * 0.4}px))` }}>
-            {[...reviews, ...reviews, ...reviews].map((t, i) => (
-              <div key={i}
-                className="flex-shrink-0 w-full md:w-[calc(50%-10px)] lg:w-[calc(33.333%-14px)]">
-                <ReviewCard t={t} idx={i % CARD_GRADIENTS.length}/>
+            className="flex cursor-grab active:cursor-grabbing"
+            style={{
+              gap: `${gap}px`,
+              transform: `translateX(${totalOffset}px)`,
+              transition: dragging ? 'none' : 'transform 0.45s cubic-bezier(0.25,0.46,0.45,0.94)',
+              willChange: 'transform',
+            }}>
+            {reviews.map((t, i) => (
+              <div key={t.id || i}
+                style={{
+                  width: `${cardW}px`,
+                  flexShrink: 0,
+                  opacity: (i >= active && i < active + cols) ? 1 : 0.35,
+                  transform: (i >= active && i < active + cols) ? 'scale(1)' : 'scale(0.97)',
+                  transition: 'opacity 0.4s ease, transform 0.4s ease',
+                }}>
+                <ReviewCard t={t} idx={i} featured={i === active + Math.floor(cols/2)}/>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Prev / Next arrows */}
-        <button onClick={prev}
-          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 w-9 h-9 bg-white border border-gray-200 rounded-full shadow-md flex items-center justify-center hover:bg-gray-50 hover:border-blue-300 transition-all z-10 hidden sm:flex">
+        {/* ── Prev / Next arrows ────────────────────────────────────────── */}
+        <button onClick={prev} disabled={active === 0}
+          className="absolute left-0 top-1/2 -translate-y-1/2 w-9 h-9 bg-white border border-gray-200 rounded-full shadow-md flex items-center justify-center hover:bg-gray-50 hover:border-blue-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all z-10">
           <ChevronRight size={16} className="rotate-180 text-gray-600"/>
         </button>
-        <button onClick={next}
-          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 w-9 h-9 bg-white border border-gray-200 rounded-full shadow-md flex items-center justify-center hover:bg-gray-50 hover:border-blue-300 transition-all z-10 hidden sm:flex">
+        <button onClick={next} disabled={active >= maxActive}
+          className="absolute right-0 top-1/2 -translate-y-1/2 w-9 h-9 bg-white border border-gray-200 rounded-full shadow-md flex items-center justify-center hover:bg-gray-50 hover:border-blue-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all z-10">
           <ChevronRight size={16} className="text-gray-600"/>
         </button>
       </div>
 
-      {/* Dot indicators */}
-      <div className="flex justify-center gap-2 mt-8">
-        {reviews.map((_,i) => (
-          <button key={i} onClick={()=>{setIdx(i);resetTimer();}}
-            className={`rounded-full transition-all ${i===idx?'w-6 h-2.5 bg-blue-600':'w-2.5 h-2.5 bg-gray-300 hover:bg-gray-400'}`}/>
+      {/* ── Dot indicators ────────────────────────────────────────────────── */}
+      <div className="flex justify-center gap-2 mt-7">
+        {Array.from({length: maxActive + 1}, (_, i) => (
+          <button key={i} onClick={() => goTo(i)}
+            className={`rounded-full transition-all duration-300 ${
+              i === active ? 'w-7 h-2.5 bg-blue-600' : 'w-2.5 h-2.5 bg-gray-300 hover:bg-gray-400'
+            }`}/>
         ))}
       </div>
 
-      {/* Show All button */}
+      {/* ── Swipe hint on mobile ──────────────────────────────────────────── */}
+      <p className="text-center text-[11px] text-gray-400 mt-3 sm:hidden">
+        ← Swipe to browse reviews →
+      </p>
+
+      {/* ── View all button ───────────────────────────────────────────────── */}
       {reviews.length > 3 && (
-        <div className="flex justify-center mt-8">
+        <div className="flex justify-center mt-7">
           <button onClick={onShowAll}
             className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border-2 border-blue-200 text-blue-700 rounded-xl text-sm font-bold hover:bg-blue-50 hover:border-blue-400 transition-all shadow-sm">
             <Star size={14} className="fill-amber-400 text-amber-400"/>
