@@ -1,0 +1,119 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Admin Helper Function
+    function isAdmin() {
+      return request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if user is the owner
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+    
+    // System Config & Announcements
+    match /system/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Admin Content Management (Landing Page, etc.)
+    match /admin/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Subscription Plans (Public read, Admin write)
+    match /subscriptionPlans/{planId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // App Settings (Payment Gateway, Trial Period)
+    match /appSettings/{settingId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // Lead Management
+    match /demo_leads/{leadId} {
+      allow create: if true;
+      allow read, write: if isAdmin();
+    }
+    
+    // Subscription Transactions
+    match /subscription_transactions/{id} {
+      allow read, write: if isAdmin();
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // ── Admin Notifications ───────────────────────────────────────────────────
+    // Any signed-in user can CREATE so they can notify admins.
+    // Only admins can READ / UPDATE / DELETE.
+    match /adminNotifications/{docId} {
+      allow create: if isAuthenticated();
+      allow read, update, delete: if isAdmin();
+    }
+    
+    // User Profiles
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      
+      allow update: if isOwner(userId) && 
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'subscriptionStatus', 'isBlocked']));
+      
+      allow create: if isAuthenticated();
+      
+      allow write: if isAdmin();
+      
+      match /accounts/{accountId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+      
+      match /transactions/{transactionId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+      
+      match /categories/{categoryId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+      
+      match /zakatCycles/{cycleId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+      
+      match /settings/{settingId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+      
+      match /subscriptions/{subscriptionId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isAuthenticated() || isAdmin();
+        allow update, delete: if isAdmin();
+        allow write: if isAdmin();
+      }
+      
+      match /adminNotes/{noteId} {
+        allow read: if isAdmin();
+        allow write: if isAdmin();
+        allow create: if isAdmin();
+      }
+      
+      match /feedback/{feedbackId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+      
+      match /{allPaths=**} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+  }
+}
