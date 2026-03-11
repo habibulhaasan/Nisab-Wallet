@@ -1401,7 +1401,7 @@ export default function LandingPage() {
               <div className="flex items-center gap-2.5 mb-4"><Image src="/nisab-logo-white.png" alt="Nisab Wallet" width={36} height={36} className="rounded-xl"/><span className="text-lg font-extrabold text-white">Nisab<span className="text-blue-400">Wallet</span></span></div>
               <p className="text-sm leading-relaxed text-gray-500 mb-5 max-w-sm">A Shariah-compliant personal finance platform designed to help Muslims manage their wealth, track spending, grow their investments, and fulfil their Zakat obligations — all in one secure place.</p>
               <div className="flex gap-2">
-                {[{Icon:Mail,href:'mailto:nisabwallet@gmail.com',tip:'Email'},{Icon:Phone,href:'tel:+8801234567890',tip:'Phone'},{Icon:Globe,href:'#',tip:'Website'}].map(({Icon,href,tip})=>(
+                {[{Icon:Mail,href:'mailto:nisabwallet@gmail.com',tip:'Email'},{Icon:Phone,href:'No phone service yet',tip:'Phone'},{Icon:Globe,href:'#',tip:'Website'}].map(({Icon,href,tip})=>(
                   <a key={tip} href={href} title={tip} className="w-9 h-9 bg-white/5 hover:bg-blue-700 border border-white/10 rounded-lg flex items-center justify-center transition-colors"><Icon size={15}/></a>
                 ))}
               </div>
@@ -1434,7 +1434,7 @@ export default function LandingPage() {
             <div className="md:col-span-2">
               <h4 className="text-white font-bold text-sm mb-4">Contact</h4>
               <ul className="space-y-3 text-sm">
-                {[{Icon:Mail,t:'nisabwallet@gmail.com',h:'mailto:nisabwallet@gmail.com'},{Icon:Phone,t:'+880 1234-567890',h:'tel:+8801234567890'},{Icon:MapPin,t:'Dhaka, Bangladesh',h:null},{Icon:Clock,t:'Mon–Fri 9AM–6PM (GMT+6)',h:null}].map(({Icon,t,h},i)=>(
+                {[{Icon:Mail,t:'nisabwallet@gmail.com',h:'mailto:nisabwallet@gmail.com'},{Icon:Phone,t:'No phone service yet',h:''},{Icon:MapPin,t:'Bangladesh 🇧🇩',h:null},{Icon:Clock,t:'Sun–Thu 9AM–6PM (GMT+6)',h:null}].map(({Icon,t,h},i)=>(
                   <li key={i} className="flex items-start gap-2"><Icon size={13} className="mt-0.5 flex-shrink-0 text-blue-500"/>{h?<a href={h} className="hover:text-white transition-colors">{t}</a>:<span>{t}</span>}</li>
                 ))}
               </ul>
@@ -1460,7 +1460,7 @@ export default function LandingPage() {
       {modal==='contact' && (
         <Modal title="Contact Us">
           <div className="space-y-4">
-            {[{Icon:Mail,title:'Email Support',sub:'Response within 24 hours',val:'nisabwallet@gmail.com',href:'mailto:nisabwallet@gmail.com'},{Icon:Phone,title:'Phone Support',sub:'Mon–Fri, 9AM–6PM (GMT+6)',val:'+880 1234-567890',href:'tel:+8801234567890'},{Icon:MapPin,title:'Office',sub:'Dhaka, Bangladesh',val:'House #123, Road #4, Dhanmondi, Dhaka 1209',href:null}].map(({Icon,title,sub,val,href})=>(
+            {[{Icon:Mail,title:'Email Support',sub:'Response within 24 hours',val:'nisabwallet@gmail.com',href:'mailto:nisabwallet@gmail.com'},{Icon:Phone,title:'Phone Support',sub:'#',val:'N phone service yet',href:''},{Icon:MapPin,title:'Office',sub:' Bangladesh',val:'#',href:null}].map(({Icon,title,sub,val,href})=>(
               <div key={title} className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl border border-gray-200"><div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0"><Icon size={18} className="text-blue-700"/></div><div><div className="font-semibold text-gray-900 text-sm mb-0.5">{title}</div><div className="text-xs text-gray-500 mb-1">{sub}</div>{href?<a href={href} className="text-sm text-blue-600 hover:underline">{val}</a>:<span className="text-sm text-gray-700">{val}</span>}</div></div>
             ))}
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-900"><strong>Already a user?</strong> Use the Feedback section in your dashboard for the fastest response.</div>
