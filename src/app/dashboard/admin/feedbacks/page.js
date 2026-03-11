@@ -17,6 +17,7 @@ import {
   ChevronDown, ChevronUp, ArrowLeft, Eye, EyeOff, BarChart2,
   Download, Users, TrendingUp, XCircle
 } from 'lucide-react';
+// UserCheck added for identity modal
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({ label, value, icon, color = 'gray', sub }) {
@@ -118,8 +119,111 @@ function NotesModal({ item, onClose, onSave }) {
   );
 }
 
+
+// ─── Identity Modal ───────────────────────────────────────────────────────────
+function IdentityModal({ item, onClose, onSave }) {
+  const [designation, setDesignation] = useState(item?.userDesignation || '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    await onSave(designation.trim());
+    setSaving(false);
+  };
+
+  const SUGGESTIONS = [
+    'Business Owner','Software Engineer','Teacher','Doctor','Pharmacist',
+    'Accountant','Entrepreneur','Homemaker','IT Professional','Student',
+    'Manager','Banker','Lawyer','Government Officer','Freelancer',
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+            <UserCheck className="w-4 h-4 text-yellow-600" /> Landing Page Identity
+          </h3>
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {/* Preview of what will show on landing page */}
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
+            <p className="text-xs text-yellow-700 font-semibold mb-2 flex items-center gap-1.5">
+              <Star className="w-3 h-3 fill-yellow-500 text-yellow-500" /> Preview on landing page
+            </p>
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-full bg-yellow-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                {(item?.userName || 'U').charAt(0)}
+              </div>
+              <div>
+                <div className="text-sm font-bold text-gray-900">{item?.userName || 'User Name'}</div>
+                <div className="text-xs text-gray-500">
+                  {designation || 'Designation'} · Bangladesh 🇧🇩
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Designation input */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Designation / Role <span className="text-red-400">*</span>
+            </label>
+            <input
+              type="text"
+              value={designation}
+              onChange={e => setDesignation(e.target.value)}
+              placeholder="e.g. Business Owner, Teacher, Software Engineer…"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
+            />
+          </div>
+
+          {/* Location — fixed */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Location</label>
+            <div className="flex items-center gap-2 px-3 py-2.5 border border-gray-200 rounded-xl bg-gray-50 text-sm text-gray-500">
+              <span>🇧🇩</span> Bangladesh
+              <span className="ml-auto text-[10px] text-gray-400 italic">fixed for all users</span>
+            </div>
+          </div>
+
+          {/* Quick suggestions */}
+          <div>
+            <p className="text-xs text-gray-400 font-medium mb-2">Quick suggestions</p>
+            <div className="flex flex-wrap gap-1.5">
+              {SUGGESTIONS.map(s => (
+                <button key={s} onClick={() => setDesignation(s)}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                    designation === s
+                      ? 'bg-yellow-500 text-white border-yellow-500'
+                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-3 px-6 pb-6">
+          <button onClick={onClose}
+            className="flex-1 py-2.5 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50">
+            Cancel
+          </button>
+          <button onClick={handleSave} disabled={!designation.trim() || saving}
+            className="flex-1 py-2.5 bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2">
+            <Save className="w-4 h-4" /> {saving ? 'Saving…' : 'Save Identity'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Detail Drawer ────────────────────────────────────────────────────────────
-function DetailDrawer({ item, onClose, onResolve, onFeature, onOpenNotes, onDelete }) {
+function DetailDrawer({ item, onClose, onResolve, onFeature, onOpenNotes, onSetIdentity, onDelete }) {
   if (!item) return null;
   return (
     <div className="fixed inset-0 bg-black/40 z-40 flex justify-end" onClick={onClose}>
@@ -192,6 +296,29 @@ function DetailDrawer({ item, onClose, onResolve, onFeature, onOpenNotes, onDele
             </div>
           )}
 
+          {/* Landing page identity */}
+          {item.featured && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+              <p className="text-xs text-yellow-700 font-semibold mb-2 flex items-center gap-1.5">
+                <Star className="w-3 h-3 fill-yellow-500 text-yellow-500" /> Landing Page Preview
+              </p>
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-full bg-yellow-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                  {(item.userName || 'U').charAt(0)}
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-gray-900">{item.userName || 'User'}</div>
+                  <div className="text-xs text-gray-500">
+                    {item.userDesignation
+                      ? <>{item.userDesignation} &middot; Bangladesh &#127475;&#127465;</>
+                      : <span className="italic text-yellow-600">No designation set — click Set Identity</span>
+                    }
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Resolution info */}
           {item.status === 'resolved' && item.resolvedAt && (
             <div className="bg-green-50 border border-green-200 rounded-xl p-3">
@@ -224,6 +351,17 @@ function DetailDrawer({ item, onClose, onResolve, onFeature, onOpenNotes, onDele
               <Star className={`w-4 h-4 ${item.featured ? 'fill-yellow-400 text-yellow-400' : ''}`} />
               {item.featured ? 'Unfeature' : 'Feature'}
             </button>
+            {item.featured && (
+              <button onClick={() => onSetIdentity && onSetIdentity(item)}
+                className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium border ${
+                  item.userDesignation
+                    ? 'bg-yellow-50 border-yellow-300 text-yellow-700 hover:bg-yellow-100'
+                    : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
+                }`}>
+                <UserCheck className="w-4 h-4" />
+                {item.userDesignation ? 'Edit Identity' : 'Set Identity'}
+              </button>
+            )}
             <button onClick={() => onOpenNotes(item)}
               className="flex items-center justify-center gap-2 py-2.5 bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100 rounded-xl text-sm font-medium">
               <StickyNote className="w-4 h-4" /> Notes
@@ -261,6 +399,7 @@ export default function AdminFeedbacksPage() {
   // modals / drawers
   const [selectedItem, setSelectedItem]     = useState(null);   // detail drawer
   const [notesItem, setNotesItem]           = useState(null);   // notes modal
+  const [identityItem, setIdentityItem]     = useState(null);   // identity modal
   const [confirmDialog, setConfirmDialog]   = useState({ isOpen: false });
 
   // ── Admin guard ─────────────────────────────────────────────────────────────
@@ -390,6 +529,23 @@ export default function AdminFeedbacksPage() {
       addToast('Notes saved', 'success');
       setNotesItem(null);
       setSelectedItem(prev => prev?.id === notesItem.id ? { ...prev, adminNotes: notes } : prev);
+      loadFeedback(true);
+    } catch (err) { addToast('Error: ' + err.message, 'error'); }
+  };
+
+
+  const saveIdentity = async (designation) => {
+    if (!identityItem) return;
+    try {
+      const ref = doc(db, 'users', identityItem.userId, 'feedback', identityItem.id);
+      await updateDoc(ref, {
+        userDesignation: designation,
+        identityUpdatedAt: new Date(),
+        identityUpdatedBy: user.uid,
+      });
+      addToast('Identity saved — will show on landing page', 'success');
+      setIdentityItem(null);
+      setSelectedItem(prev => prev?.id === identityItem.id ? { ...prev, userDesignation: designation } : prev);
       loadFeedback(true);
     } catch (err) { addToast('Error: ' + err.message, 'error'); }
   };
@@ -611,6 +767,7 @@ export default function AdminFeedbacksPage() {
                     {item.featured && (
                       <span className="flex items-center gap-1 px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-semibold">
                         <Star className="w-3 h-3 fill-yellow-500 text-yellow-500" /> Featured
+                        {item.userDesignation && <span className="text-yellow-600">· {item.userDesignation}</span>}
                       </span>
                     )}
                     {item.adminNotes && (
@@ -664,6 +821,13 @@ export default function AdminFeedbacksPage() {
                     title={item.featured ? 'Remove from landing page' : 'Feature on landing page'}>
                     <Star className={`w-4 h-4 ${item.featured ? 'fill-yellow-400' : ''}`} />
                   </button>
+                  {item.featured && (
+                    <button onClick={() => setIdentityItem(item)}
+                      className={`p-2 rounded-lg transition-colors ${item.userDesignation ? 'text-yellow-600 bg-yellow-50 hover:bg-yellow-100' : 'text-gray-400 hover:bg-gray-100'}`}
+                      title="Set landing page identity (name & designation)">
+                      <UserCheck className="w-4 h-4" />
+                    </button>
+                  )}
                   <button onClick={() => setNotesItem(item)}
                     className={`p-2 rounded-lg transition-colors ${
                       item.adminNotes ? 'text-purple-600 bg-purple-50 hover:bg-purple-100' : 'text-gray-400 hover:bg-gray-100'}`}
@@ -689,6 +853,7 @@ export default function AdminFeedbacksPage() {
           onResolve={toggleResolved}
           onFeature={toggleFeatured}
           onOpenNotes={(item) => { setNotesItem(item); }}
+          onSetIdentity={(item) => { setIdentityItem(item); }}
           onDelete={confirmDelete}
         />
       )}
@@ -699,6 +864,15 @@ export default function AdminFeedbacksPage() {
           item={notesItem}
           onClose={() => setNotesItem(null)}
           onSave={saveNotes}
+        />
+      )}
+
+      {/* ── Identity Modal ─────────────────────────────────────────────────── */}
+      {identityItem && (
+        <IdentityModal
+          item={identityItem}
+          onClose={() => setIdentityItem(null)}
+          onSave={saveIdentity}
         />
       )}
 
