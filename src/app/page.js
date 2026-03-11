@@ -597,30 +597,35 @@ const CARD_GRADIENTS = [
 ];
 
 // ─── Single Review Card ────────────────────────────────────────────────────────
-function ReviewCard({ t, idx, featured = false }) {
+function ReviewCard({ t, idx }) {
   return (
-    <div className={`bg-white rounded-2xl p-6 flex flex-col h-full select-none
-      ${featured
-        ? 'border-2 border-blue-300 shadow-lg shadow-blue-100/60 ring-1 ring-blue-200'
-        : 'border border-gray-200 shadow-sm'}`}>
-      <div className="flex items-center justify-between mb-3">
+    <div className="bg-white border border-gray-200 rounded-2xl p-6 flex flex-col h-full shadow-sm">
+      {/* Stars + badge */}
+      <div className="flex items-center justify-between mb-4">
         <div className="flex gap-0.5">
-          {[1,2,3,4,5].map(s=>(
-            <Star key={s} size={13} className={s<=t.rating?'text-amber-400 fill-amber-400':'text-gray-200 fill-gray-200'}/>
+          {[1,2,3,4,5].map(s => (
+            <Star key={s} size={13}
+              className={s <= t.rating ? 'text-amber-400 fill-amber-400' : 'text-gray-200 fill-gray-200'}/>
           ))}
         </div>
-        <span className="text-[10px] text-blue-500 font-semibold bg-blue-50 px-2 py-0.5 rounded-full">
-          Verified User
+        <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+          Verified
         </span>
       </div>
-      <p className="text-sm text-gray-700 leading-relaxed flex-1 mb-5">"{t.msg}"</p>
+      {/* Message — fixed min-height so short msgs don't shrink the card */}
+      <p className="text-sm text-gray-700 leading-relaxed flex-1 mb-5" style={{minHeight:'72px'}}>
+        "{t.msg}"
+      </p>
+      {/* Author */}
       <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
-        <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${CARD_GRADIENTS[idx % CARD_GRADIENTS.length]} flex items-center justify-center text-white font-extrabold text-sm flex-shrink-0`}>
+        <div className={`w-10 h-10 rounded-full bg-gradient-to-br flex-shrink-0
+          flex items-center justify-center text-white font-extrabold text-sm
+          ${CARD_GRADIENTS[idx % CARD_GRADIENTS.length]}`}>
           {t.name.charAt(0)}
         </div>
-        <div>
-          <div className="text-sm font-bold text-gray-900">{t.name}</div>
-          <div className="text-xs text-gray-500">{t.role}</div>
+        <div className="min-w-0">
+          <div className="text-sm font-bold text-gray-900 truncate">{t.name}</div>
+          <div className="text-xs text-gray-500 truncate">{t.role}</div>
         </div>
       </div>
     </div>
@@ -628,136 +633,123 @@ function ReviewCard({ t, idx, featured = false }) {
 }
 
 // ─── Reviews Carousel ──────────────────────────────────────────────────────────
-// Strategy: render all cards in a flex row, slide by exactly one card-width + gap.
-// Uses a ref to measure the real pixel width so there is ZERO clipping at any breakpoint.
+// Approach: CSS scroll-snap. No JS math, no clipping, works perfectly at every
+// breakpoint. One card on mobile, two on md, three on lg. Auto-advances every 4s.
+// User can drag/swipe natively or click arrows/dots.
 function ReviewsCarousel({ reviews, onShowAll }) {
   const [active, setActive] = useState(0);
-  const [cols, setCols] = useState(3);           // columns visible
-  const [cardW, setCardW] = useState(0);         // measured card pixel width
-  const [gap] = useState(20);                    // gap between cards (px)
-  const [dragging, setDragging] = useState(false);
-  const [startX, setStartX] = useState(0);
-  const [liveOffset, setLiveOffset] = useState(0); // drag live offset
-  const trackRef = useRef(null);
-  const timerRef = useRef(null);
-  const total = reviews.length;
+  const scrollRef = useRef(null);
+  const timerRef  = useRef(null);
+  const total     = reviews.length;
 
-  // Measure card width + decide column count on resize
-  useEffect(() => {
-    const measure = () => {
-      const w = trackRef.current?.offsetWidth || 0;
-      const c = w < 640 ? 1 : w < 1024 ? 2 : 3;
-      setCols(c);
-      setCardW((w - gap * (c - 1)) / c);
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    if (trackRef.current) ro.observe(trackRef.current);
-    return () => ro.disconnect();
-  }, [gap]);
-
-  const maxActive = Math.max(0, total - cols);
+  // Scroll to card i
+  const scrollTo = (i) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const card = el.children[i];
+    if (!card) return;
+    el.scrollTo({ left: card.offsetLeft - el.offsetLeft, behavior: 'smooth' });
+    setActive(i);
+  };
 
   const resetTimer = () => {
     clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
-      setActive(i => i >= maxActive ? 0 : i + 1);
+      setActive(prev => {
+        const next = prev >= total - 1 ? 0 : prev + 1;
+        const el = scrollRef.current;
+        if (el) {
+          const card = el.children[next];
+          if (card) el.scrollTo({ left: card.offsetLeft - el.offsetLeft, behavior: 'smooth' });
+        }
+        return next;
+      });
     }, 4000);
   };
 
-  useEffect(() => { resetTimer(); return () => clearInterval(timerRef.current); }, [maxActive]);
+  useEffect(() => { resetTimer(); return () => clearInterval(timerRef.current); }, [total]);
 
-  const goTo = (i) => { setActive(Math.min(Math.max(i, 0), maxActive)); resetTimer(); };
-  const prev = () => goTo(active - 1);
-  const next = () => goTo(active + 1);
-
-  // Drag / swipe handlers
-  const onDragStart = (e) => {
-    setDragging(true);
-    setStartX(e.touches ? e.touches[0].clientX : e.clientX);
-    setLiveOffset(0);
+  // Sync active dot on manual scroll
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
     clearInterval(timerRef.current);
+    const cardW = el.children[0]?.offsetWidth || 1;
+    const i = Math.round(el.scrollLeft / cardW);
+    setActive(Math.min(Math.max(i, 0), total - 1));
   };
-  const onDragMove = (e) => {
-    if (!dragging) return;
-    const x = e.touches ? e.touches[0].clientX : e.clientX;
-    setLiveOffset(x - startX);
-  };
-  const onDragEnd = () => {
-    if (!dragging) return;
-    if (liveOffset < -50) next();
-    else if (liveOffset > 50) prev();
-    setDragging(false);
-    setLiveOffset(0);
-    resetTimer();
-  };
+  // Restart auto-play after user stops scrolling
+  const onScrollEnd = () => resetTimer();
 
-  // Pixel offset for the track
-  const baseOffset = -(active * (cardW + gap));
-  const totalOffset = baseOffset + (dragging ? liveOffset * 0.35 : 0);
+  const prev = () => { const n = Math.max(active - 1, 0);        scrollTo(n); resetTimer(); };
+  const next = () => { const n = Math.min(active + 1, total - 1); scrollTo(n); resetTimer(); };
 
   return (
     <div>
-      <div className="relative px-10" ref={trackRef}>
-        {/* ── Track ─────────────────────────────────────────────────────── */}
-        <div className="overflow-hidden rounded-2xl"
-          onMouseDown={onDragStart} onMouseMove={onDragMove}
-          onMouseUp={onDragEnd}   onMouseLeave={onDragEnd}
-          onTouchStart={onDragStart} onTouchMove={onDragMove} onTouchEnd={onDragEnd}>
-          <div
-            className="flex cursor-grab active:cursor-grabbing"
-            style={{
-              gap: `${gap}px`,
-              transform: `translateX(${totalOffset}px)`,
-              transition: dragging ? 'none' : 'transform 0.45s cubic-bezier(0.25,0.46,0.45,0.94)',
-              willChange: 'transform',
-            }}>
-            {reviews.map((t, i) => (
-              <div key={t.id || i}
-                style={{
-                  width: `${cardW}px`,
-                  flexShrink: 0,
-                  opacity: (i >= active && i < active + cols) ? 1 : 0.35,
-                  transform: (i >= active && i < active + cols) ? 'scale(1)' : 'scale(0.97)',
-                  transition: 'opacity 0.4s ease, transform 0.4s ease',
-                }}>
-                <ReviewCard t={t} idx={i} featured={i === active + Math.floor(cols/2)}/>
-              </div>
-            ))}
-          </div>
+      {/* ── Scroll track ─────────────────────────────────────────────────── */}
+      <div className="relative">
+        <div
+          ref={scrollRef}
+          onScroll={onScroll}
+          onScrollEnd={onScrollEnd}
+          className="rev-track flex gap-5 overflow-x-auto pb-2 scroll-smooth"
+          style={{
+            scrollSnapType: 'x mandatory',
+            scrollbarWidth: 'none',          /* Firefox */
+            msOverflowStyle: 'none',         /* IE/Edge */
+            WebkitOverflowScrolling: 'touch',
+          }}>
+          {reviews.map((t, i) => (
+            <div key={t.id || i}
+              onClick={() => { scrollTo(i); resetTimer(); }}
+              style={{ scrollSnapAlign: 'start', scrollSnapStop: 'always' }}
+              className="flex-shrink-0 w-full sm:w-[calc(50%-10px)] lg:w-[calc(33.333%-14px)] cursor-pointer">
+              <ReviewCard t={t} idx={i}/>
+            </div>
+          ))}
         </div>
 
-        {/* ── Prev / Next arrows ────────────────────────────────────────── */}
+        {/* ── Prev / Next arrows (desktop only) ───────────────────────── */}
         <button onClick={prev} disabled={active === 0}
-          className="absolute left-0 top-1/2 -translate-y-1/2 w-9 h-9 bg-white border border-gray-200 rounded-full shadow-md flex items-center justify-center hover:bg-gray-50 hover:border-blue-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all z-10">
+          className="hidden sm:flex absolute -left-5 top-1/2 -translate-y-1/2 w-10 h-10
+            bg-white border border-gray-200 rounded-full shadow-lg items-center justify-center
+            hover:bg-gray-50 hover:border-blue-300 disabled:opacity-25 disabled:cursor-not-allowed
+            transition-all z-10">
           <ChevronRight size={16} className="rotate-180 text-gray-600"/>
         </button>
-        <button onClick={next} disabled={active >= maxActive}
-          className="absolute right-0 top-1/2 -translate-y-1/2 w-9 h-9 bg-white border border-gray-200 rounded-full shadow-md flex items-center justify-center hover:bg-gray-50 hover:border-blue-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all z-10">
+        <button onClick={next} disabled={active >= total - 1}
+          className="hidden sm:flex absolute -right-5 top-1/2 -translate-y-1/2 w-10 h-10
+            bg-white border border-gray-200 rounded-full shadow-lg items-center justify-center
+            hover:bg-gray-50 hover:border-blue-300 disabled:opacity-25 disabled:cursor-not-allowed
+            transition-all z-10">
           <ChevronRight size={16} className="text-gray-600"/>
         </button>
       </div>
 
-      {/* ── Dot indicators ────────────────────────────────────────────────── */}
-      <div className="flex justify-center gap-2 mt-7">
-        {Array.from({length: maxActive + 1}, (_, i) => (
-          <button key={i} onClick={() => goTo(i)}
+      {/* ── Dots ─────────────────────────────────────────────────────────── */}
+      <div className="flex justify-center gap-2 mt-6">
+        {reviews.map((_, i) => (
+          <button key={i} onClick={() => { scrollTo(i); resetTimer(); }}
             className={`rounded-full transition-all duration-300 ${
-              i === active ? 'w-7 h-2.5 bg-blue-600' : 'w-2.5 h-2.5 bg-gray-300 hover:bg-gray-400'
+              i === active
+                ? 'w-7 h-2.5 bg-blue-600'
+                : 'w-2.5 h-2.5 bg-gray-300 hover:bg-gray-400'
             }`}/>
         ))}
       </div>
 
-      {/* ── Swipe hint on mobile ──────────────────────────────────────────── */}
-      <p className="text-center text-[11px] text-gray-400 mt-3 sm:hidden">
-        ← Swipe to browse reviews →
+      {/* ── Mobile swipe hint ────────────────────────────────────────────── */}
+      <p className="text-center text-[11px] text-gray-400 mt-2.5 sm:hidden select-none">
+        Swipe left or right to browse
       </p>
 
-      {/* ── View all button ───────────────────────────────────────────────── */}
-      {reviews.length > 3 && (
+      {/* ── View All button ──────────────────────────────────────────────── */}
+      {reviews.length > 0 && (
         <div className="flex justify-center mt-7">
           <button onClick={onShowAll}
-            className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border-2 border-blue-200 text-blue-700 rounded-xl text-sm font-bold hover:bg-blue-50 hover:border-blue-400 transition-all shadow-sm">
+            className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border-2
+              border-blue-200 text-blue-700 rounded-xl text-sm font-bold
+              hover:bg-blue-50 hover:border-blue-400 transition-all shadow-sm">
             <Star size={14} className="fill-amber-400 text-amber-400"/>
             View All {reviews.length} Reviews
             <ArrowRight size={14}/>
@@ -1088,6 +1080,7 @@ export default function LandingPage() {
         .nl:hover::after{width:100%}
         .card-hover{transition:transform .2s,box-shadow .2s}
         .card-hover:hover{transform:translateY(-4px);box-shadow:0 12px 32px rgba(0,0,0,.1)}
+        .rev-track::-webkit-scrollbar{display:none}
         .feat-card{cursor:pointer;transition:transform .18s,box-shadow .18s,border-color .18s}
         .feat-card:hover{transform:translateY(-5px);box-shadow:0 16px 40px rgba(0,0,0,.12)}
         .faq-body{overflow:hidden;transition:max-height .32s ease,opacity .22s ease}
