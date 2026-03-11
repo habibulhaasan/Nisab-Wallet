@@ -10,7 +10,7 @@ import {
   LogOut, Menu, X, ArrowRightLeft, Settings, 
   Users, Package, DollarSign, Globe, Sprout,
   HandCoins, MessageCircleQuestion, Goal, Blend, MessageSquareMore,
-  Home, Repeat ,FileText, ShoppingBag, PiggyBank, BookOpen,
+  Home, Repeat ,FileText, ShoppingBag, PiggyBank, BookOpen, MailCheck,
   Gem, AlertTriangle
 } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
@@ -81,6 +81,7 @@ export default function DashboardNav() {
     { name: 'Landing Page', href: '/dashboard/admin/landing-settings', icon: Globe },
     { name: 'Finance', href: '/dashboard/admin/finance', icon: DollarSign },
     { name: 'Users Feedback', href: '/dashboard/admin/feedbacks', icon: MessageSquareMore },
+    { name: 'Email', href: '/dashboard/admin/email', icon: MailCheck },
   ];
 
   const isActive = (href) => pathname === href;
