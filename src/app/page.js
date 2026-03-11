@@ -342,7 +342,7 @@ export default function LandingPage() {
         for (const u of snap.docs) {
           if (list.length >= 6) break;
           const fs = await getDocs(query(collection(db,'users',u.id,'feedback'), where('featured','==',true), limit(2)));
-          fs.forEach(d => { const data = d.data(); if (data.message && list.length < 6) const desig = data.userDesignation || data.userRole || 'Nisab Wallet User'; const roleStr = desig.includes('Bangladesh') ? desig : desig + ' · Bangladesh 🇧🇩'; list.push({ id:d.id, name:data.userName||'User', role:roleStr, rating:data.rating||5, msg:data.message }); });
+          fs.forEach(d => { const data = d.data(); if (data.message && list.length < 6) { const desig = data.userDesignation || data.userRole || 'Nisab Wallet User'; const roleStr = desig.includes('Bangladesh') ? desig : desig + ' · Bangladesh 🇧🇩'; list.push({ id:d.id, name:data.userName||'User', role:roleStr, rating:data.rating||5, msg:data.message }); } });
         }
         if (list.length >= 3) setTesti(list);
       } catch {}
