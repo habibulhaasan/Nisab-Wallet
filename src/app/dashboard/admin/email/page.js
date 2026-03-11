@@ -20,7 +20,7 @@ import {
   ArrowLeft, Copy, Star, Inbox, Calendar, TrendingUp, Zap,
   MoreVertical, Circle, Check, User, Building2, BookOpen,
   MessageSquare, PenLine, LayoutTemplate, ChevronRight, Hash,
-  MailOpen, MailX, AtSign, Globe, Phone, Badge, Layers,
+  MailOpen, MailX, AtSign, Globe, Phone, Layers,
 } from 'lucide-react';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ const TEMPLATE_CATEGORIES = ['Onboarding', 'Renewal Reminder', 'Zakat Reminder',
 const DEFAULT_TAGS = ['trial-user', 'paid', 'expired', 'registered', 'lead', 'vip'];
 
 // ─── Reusable UI ──────────────────────────────────────────────────────────────
-function Badge({ label, color = 'gray' }) {
+function StatusBadge({ label, color = 'gray' }) {
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border capitalize ${color}`}>
       {label}
@@ -250,7 +250,7 @@ function DashboardTab({ contacts, campaigns, recipients }) {
                       <div className="text-xs text-gray-500 truncate">{c.subject}</div>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <Badge label={c.status} color={CAMPAIGN_STATUS_COLORS[c.status]} />
+                      <StatusBadge label={c.status} color={CAMPAIGN_STATUS_COLORS[c.status]} />
                       {c.status === 'sent' && (
                         <div className="text-[10px] text-gray-400 mt-0.5">{sent} sent · {opened} opened</div>
                       )}
@@ -541,7 +541,7 @@ function ContactsTab({ contacts, loading, onAdd, onEdit, onDelete, onBulkDelete,
                   {(c.tags || []).slice(0, 2).map(t => <TagPill key={t} tag={t} />)}
                   {(c.tags || []).length > 2 && <span className="text-[10px] text-gray-400">+{c.tags.length - 2}</span>}
                 </div>
-                <div><Badge label={c.status} color={STATUS_COLORS[c.status]} /></div>
+                <div><StatusBadge label={c.status} color={STATUS_COLORS[c.status]} /></div>
                 <div className="text-xs text-gray-400">{fmt(c.createdAt)}</div>
                 <div className="flex items-center gap-1">
                   <button onClick={() => { setEditItem(c); setShowForm(true); }}
@@ -886,7 +886,7 @@ function CampaignsTab({ campaigns, contacts, recipients, loading, onAdd, onEdit,
                   <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setDetailItem(c)}>
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className="font-bold text-gray-900">{c.name}</span>
-                      <Badge label={c.status} color={CAMPAIGN_STATUS_COLORS[c.status]} />
+                      <StatusBadge label={c.status} color={CAMPAIGN_STATUS_COLORS[c.status]} />
                       {c.segment && c.segment !== 'all' && <TagPill tag={c.segment} />}
                     </div>
                     <div className="text-sm text-gray-600 mb-2 truncate">📧 {c.subject}</div>
