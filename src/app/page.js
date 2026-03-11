@@ -1254,28 +1254,96 @@ export default function LandingPage() {
       </section>
 
       {/* ═══════════════════════════════════════════════ TESTIMONIALS */}
-      <section id="reviews" className="py-24 px-4 sm:px-6 lg:px-8 bg-slate-50 scroll-mt-16">
-        <div className="max-w-7xl mx-auto">
-          <Fade className="text-center mb-14">
-            <div className="badge sl mb-4"><Star size={12}/>User Reviews</div>
-            <h2 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-4">Trusted Across Bangladesh</h2>
-            <p className="text-lg text-gray-600">Real feedback from Muslims who use Nisab Wallet every day.</p>
+      <section id="reviews" className="relative py-24 scroll-mt-16 overflow-hidden bg-gray-950">
+        {/* Subtle grid */}
+        <div className="absolute inset-0 pointer-events-none opacity-[0.04]" style={{backgroundImage:'linear-gradient(white 1px,transparent 1px),linear-gradient(90deg,white 1px,transparent 1px)',backgroundSize:'48px 48px'}}/>
+        {/* Glow blobs */}
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-700/20 rounded-full blur-3xl pointer-events-none"/>
+        <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-indigo-700/20 rounded-full blur-3xl pointer-events-none"/>
+
+        <div className="relative z-10">
+          <Fade className="text-center mb-16 px-4">
+            <div className="inline-flex items-center gap-3 px-5 py-2.5 bg-white/5 border border-white/10 rounded-full mb-6 backdrop-blur-sm">
+              <div className="flex gap-0.5">{[1,2,3,4,5].map(i=><Star key={i} size={15} className="text-amber-400 fill-amber-400"/>)}</div>
+              <span className="text-white font-extrabold text-sm">4.9</span>
+              <div className="w-px h-4 bg-white/20"/>
+              <span className="text-gray-400 text-sm">from 1,200+ users</span>
+            </div>
+            <h2 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight mb-4 leading-tight">
+              Loved by Muslims<br className="hidden sm:block"/> Across Bangladesh
+            </h2>
+            <p className="text-lg text-gray-400 max-w-xl mx-auto">Real words from real users — managing wealth, tracking Zakat, finding peace of mind.</p>
           </Fade>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {displayT.slice(0,6).map((t,i)=>(
-              <Fade key={t.id||i} delay={i*60}>
-                <div className="card-hover bg-white border border-gray-200 rounded-2xl p-6 h-full flex flex-col">
-                  <Stars n={t.rating}/>
-                  <p className="text-sm text-gray-700 mt-4 mb-5 leading-relaxed flex-1">"{t.msg}"</p>
-                  <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-extrabold text-sm flex-shrink-0">{t.name.charAt(0)}</div>
-                    <div><div className="text-sm font-bold text-gray-900">{t.name}</div><div className="text-xs text-gray-500">{t.role}</div></div>
-                  </div>
-                </div>
-              </Fade>
-            ))}
+
+          {/* Row 1 — scrolls LEFT */}
+          <div className="mb-4 relative">
+            <div className="absolute left-0 top-0 bottom-0 w-24 z-10 pointer-events-none" style={{background:'linear-gradient(to right,#030712,transparent)'}}/>
+            <div className="absolute right-0 top-0 bottom-0 w-24 z-10 pointer-events-none" style={{background:'linear-gradient(to left,#030712,transparent)'}}/>
+            <div className="flex gap-4 overflow-hidden">
+              <div className="flex gap-4 animate-marquee-left whitespace-nowrap">
+                {[...displayT,...displayT].map((t,i)=>{
+                  const A1=['border-blue-800/60 bg-blue-950/40','border-indigo-800/60 bg-indigo-950/40','border-violet-800/60 bg-violet-950/40','border-slate-700/60 bg-slate-900/60','border-cyan-800/60 bg-cyan-950/40','border-blue-700/60 bg-blue-900/30'];
+                  const G1=['from-blue-500 to-indigo-600','from-violet-500 to-purple-600','from-cyan-500 to-blue-600','from-emerald-500 to-teal-600','from-rose-500 to-pink-600','from-amber-500 to-orange-600'];
+                  return(
+                    <div key={`r1-${i}`} className={`inline-flex flex-col flex-shrink-0 w-72 p-5 rounded-2xl border ${A1[i%A1.length]} backdrop-blur-sm`}>
+                      <div className="text-5xl font-black text-white/8 leading-none mb-1 select-none font-serif">"</div>
+                      <p className="text-sm text-gray-300 leading-relaxed mb-4 whitespace-normal line-clamp-4">{t.msg}</p>
+                      <div className="mt-auto flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${G1[i%G1.length]} flex items-center justify-center text-white font-extrabold text-sm flex-shrink-0`}>{t.name.charAt(0)}</div>
+                          <div><div className="text-sm font-bold text-white leading-tight">{t.name}</div><div className="text-[10px] text-gray-500">{t.role}</div></div>
+                        </div>
+                        <div className="flex gap-0.5">{[1,2,3,4,5].map(s=><Star key={s} size={10} className={s<=t.rating?'text-amber-400 fill-amber-400':'text-gray-700 fill-gray-700'}/>)}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
+
+          {/* Row 2 — scrolls RIGHT (reversed) */}
+          <div className="relative">
+            <div className="absolute left-0 top-0 bottom-0 w-24 z-10 pointer-events-none" style={{background:'linear-gradient(to right,#030712,transparent)'}}/>
+            <div className="absolute right-0 top-0 bottom-0 w-24 z-10 pointer-events-none" style={{background:'linear-gradient(to left,#030712,transparent)'}}/>
+            <div className="flex gap-4 overflow-hidden">
+              <div className="flex gap-4 animate-marquee-right whitespace-nowrap">
+                {[...[...displayT].reverse(),...[...displayT].reverse()].map((t,i)=>{
+                  const A2=['border-emerald-800/60 bg-emerald-950/40','border-teal-800/60 bg-teal-950/40','border-blue-800/50 bg-blue-950/30','border-indigo-700/60 bg-indigo-900/30','border-slate-600/60 bg-slate-900/60','border-violet-700/50 bg-violet-900/30'];
+                  const G2=['from-teal-500 to-emerald-600','from-blue-600 to-blue-800','from-indigo-500 to-violet-600','from-pink-500 to-rose-600','from-slate-500 to-slate-700','from-orange-500 to-red-600'];
+                  return(
+                    <div key={`r2-${i}`} className={`inline-flex flex-col flex-shrink-0 w-80 p-5 rounded-2xl border ${A2[i%A2.length]} backdrop-blur-sm`}>
+                      <div className="text-5xl font-black text-white/8 leading-none mb-1 select-none font-serif">"</div>
+                      <p className="text-sm text-gray-300 leading-relaxed mb-4 whitespace-normal line-clamp-4">{t.msg}</p>
+                      <div className="mt-auto flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${G2[i%G2.length]} flex items-center justify-center text-white font-extrabold text-sm flex-shrink-0`}>{t.name.charAt(0)}</div>
+                          <div><div className="text-sm font-bold text-white leading-tight">{t.name}</div><div className="text-[10px] text-gray-500">{t.role}</div></div>
+                        </div>
+                        <div className="flex gap-0.5">{[1,2,3,4,5].map(s=><Star key={s} size={10} className={s<=t.rating?'text-amber-400 fill-amber-400':'text-gray-700 fill-gray-700'}/>)}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom CTA */}
+          <Fade className="text-center mt-14 px-4">
+            <button onClick={()=>router.push('/register')} className="inline-flex items-center gap-2 px-6 py-3 bg-white text-gray-900 rounded-xl font-bold text-sm hover:bg-gray-100 transition-all shadow-xl">
+              Join Them Today <ArrowRight size={15}/>
+            </button>
+          </Fade>
         </div>
+
+        <style>{`
+          @keyframes marquee-left  { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+          @keyframes marquee-right { from{transform:translateX(-50%)} to{transform:translateX(0)} }
+          .animate-marquee-left  { animation: marquee-left  38s linear infinite; }
+          .animate-marquee-right { animation: marquee-right 42s linear infinite; }
+          .animate-marquee-left:hover,.animate-marquee-right:hover { animation-play-state: paused; }
+        `}</style>
       </section>
 
       {/* ═══════════════════════════════════════════════ FAQ */}
@@ -1330,10 +1398,10 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="grid md:grid-cols-12 gap-10 pb-12 border-b border-white/5">
             <div className="md:col-span-4">
-              <div className="flex items-center gap-2.5 mb-4"><Image src="/nisab-logo.png" alt="Nisab Wallet" width={36} height={36} className="rounded-xl"/><span className="text-lg font-extrabold text-white">Nisab<span className="text-blue-400">Wallet</span></span></div>
+              <div className="flex items-center gap-2.5 mb-4"><Image src="/nisab-logo-white.png" alt="Nisab Wallet" width={36} height={36} className="rounded-xl"/><span className="text-lg font-extrabold text-white">Nisab<span className="text-blue-400">Wallet</span></span></div>
               <p className="text-sm leading-relaxed text-gray-500 mb-5 max-w-sm">A Shariah-compliant personal finance platform designed to help Muslims manage their wealth, track spending, grow their investments, and fulfil their Zakat obligations — all in one secure place.</p>
               <div className="flex gap-2">
-                {[{Icon:Mail,href:'mailto:support@nisabwallet.com',tip:'Email'},{Icon:Phone,href:'tel:+8801234567890',tip:'Phone'},{Icon:Globe,href:'#',tip:'Website'}].map(({Icon,href,tip})=>(
+                {[{Icon:Mail,href:'mailto:nisabwallet@gmail.com',tip:'Email'},{Icon:Phone,href:'tel:+8801234567890',tip:'Phone'},{Icon:Globe,href:'#',tip:'Website'}].map(({Icon,href,tip})=>(
                   <a key={tip} href={href} title={tip} className="w-9 h-9 bg-white/5 hover:bg-blue-700 border border-white/10 rounded-lg flex items-center justify-center transition-colors"><Icon size={15}/></a>
                 ))}
               </div>
@@ -1366,7 +1434,7 @@ export default function LandingPage() {
             <div className="md:col-span-2">
               <h4 className="text-white font-bold text-sm mb-4">Contact</h4>
               <ul className="space-y-3 text-sm">
-                {[{Icon:Mail,t:'support@nisabwallet.com',h:'mailto:support@nisabwallet.com'},{Icon:Phone,t:'+880 1234-567890',h:'tel:+8801234567890'},{Icon:MapPin,t:'Dhaka, Bangladesh',h:null},{Icon:Clock,t:'Mon–Fri 9AM–6PM (GMT+6)',h:null}].map(({Icon,t,h},i)=>(
+                {[{Icon:Mail,t:'nisabwallet@gmail.com',h:'mailto:nisabwallet@gmail.com'},{Icon:Phone,t:'+880 1234-567890',h:'tel:+8801234567890'},{Icon:MapPin,t:'Dhaka, Bangladesh',h:null},{Icon:Clock,t:'Mon–Fri 9AM–6PM (GMT+6)',h:null}].map(({Icon,t,h},i)=>(
                   <li key={i} className="flex items-start gap-2"><Icon size={13} className="mt-0.5 flex-shrink-0 text-blue-500"/>{h?<a href={h} className="hover:text-white transition-colors">{t}</a>:<span>{t}</span>}</li>
                 ))}
               </ul>
@@ -1392,7 +1460,7 @@ export default function LandingPage() {
       {modal==='contact' && (
         <Modal title="Contact Us">
           <div className="space-y-4">
-            {[{Icon:Mail,title:'Email Support',sub:'Response within 24 hours',val:'support@nisabwallet.com',href:'mailto:support@nisabwallet.com'},{Icon:Phone,title:'Phone Support',sub:'Mon–Fri, 9AM–6PM (GMT+6)',val:'+880 1234-567890',href:'tel:+8801234567890'},{Icon:MapPin,title:'Office',sub:'Dhaka, Bangladesh',val:'House #123, Road #4, Dhanmondi, Dhaka 1209',href:null}].map(({Icon,title,sub,val,href})=>(
+            {[{Icon:Mail,title:'Email Support',sub:'Response within 24 hours',val:'nisabwallet@gmail.com',href:'mailto:nisabwallet@gmail.com'},{Icon:Phone,title:'Phone Support',sub:'Mon–Fri, 9AM–6PM (GMT+6)',val:'+880 1234-567890',href:'tel:+8801234567890'},{Icon:MapPin,title:'Office',sub:'Dhaka, Bangladesh',val:'House #123, Road #4, Dhanmondi, Dhaka 1209',href:null}].map(({Icon,title,sub,val,href})=>(
               <div key={title} className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl border border-gray-200"><div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0"><Icon size={18} className="text-blue-700"/></div><div><div className="font-semibold text-gray-900 text-sm mb-0.5">{title}</div><div className="text-xs text-gray-500 mb-1">{sub}</div>{href?<a href={href} className="text-sm text-blue-600 hover:underline">{val}</a>:<span className="text-sm text-gray-700">{val}</span>}</div></div>
             ))}
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-900"><strong>Already a user?</strong> Use the Feedback section in your dashboard for the fastest response.</div>
@@ -1403,7 +1471,7 @@ export default function LandingPage() {
         <Modal title="Privacy Policy">
           <div className="space-y-4 text-sm text-gray-700 leading-relaxed">
             <p className="text-xs text-gray-400">Last updated: {new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</p>
-            {[['1. Information We Collect','We collect your name, email, and financial data you input. We also collect anonymous usage data to improve the platform.'],['2. How We Use Your Data','To provide the service, calculate Zakat, send account notifications, and improve platform performance. We never use your data for advertising.'],['3. Data Security','All data is stored in Firebase with end-to-end encryption and strict per-user Firestore rules. Data is encrypted in transit and at rest.'],['4. Data Sharing','We never sell or share your personal data. Only essential service providers are used, all bound by strict confidentiality agreements.'],['5. Your Rights','Access, update, or delete your data anytime via Settings. Export a full backup of all financial records as JSON from the Settings page.'],['6. Contact','privacy@nisabwallet.com']].map(([h,b])=><div key={h}><h3 className="font-bold text-gray-900 mb-1">{h}</h3><p>{b}</p></div>)}
+            {[['1. Information We Collect','We collect your name, email, and financial data you input. We also collect anonymous usage data to improve the platform.'],['2. How We Use Your Data','To provide the service, calculate Zakat, send account notifications, and improve platform performance. We never use your data for advertising.'],['3. Data Security','All data is stored in Firebase with end-to-end encryption and strict per-user Firestore rules. Data is encrypted in transit and at rest.'],['4. Data Sharing','We never sell or share your personal data. Only essential service providers are used, all bound by strict confidentiality agreements.'],['5. Your Rights','Access, update, or delete your data anytime via Settings. Export a full backup of all financial records as JSON from the Settings page.'],['6. Contact','nisabwallet@gmail.com']].map(([h,b])=><div key={h}><h3 className="font-bold text-gray-900 mb-1">{h}</h3><p>{b}</p></div>)}
           </div>
         </Modal>
       )}
@@ -1411,7 +1479,7 @@ export default function LandingPage() {
         <Modal title="Terms of Service">
           <div className="space-y-4 text-sm text-gray-700 leading-relaxed">
             <p className="text-xs text-gray-400">Last updated: {new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</p>
-            {[['1. Acceptance','By using Nisab Wallet you agree to these Terms. Please do not use the platform if you disagree.'],['2. Use of Service','You agree to use the service lawfully. You are responsible for maintaining account security and confidentiality.'],['3. Subscription & Payments','All plans include a 5-day free trial. Payments are verified manually within 24 hours. Prices are in BDT and subject to 30-days notice for changes.'],['4. Zakat Calculations','We follow accepted fiqh methodology and aim for full accuracy. However, we recommend consulting a qualified Islamic scholar for your final obligation.'],['5. Limitation of Liability','Nisab Wallet is provided "as is". We are not liable for financial decisions made based on platform data.'],['6. Termination','We may terminate access for violations of these Terms.'],['7. Contact','legal@nisabwallet.com']].map(([h,b])=><div key={h}><h3 className="font-bold text-gray-900 mb-1">{h}</h3><p>{b}</p></div>)}
+            {[['1. Acceptance','By using Nisab Wallet you agree to these Terms. Please do not use the platform if you disagree.'],['2. Use of Service','You agree to use the service lawfully. You are responsible for maintaining account security and confidentiality.'],['3. Subscription & Payments','All plans include a 5-day free trial. Payments are verified manually within 24 hours. Prices are in BDT and subject to 30-days notice for changes.'],['4. Zakat Calculations','We follow accepted fiqh methodology and aim for full accuracy. However, we recommend consulting a qualified Islamic scholar for your final obligation.'],['5. Limitation of Liability','Nisab Wallet is provided "as is". We are not liable for financial decisions made based on platform data.'],['6. Termination','We may terminate access for violations of these Terms.'],['7. Contact','nisabwallet@gmail.com']].map(([h,b])=><div key={h}><h3 className="font-bold text-gray-900 mb-1">{h}</h3><p>{b}</p></div>)}
           </div>
         </Modal>
       )}
