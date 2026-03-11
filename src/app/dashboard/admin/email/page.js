@@ -628,14 +628,15 @@ function ContactForm({ initial, onSave, onClose, registeredUsers }) {
   );
 }
 
-function ContactsTab({ contacts, campaigns, recipients, loading, onAdd, onStatusChange, onDelete, onBulkDelete, onImportCSV, onExportCSV, registeredUsers }) {
-  const [search, setSearch]           = useState('');
-  const [filterTag, setFilterTag]     = useState('all');
+function ContactsTab({ contacts, campaigns, recipients, loading, onAdd, onStatusChange, onDelete, onBulkDelete, onBulkStatus, onImportCSV, onExportCSV, registeredUsers }) {
+  const [search, setSearch]             = useState('');
+  const [filterTag, setFilterTag]       = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [selected, setSelected]       = useState(new Set());
-  const [showForm, setShowForm]       = useState(false);
-  const [editItem, setEditItem]       = useState(null);
-  const [detailItem, setDetailItem]   = useState(null);
+  const [selected, setSelected]         = useState(new Set());
+  const [showForm, setShowForm]         = useState(false);
+  const [editItem, setEditItem]         = useState(null);
+  const [detailItem, setDetailItem]     = useState(null);
+  const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
   const fileRef = useRef();
 
   const allTags = useMemo(() => {
@@ -652,7 +653,8 @@ function ContactsTab({ contacts, campaigns, recipients, loading, onAdd, onStatus
     return matchSearch && matchTag && matchStatus;
   }), [contacts, search, filterTag, filterStatus]);
 
-  const toggleSelect = (id) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleSelect  = (id) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleAll     = () => setSelected(selected.size === filtered.length && filtered.length > 0 ? new Set() : new Set(filtered.map(c => c.id)));
 
   return (
     <div>
@@ -713,17 +715,37 @@ function ContactsTab({ contacts, campaigns, recipients, loading, onAdd, onStatus
 
       {/* Bulk action bar */}
       {selected.size > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl mb-4">
-          <span className="text-sm font-semibold text-blue-800">{selected.size} selected</span>
+        <div className="flex items-center gap-2 flex-wrap px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl mb-4">
+          <span className="text-sm font-bold text-blue-900">{selected.size} selected</span>
+          <div className="relative">
+            <button onClick={() => setBulkStatusOpen(v => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-blue-300 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-50">
+              <Tag size={11}/> Set Status <ChevronDown size={11}/>
+            </button>
+            {bulkStatusOpen && (
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-20 min-w-[145px] py-1">
+                {CONTACT_STATUSES.map(s => {
+                  const m = STATUS_META[s];
+                  return (
+                    <button key={s} onClick={() => { onBulkStatus([...selected], s, () => setSelected(new Set())); setBulkStatusOpen(false); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold hover:bg-gray-50 transition-colors">
+                      <div className={`w-2 h-2 rounded-full ${m.dot}`}/>
+                      <span className={m.text + ' capitalize'}>{m.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           <button onClick={() => onBulkDelete([...selected], () => setSelected(new Set()))}
             className="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700">
-            <Trash2 size={12}/> Delete Selected
+            <Trash2 size={11}/> Delete
           </button>
-          <button onClick={() => setSelected(new Set())} className="ml-auto text-xs text-blue-600 hover:text-blue-800">Clear</button>
+          <button onClick={() => setSelected(new Set())} className="ml-auto text-xs text-blue-500 hover:text-blue-800">Clear</button>
         </div>
       )}
 
-      {/* Cards grid */}
+      {/* Contacts table */}
       {loading ? <Spinner/> : filtered.length === 0 ? (
         <EmptyState icon={Users} title="No contacts found"
           desc="Add contacts manually, import a CSV, or pull from registered users."
@@ -735,27 +757,45 @@ function ContactsTab({ contacts, campaigns, recipients, loading, onAdd, onStatus
           }
         />
       ) : (
-        <>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filtered.map(c => (
-              <div key={c.id} className="relative">
-                {/* Select checkbox */}
-                <div className="absolute top-3 left-3 z-10" onClick={e => e.stopPropagation()}>
-                  <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelect(c.id)}
-                    className="w-3.5 h-3.5 rounded accent-blue-600"/>
-                </div>
-                <ContactCard
-                  contact={c}
-                  onStatusChange={onStatusChange}
-                  onClick={() => setDetailItem(c)}
-                />
-              </div>
-            ))}
+        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="pl-4 pr-2 py-3 w-8">
+                    <input type="checkbox"
+                      checked={selected.size === filtered.length && filtered.length > 0}
+                      onChange={toggleAll}
+                      className="w-3.5 h-3.5 rounded accent-blue-600"/>
+                  </th>
+                  <th className="px-3 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
+                  <th className="px-3 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Email / Phone</th>
+                  <th className="px-3 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Tags</th>
+                  <th className="px-3 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-3 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Source</th>
+                  <th className="px-3 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Added</th>
+                  <th className="px-3 py-3 w-10"/>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(c => (
+                  <ContactTableRow
+                    key={c.id}
+                    contact={c}
+                    selected={selected.has(c.id)}
+                    onToggle={() => toggleSelect(c.id)}
+                    onStatusChange={onStatusChange}
+                    onClick={() => setDetailItem(c)}
+                  />
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div className="mt-4 text-xs text-gray-400 text-center">
-            Showing {filtered.length} of {contacts.length} contacts
+          <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-100 text-xs text-gray-500 flex items-center justify-between">
+            <span>Showing <strong>{filtered.length}</strong> of <strong>{contacts.length}</strong> contacts</span>
+            {selected.size > 0 && <span className="text-blue-600 font-semibold">{selected.size} selected</span>}
           </div>
-        </>
+        </div>
       )}
 
       {/* Detail modal */}
@@ -919,17 +959,47 @@ function CampaignForm({ initial, contacts, templates, onSave, onClose }) {
   );
 }
 
-function CampaignDetail({ campaign, contacts, recipients, onClose, onUpdateRecipient, onMarkSent }) {
-  const [search, setSearch] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
+// ── Placeholder substitution ─────────────────────────────────────────────────
+function fillPlaceholders(text, contact) {
+  if (!text || !contact) return text || '';
+  return text
+    .replace(/\{\{name\}\}/gi,        contact.name        || '')
+    .replace(/\{\{email\}\}/gi,       contact.email       || '')
+    .replace(/\{\{phone\}\}/gi,       contact.phone       || '')
+    .replace(/\{\{company\}\}/gi,     contact.company     || '')
+    .replace(/\{\{designation\}\}/gi, contact.designation || contact.company || '')
+    .replace(/\{\{tags\}\}/gi,        (contact.tags || []).join(', '));
+}
 
-  const recs = recipients[campaign.id] || [];
+// ── Build mailto URL (individual = personal, multi = BCC all) ────────────────
+function buildMailto(contactList, subject, body) {
+  if (!contactList.length) return '#';
+  if (contactList.length === 1) {
+    const c = contactList[0];
+    const personalBody = fillPlaceholders(body, c);
+    const personalSubject = fillPlaceholders(subject, c);
+    return 'mailto:' + encodeURIComponent(c.email)
+      + '?subject=' + encodeURIComponent(personalSubject)
+      + '&body='    + encodeURIComponent(personalBody);
+  }
+  const bcc = contactList.map(c => c.email).join(',');
+  return 'mailto:?bcc=' + encodeURIComponent(bcc)
+    + '&subject=' + encodeURIComponent(subject || '')
+    + '&body='    + encodeURIComponent(body || '');
+}
+
+function CampaignDetail({ campaign, contacts, recipients, onClose, onUpdateRecipient, onMarkSent }) {
+  const [search, setSearch]             = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [selectedRecs, setSelectedRecs] = useState(new Set());
+  const [previewContact, setPreviewContact] = useState(null);
+
+  const recs     = recipients[campaign.id] || [];
   const filtered = recs.filter(r => {
     const c = contacts.find(x => x.id === r.contactId);
     const q = search.toLowerCase();
-    const matchSearch = !q || c?.name?.toLowerCase().includes(q) || c?.email?.toLowerCase().includes(q);
-    const matchStatus = filterStatus === 'all' || r.status === filterStatus;
-    return matchSearch && matchStatus;
+    return (!q || c?.name?.toLowerCase().includes(q) || c?.email?.toLowerCase().includes(q))
+      && (filterStatus === 'all' || r.status === filterStatus);
   });
 
   const stats = {
@@ -942,100 +1012,223 @@ function CampaignDetail({ campaign, contacts, recipients, onClose, onUpdateRecip
 
   const fmt = (ts) => ts?.toDate ? ts.toDate().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—';
 
+  const toggleRec    = (id) => setSelectedRecs(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleAllRec = () => setSelectedRecs(selectedRecs.size === filtered.length ? new Set() : new Set(filtered.map(r => r.id)));
+
+  const getContact = (r) => contacts.find(x => x.id === r.contactId);
+
+  const selectedContacts = [...selectedRecs]
+    .map(rid => { const r = recs.find(x => x.id === rid); return getContact(r); })
+    .filter(Boolean);
+
+  const openEmailApp = (contactList) => {
+    const url = buildMailto(contactList, campaign.subject, campaign.body);
+    window.open(url, '_blank');
+  };
+
+  // Status cycle: one click advances to next status
+  const STATUS_NEXT = { pending: 'sent', sent: 'opened', opened: 'replied', replied: 'bounced', bounced: 'sent' };
+  const STATUS_CHIP = {
+    pending: { label: '○ Pending', cls: 'bg-gray-100 text-gray-500 border-gray-300'       },
+    sent:    { label: '→ Sent',    cls: 'bg-blue-100 text-blue-700 border-blue-300'        },
+    opened:  { label: '✓ Opened',  cls: 'bg-emerald-100 text-emerald-700 border-emerald-300' },
+    replied: { label: '↩ Replied', cls: 'bg-violet-100 text-violet-700 border-violet-300' },
+    bounced: { label: '✕ Bounced', cls: 'bg-red-100 text-red-700 border-red-300'           },
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl flex flex-col max-h-[90vh]">
+
         {/* Header */}
-        <div className="flex items-start justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-          <div>
-            <h3 className="font-bold text-gray-900 flex items-center gap-2">
-              <Send size={16} className="text-blue-600" /> {campaign.name}
+        <div className="flex items-start justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
+          <div className="min-w-0 flex-1">
+            <h3 className="font-bold text-gray-900 flex items-center gap-2 text-base truncate">
+              <Send size={15} className="text-blue-600 flex-shrink-0"/> {campaign.name}
             </h3>
-            <div className="text-xs text-gray-500 mt-0.5">{campaign.subject}</div>
+            <div className="text-xs text-gray-500 mt-0.5 truncate">📧 {campaign.subject}</div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0 ml-3">
             {campaign.status !== 'sent' && (
               <button onClick={() => onMarkSent(campaign)}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700">
-                <CheckCircle size={12} /> Mark as Sent
+                <CheckCircle size={12}/> Mark Sent
               </button>
             )}
-            <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"><X size={18} /></button>
+            <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"><X size={18}/></button>
           </div>
         </div>
 
-        {/* Mini stats */}
-        <div className="grid grid-cols-4 gap-3 px-6 py-3 bg-gray-50 border-b border-gray-100 flex-shrink-0">
+        {/* Stats */}
+        <div className="grid grid-cols-5 border-b border-gray-100 flex-shrink-0 bg-gray-50">
           {[
-            { label: 'Recipients', val: stats.total,   color: 'text-gray-800' },
-            { label: 'Sent',       val: stats.sent,    color: 'text-blue-700' },
-            { label: 'Opened',     val: stats.opened,  color: 'text-emerald-700' },
-            { label: 'Replied',    val: stats.replied, color: 'text-violet-700' },
-          ].map(s => (
-            <div key={s.label} className="text-center">
-              <div className={`text-xl font-black ${s.color}`}>{s.val}</div>
+            { label: 'Total',   val: stats.total,   color: 'text-gray-800'    },
+            { label: 'Sent',    val: stats.sent,    color: 'text-blue-700'    },
+            { label: 'Opened',  val: stats.opened,  color: 'text-emerald-700' },
+            { label: 'Replied', val: stats.replied, color: 'text-violet-700'  },
+            { label: 'Bounced', val: stats.bounced, color: 'text-red-600'     },
+          ].map((s, i) => (
+            <div key={s.label} className={`text-center py-3 ${i < 4 ? 'border-r border-gray-200' : ''}`}>
+              <div className={`text-lg font-black ${s.color}`}>{s.val}</div>
               <div className="text-[10px] text-gray-500">{s.label}</div>
             </div>
           ))}
         </div>
 
-        {/* Filters */}
-        <div className="flex gap-3 px-6 py-3 border-b border-gray-100 flex-shrink-0">
-          <div className="relative flex-1">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search recipients…"
-              className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        {/* Filters + Email All */}
+        <div className="flex gap-2 px-4 py-3 border-b border-gray-100 flex-shrink-0 flex-wrap">
+          <div className="relative flex-1 min-w-[150px]">
+            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search recipients…"
+              className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"/>
           </div>
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-            className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+            className="px-2 py-2 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none">
             <option value="all">All Status</option>
             {RECIPIENT_STATUSES.map(s => <option key={s} value={s} className="capitalize">{s}</option>)}
           </select>
+          <button onClick={() => { const cs = filtered.map(r => getContact(r)).filter(Boolean); openEmailApp(cs); }}
+            title="Open email app with all visible contacts in BCC"
+            className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700">
+            <Mail size={12}/> Email All ({filtered.length})
+          </button>
         </div>
 
-        {/* Recipients table */}
-        <div className="overflow-y-auto flex-1 px-6 py-3">
+        {/* Bulk bar when rows selected */}
+        {selectedRecs.size > 0 && (
+          <div className="flex items-center gap-3 px-4 py-2 bg-blue-50 border-b border-blue-100 flex-shrink-0 flex-wrap">
+            <span className="text-xs font-bold text-blue-900">{selectedRecs.size} selected</span>
+            <button onClick={() => openEmailApp(selectedContacts)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700">
+              <Mail size={11}/> Email Selected
+            </button>
+            {selectedRecs.size === 1 && (
+              <button onClick={() => setPreviewContact(selectedContacts[0])}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white rounded-lg text-xs font-bold hover:bg-violet-700">
+                <Eye size={11}/> Preview
+              </button>
+            )}
+            <button onClick={() => setSelectedRecs(new Set())} className="ml-auto text-xs text-blue-500 hover:text-blue-800">Clear</button>
+          </div>
+        )}
+
+        {/* Recipients list */}
+        <div className="overflow-y-auto flex-1 px-4 py-3">
           {recs.length === 0 ? (
             <div className="text-sm text-gray-400 text-center py-10">
-              No recipients yet. Recipients are auto-created when you mark the campaign as Sent.
+              No recipients yet — mark campaign as Sent to auto-create recipient records.
             </div>
           ) : filtered.length === 0 ? (
-            <div className="text-sm text-gray-400 text-center py-10">No results for this filter.</div>
+            <div className="text-sm text-gray-400 text-center py-10">No results.</div>
           ) : (
-            <div className="space-y-2">
-              {filtered.map(r => {
-                const c = contacts.find(x => x.id === r.contactId);
-                return (
-                  <div key={r.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
-                      {(c?.name || '?').charAt(0)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold text-gray-900">{c?.name || 'Unknown'}</div>
-                      <div className="text-xs text-gray-500">{c?.email}</div>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {RECIPIENT_STATUSES.filter(s => s !== 'pending').map(s => (
-                        <button key={s} onClick={() => onUpdateRecipient(campaign.id, r.id, s)}
-                          title={`Mark as ${s}`}
-                          className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-all ${
-                            r.status === s
-                              ? RECIPIENT_STATUS_COLORS[s] + ' border-current shadow-sm'
-                              : 'bg-white border-gray-200 text-gray-400 hover:border-gray-400'
-                          }`}>
-                          {s}
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="pl-3 pr-1 py-2 w-8">
+                    <input type="checkbox"
+                      checked={selectedRecs.size === filtered.length && filtered.length > 0}
+                      onChange={toggleAllRec}
+                      className="w-3 h-3 rounded accent-blue-600"/>
+                  </th>
+                  <th className="px-2 py-2 text-left text-[10px] font-bold text-gray-400 uppercase">Recipient</th>
+                  <th className="px-2 py-2 text-left text-[10px] font-bold text-gray-400 uppercase">Status (click to advance)</th>
+                  <th className="px-2 py-2 text-left text-[10px] font-bold text-gray-400 uppercase">Updated</th>
+                  <th className="px-2 py-2 text-left text-[10px] font-bold text-gray-400 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(r => {
+                  const c    = getContact(r);
+                  const chip = STATUS_CHIP[r.status] || STATUS_CHIP.pending;
+                  const next = STATUS_NEXT[r.status]  || 'sent';
+                  const gradIdx = (c?.name?.charCodeAt(0) || 0) % GRAD.length;
+                  return (
+                    <tr key={r.id} className={`border-b border-gray-100 transition-colors ${selectedRecs.has(r.id) ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
+                      <td className="pl-3 pr-1 py-2.5">
+                        <input type="checkbox" checked={selectedRecs.has(r.id)} onChange={() => toggleRec(r.id)}
+                          className="w-3 h-3 rounded accent-blue-600"/>
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${GRAD[gradIdx]} flex items-center justify-center text-white font-bold text-[10px] flex-shrink-0`}>
+                            {(c?.name || '?').charAt(0)}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-gray-900 truncate">{c?.name || 'Unknown'}</div>
+                            <div className="text-[10px] text-gray-500 truncate">{c?.email}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <button onClick={() => onUpdateRecipient(campaign.id, r.id, next)}
+                          title={`Click to mark as: ${next}`}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-bold border-2 transition-all hover:scale-105 active:scale-95 cursor-pointer ${chip.cls}`}>
+                          {chip.label}
+                          <span className="text-[9px] opacity-50 ml-0.5">→{next}</span>
                         </button>
-                      ))}
-                    </div>
-                    <div className="text-[10px] text-gray-400 flex-shrink-0 w-16 text-right">{fmt(r.updatedAt)}</div>
-                  </div>
-                );
-              })}
-            </div>
+                      </td>
+                      <td className="px-2 py-2.5 text-[10px] text-gray-400 whitespace-nowrap">{fmt(r.updatedAt)}</td>
+                      <td className="px-2 py-2.5">
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => c && openEmailApp([c])} title="Open email app"
+                            className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg">
+                            <Mail size={12}/>
+                          </button>
+                          <button onClick={() => c && setPreviewContact(c)} title="Preview personalised email"
+                            className="p-1.5 text-violet-500 hover:bg-violet-50 rounded-lg">
+                            <Eye size={12}/>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           )}
         </div>
       </div>
+
+      {/* Personalised email preview */}
+      {previewContact && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[60] backdrop-blur-sm"
+          onClick={() => setPreviewContact(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl max-h-[85vh] flex flex-col"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <div className="font-bold text-gray-900 text-sm">📧 Personalised Email Preview</div>
+                <div className="text-xs text-gray-500 mt-0.5">For: {previewContact.name} ({previewContact.email})</div>
+              </div>
+              <button onClick={() => setPreviewContact(null)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg"><X size={16}/></button>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1 space-y-3">
+              <div className="bg-gray-50 rounded-xl px-4 py-2.5">
+                <span className="text-[10px] text-gray-400 font-bold uppercase">To: </span>
+                <span className="text-sm font-semibold text-gray-900">{previewContact.name} &lt;{previewContact.email}&gt;</span>
+              </div>
+              <div className="bg-gray-50 rounded-xl px-4 py-2.5">
+                <span className="text-[10px] text-gray-400 font-bold uppercase">Subject: </span>
+                <span className="text-sm font-semibold text-gray-900">{fillPlaceholders(campaign.subject, previewContact)}</span>
+              </div>
+              <div className="border border-gray-200 rounded-xl overflow-hidden">
+                <div className="text-xs font-bold text-gray-400 uppercase px-4 pt-3 pb-1">Body:</div>
+                <div className="px-4 pb-4 text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                  {fillPlaceholders(campaign.body, previewContact)}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3 px-5 pb-5">
+              <button onClick={() => { openEmailApp([previewContact]); setPreviewContact(null); }}
+                className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 flex items-center justify-center gap-2">
+                <Mail size={14}/> Open in Email App
+              </button>
+              <button onClick={() => setPreviewContact(null)}
+                className="py-2.5 px-4 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1160,64 +1353,172 @@ function CampaignsTab({ campaigns, contacts, recipients, loading, onAdd, onEdit,
 // ══════════════════════════════════════════════════════════════════════════════
 // TAB 4 — TEMPLATES
 // ══════════════════════════════════════════════════════════════════════════════
+const TEMPLATE_PLACEHOLDERS = [
+  { key: '{{name}}',        desc: "Contact's full name"    },
+  { key: '{{email}}',       desc: "Contact's email"        },
+  { key: '{{phone}}',       desc: "Contact's phone"        },
+  { key: '{{company}}',     desc: "Company / organisation" },
+  { key: '{{designation}}', desc: "Job title / role"       },
+  { key: '{{tags}}',        desc: "Segment tags list"      },
+];
+
+const SAMPLE_CONTACT = {
+  name: 'Ahmed Al-Rashid', email: 'ahmed@example.com', phone: '+880 1712-345678',
+  company: 'Al-Rashid Enterprises', designation: 'Business Owner', tags: ['paid','vip'],
+};
+
 function TemplateForm({ initial, onSave, onClose }) {
   const [form, setForm] = useState({
     name:     initial?.name     || '',
     category: initial?.category || 'General',
     subject:  initial?.subject  || '',
     body:     initial?.body     || '',
+    isHtml:   initial?.isHtml   || false,
   });
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const set       = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const [showPreview, setShowPreview] = useState(false);
+  const bodyRef = useRef();
+
+  // Insert placeholder at cursor position in textarea
+  const insertPlaceholder = (key) => {
+    const el = bodyRef.current;
+    if (!el) { set('body', form.body + key); return; }
+    const start = el.selectionStart;
+    const end   = el.selectionEnd;
+    const next  = form.body.slice(0, start) + key + form.body.slice(end);
+    set('body', next);
+    setTimeout(() => { el.focus(); el.setSelectionRange(start + key.length, start + key.length); }, 0);
+  };
+
+  const previewBody    = fillPlaceholders(form.body, SAMPLE_CONTACT);
+  const previewSubject = fillPlaceholders(form.subject, SAMPLE_CONTACT);
+  const htmlPlaceholder = '<!DOCTYPE html>\n<html>\n<head></head>\n<body>\n  <p>Hello {{name}},</p>\n</body>\n</html>';
+  const textPlaceholder = 'Dear {{name}},\n\nWrite your email here...\n\nBest regards,\nNisab Wallet Team';
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-y-auto max-h-[90vh]">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+      <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl flex flex-col max-h-[92vh]">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
           <h3 className="font-bold text-gray-900 flex items-center gap-2">
-            <LayoutTemplate size={16} className="text-violet-600" />
+            <LayoutTemplate size={16} className="text-violet-600"/>
             {initial ? 'Edit Template' : 'New Template'}
           </h3>
-          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"><X size={18} /></button>
-        </div>
-        <div className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold text-gray-600 block mb-1">Template Name *</label>
-              <input value={form.name} onChange={e => set('name', e.target.value)}
-                placeholder="e.g. Renewal Reminder v1"
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-600 block mb-1">Category</label>
-              <select value={form.category} onChange={e => set('category', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
-                {TEMPLATE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-gray-600 block mb-1">Subject Line *</label>
-            <input value={form.subject} onChange={e => set('subject', e.target.value)}
-              placeholder="e.g. Your Nisab Wallet trial is ending — here's what to do next"
-              className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-gray-600 block mb-1">Email Body *</label>
-            <textarea value={form.body} onChange={e => set('body', e.target.value)}
-              rows={12} placeholder="Write your full email template here. Use {name}, {email} as placeholders."
-              className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none font-mono" />
-            <div className="text-[11px] text-gray-400 mt-1">
-              Tip: Use placeholders like <code className="bg-gray-100 px-1 rounded">{'{{name}}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{{email}}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{{plan}}'}</code>
-            </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowPreview(v => !v)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                showPreview ? 'bg-violet-600 text-white border-violet-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}>
+              <Eye size={12}/> {showPreview ? 'Back to Edit' : 'Preview'}
+            </button>
+            <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"><X size={18}/></button>
           </div>
         </div>
-        <div className="flex gap-3 px-6 pb-6">
+
+        {showPreview ? (
+          /* ── Preview pane ── */
+          <div className="flex-1 overflow-y-auto p-5 space-y-3">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 text-xs text-amber-800 flex items-center gap-2">
+              <Eye size={12}/> Previewing with sample contact: <strong>{SAMPLE_CONTACT.name}</strong>
+              {form.isHtml && <span className="ml-auto text-violet-700 font-bold bg-violet-100 px-2 py-0.5 rounded-full">HTML</span>}
+            </div>
+            <div className="bg-gray-50 rounded-xl px-4 py-2.5">
+              <span className="text-[10px] text-gray-400 font-bold uppercase mr-2">Subject:</span>
+              <span className="text-sm font-semibold text-gray-900">{previewSubject}</span>
+            </div>
+            <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
+              {form.isHtml ? (
+                <iframe
+                  srcDoc={previewBody}
+                  title="HTML Email Preview"
+                  className="w-full border-0"
+                  style={{ minHeight: '420px' }}
+                  sandbox="allow-same-origin"
+                />
+              ) : (
+                <div className="p-5 text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                  {previewBody}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* ── Edit pane ── */
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-semibold text-gray-600 block mb-1">Template Name *</label>
+                <input value={form.name} onChange={e => set('name', e.target.value)}
+                  placeholder="e.g. Renewal Reminder v1"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"/>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-600 block mb-1">Category</label>
+                <select value={form.category} onChange={e => set('category', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+                  {TEMPLATE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* HTML mode toggle */}
+            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
+              <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                <input type="checkbox" checked={form.isHtml} onChange={e => set('isHtml', e.target.checked)} className="sr-only peer"/>
+                <div className="w-9 h-5 bg-gray-300 peer-checked:bg-violet-600 rounded-full transition-colors"/>
+                <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4"/>
+              </label>
+              <div>
+                <div className="text-xs font-bold text-gray-800">HTML Email Mode</div>
+                <div className="text-[10px] text-gray-500">Paste full HTML email — preview renders it as actual email</div>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-gray-600 block mb-1">Subject Line *</label>
+              <input value={form.subject} onChange={e => set('subject', e.target.value)}
+                placeholder="e.g. Your Nisab Wallet subscription is ending soon"
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"/>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-gray-600">
+                  Email Body * {form.isHtml && <span className="text-violet-600 ml-1">(HTML)</span>}
+                </label>
+                <span className="text-[10px] text-gray-400">{form.body.length} chars</span>
+              </div>
+              {/* Placeholder insert toolbar */}
+              <div className="flex flex-wrap items-center gap-1.5 p-2 bg-gray-50 rounded-lg border border-gray-200 mb-2">
+                <span className="text-[10px] text-gray-400 font-semibold mr-0.5">Insert:</span>
+                {TEMPLATE_PLACEHOLDERS.map(p => (
+                  <button key={p.key} onClick={() => insertPlaceholder(p.key)} title={p.desc}
+                    className="px-2 py-0.5 bg-white text-violet-700 border border-violet-200 rounded text-[10px] font-mono hover:bg-violet-50 hover:border-violet-400 transition-colors">
+                    {p.key}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                ref={bodyRef}
+                value={form.body}
+                onChange={e => set('body', e.target.value)}
+                rows={14}
+                placeholder={form.isHtml ? htmlPlaceholder : textPlaceholder}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none font-mono leading-relaxed"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="flex gap-3 px-5 py-4 border-t border-gray-100 flex-shrink-0">
           <button onClick={onClose}
             className="flex-1 py-2.5 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50">Cancel</button>
           <button onClick={() => onSave(form)}
             disabled={!form.name.trim() || !form.subject.trim() || !form.body.trim()}
             className="flex-1 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2">
-            <Save size={14} /> {initial ? 'Update Template' : 'Save Template'}
+            <Save size={14}/> {initial ? 'Update Template' : 'Save Template'}
           </button>
         </div>
       </div>
@@ -1267,7 +1568,13 @@ function TemplatesTab({ templates, loading, onAdd, onEdit, onDelete, onCopy }) {
                 </div>
               </div>
               <div className="text-xs font-semibold text-gray-700 mb-1 truncate">📧 {t.subject}</div>
-              <div className="text-xs text-gray-500 line-clamp-3 flex-1 mb-4 leading-relaxed whitespace-pre-line">{t.body}</div>
+              {t.isHtml ? (
+                <div className="text-xs text-violet-600 bg-violet-50 border border-violet-100 rounded-lg px-2 py-1.5 mb-4 flex items-center gap-1.5 font-medium">
+                  <span className="text-violet-400">&#60;/&#62;</span> HTML template — click Preview to render
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500 line-clamp-3 flex-1 mb-4 leading-relaxed whitespace-pre-line">{t.body}</div>
+              )}
               <div className="flex gap-2 pt-3 border-t border-gray-100">
                 <button onClick={() => setPreview(t)}
                   className="flex-1 flex items-center justify-center gap-1 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-50">
@@ -1297,8 +1604,12 @@ function TemplatesTab({ templates, loading, onAdd, onEdit, onDelete, onCopy }) {
           <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-y-auto max-h-[85vh]" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50 rounded-t-2xl">
               <div>
-                <div className="text-xs text-gray-500 font-semibold mb-0.5">TEMPLATE PREVIEW</div>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-xs text-gray-500 font-semibold uppercase">Template Preview</span>
+                  {preview.isHtml && <span className="text-[10px] font-bold text-violet-700 bg-violet-100 border border-violet-200 px-1.5 py-0.5 rounded-full">HTML</span>}
+                </div>
                 <div className="font-bold text-gray-900">{preview.name}</div>
+                <div className="text-[10px] text-amber-700 mt-0.5">Placeholders filled with sample data</div>
               </div>
               <button onClick={() => setPreview(null)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-200"><X size={18}/></button>
             </div>
@@ -1307,9 +1618,17 @@ function TemplatesTab({ templates, loading, onAdd, onEdit, onDelete, onCopy }) {
                 <span className="text-xs text-gray-500 font-semibold">Subject: </span>
                 <span className="text-sm font-semibold text-gray-900">{preview.subject}</span>
               </div>
-              <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed bg-white border border-gray-200 rounded-xl p-4 font-mono">
-                {preview.body}
-              </div>
+              {preview.isHtml ? (
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  <iframe srcDoc={fillPlaceholders(preview.body, SAMPLE_CONTACT)}
+                    title="HTML Email Preview" className="w-full border-0"
+                    style={{ minHeight: '360px' }} sandbox="allow-same-origin"/>
+                </div>
+              ) : (
+                <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed bg-white border border-gray-200 rounded-xl p-4">
+                  {fillPlaceholders(preview.body, SAMPLE_CONTACT)}
+                </div>
+              )}
             </div>
             <div className="flex gap-3 px-6 pb-6">
               <button onClick={() => { onCopy(preview); setPreview(null); }}
@@ -1441,6 +1760,18 @@ export default function AdminEmailPage() {
     });
   };
 
+  const bulkStatusContacts = async (ids, status, onDone) => {
+    try {
+      const now = new Date();
+      const batch = writeBatch(db);
+      ids.forEach(id => batch.update(doc(db, 'emailContacts', id), { status, updatedAt: serverTimestamp() }));
+      await batch.commit();
+      setContacts(cs => cs.map(c => ids.includes(c.id) ? { ...c, status, updatedAt: now } : c));
+      addToast(`${ids.length} contacts set to "${status}"`, 'success');
+      onDone();
+    } catch (err) { addToast('Error updating contacts: ' + err.message, 'error'); }
+  };
+
   // ── Quick status change ───────────────────────────────────────────────────
   const changeContactStatus = async (contact, newStatus) => {
     try {
@@ -1472,7 +1803,7 @@ export default function AdminEmailPage() {
             phone:     row.phone || row['phone number'] || '',
             company:   row.company || row.organisation || row.organization || '',
             tags:      row.tags ? row.tags.split(';').map(t => t.trim().toLowerCase()) : [],
-            status:    'active',
+            status:    (CONTACT_STATUSES.includes((row.status || '').toLowerCase()) ? (row.status || '').toLowerCase() : 'active'),
             source:    'csv-import',
             notes:     row.notes || '',
             createdAt: serverTimestamp(),
@@ -1676,6 +2007,7 @@ export default function AdminEmailPage() {
             onStatusChange={changeContactStatus}
             onDelete={deleteContact}
             onBulkDelete={bulkDeleteContacts}
+            onBulkStatus={bulkStatusContacts}
             onImportCSV={importCSV}
             onExportCSV={exportCSV}
           />
