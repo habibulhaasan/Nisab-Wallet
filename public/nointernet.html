@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nisab Wallet - Offline</title>
+    <style>
+        :root {
+            --accent: #0078d7; /* Classic Win-Blue */
+            --bg-gradient: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            --glass: rgba(255, 255, 255, 0.8);
+            --text-dark: #1a1a1a;
+            --text-light: #5f6368;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Segoe UI", "San Francisco", Arial, sans-serif;
+        }
+
+        body {
+            background: var(--bg-gradient);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            color: var(--text-dark);
+            overflow: hidden;
+        }
+
+        .card {
+            background: var(--glass);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 20px;
+            padding: 40px 30px;
+            width: 100%;
+            max-width: 360px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            animation: slideUp 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .logo {
+            width: 80px;
+            height: auto;
+            margin-bottom: 25px;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.05));
+        }
+
+        /* Animated Offline Indicator */
+        .status-wrapper {
+            position: relative;
+            height: 60px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .pulse-ring {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border: 2px solid var(--accent);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+            opacity: 0;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.5); opacity: 0; }
+            50% { opacity: 0.5; }
+            100% { transform: scale(2); opacity: 0; }
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            background: #d1d1d1;
+            border-radius: 50%;
+            z-index: 2;
+        }
+
+        h1 {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            letter-spacing: -0.5px;
+        }
+
+        p {
+            font-size: 15px;
+            color: var(--text-light);
+            line-height: 1.6;
+            margin-bottom: 35px;
+        }
+
+        .btn-refresh {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 14px 40px;
+            border-radius: 50px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0, 120, 215, 0.3);
+        }
+
+        .btn-refresh:hover {
+            background: #005a9e;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0, 120, 215, 0.4);
+        }
+
+        .btn-refresh:active {
+            transform: translateY(0);
+        }
+
+        /* Footer Info */
+        .app-name {
+            margin-top: 25px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <img src="https://nisabwallet.vercel.app/nisab-logo.png" alt="Nisab Wallet" class="logo">
+
+        <div class="status-wrapper">
+            <div class="pulse-ring"></div>
+            <div class="status-dot"></div>
+        </div>
+
+        <h1>No connection</h1>
+        <p>Check your connection and try again. Nisab Wallet needs the internet to sync your data.</p>
+
+        <button class="btn-refresh" onclick="location.reload()">Refresh Page</button>
+
+        <div class="app-name">Nisab Wallet</div>
+    </div>
+
+</body>
+</html>

@@ -290,22 +290,238 @@ function DashboardTab({ contacts, campaigns, recipients }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // TAB 2 — CONTACTS
 // ══════════════════════════════════════════════════════════════════════════════
+
+// ── Status cycle order for one-click toggle ───────────────────────────────────
+const STATUS_CYCLE = { active: 'unsubscribed', unsubscribed: 'active', bounced: 'blocked', blocked: 'active' };
+
+const STATUS_META = {
+  active:       { icon: CheckCircle, bg: 'bg-emerald-100', text: 'text-emerald-700', border: 'border-emerald-300', dot: 'bg-emerald-500', label: 'Active'       },
+  unsubscribed: { icon: XCircle,     bg: 'bg-orange-100',  text: 'text-orange-700',  border: 'border-orange-300',  dot: 'bg-orange-500',  label: 'Unsubscribed' },
+  bounced:      { icon: AlertCircle, bg: 'bg-red-100',     text: 'text-red-700',     border: 'border-red-300',     dot: 'bg-red-500',     label: 'Bounced'      },
+  blocked:      { icon: XCircle,     bg: 'bg-gray-100',    text: 'text-gray-600',    border: 'border-gray-300',    dot: 'bg-gray-400',    label: 'Blocked'      },
+};
+
+const GRAD = [
+  'from-blue-500 to-indigo-600',
+  'from-violet-500 to-purple-600',
+  'from-emerald-500 to-teal-600',
+  'from-rose-500 to-pink-600',
+  'from-amber-500 to-orange-500',
+  'from-cyan-500 to-blue-500',
+];
+
+// ── Contact Detail Modal ──────────────────────────────────────────────────────
+function ContactDetailModal({ contact, campaigns, recipients, onClose, onEdit, onDelete, onStatusChange }) {
+  const sm = STATUS_META[contact.status] || STATUS_META.active;
+  const StatusIcon = sm.icon;
+  const gradIdx = contact.name?.charCodeAt(0) % GRAD.length || 0;
+
+  // Campaign history for this contact
+  const history = campaigns.map(c => {
+    const rec = (recipients[c.id] || []).find(r => r.contactId === contact.id);
+    return rec ? { campaign: c, rec } : null;
+  }).filter(Boolean);
+
+  const fmt = (ts) => ts?.toDate ? ts.toDate().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+
+  const nextStatus = STATUS_CYCLE[contact.status] || 'active';
+  const nextMeta = STATUS_META[nextStatus];
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+      onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]"
+        onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className={`relative px-6 pt-6 pb-5 bg-gradient-to-br ${GRAD[gradIdx]} rounded-t-2xl`}>
+          <button onClick={onClose}
+            className="absolute top-4 right-4 p-1.5 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors">
+            <X size={16}/>
+          </button>
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-white/20 border-2 border-white/30 flex items-center justify-center text-white font-black text-2xl flex-shrink-0">
+              {contact.name?.charAt(0)?.toUpperCase() || '?'}
+            </div>
+            <div>
+              <h2 className="text-xl font-extrabold text-white">{contact.name}</h2>
+              <div className="text-white/80 text-sm flex items-center gap-1.5 mt-0.5">
+                <AtSign size={12}/>{contact.email}
+              </div>
+              {contact.company && (
+                <div className="text-white/70 text-xs flex items-center gap-1 mt-0.5">
+                  <Building2 size={11}/>{contact.company}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Status badge */}
+          <div className="flex items-center gap-2 mt-4 flex-wrap">
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-white/20 text-white border border-white/30`}>
+              <StatusIcon size={11}/> {sm.label}
+            </span>
+            {(contact.tags || []).map(t => (
+              <span key={t} className="px-2 py-0.5 bg-white/15 text-white/90 rounded-full text-[10px] font-semibold border border-white/20">{t}</span>
+            ))}
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-5">
+
+          {/* Quick actions */}
+          <div className="grid grid-cols-3 gap-2">
+            <button onClick={() => onStatusChange(contact, nextStatus)}
+              className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 ${nextMeta.border} ${nextMeta.bg} ${nextMeta.text} hover:opacity-80 transition-opacity`}>
+              <nextMeta.icon size={16}/>
+              <span className="text-[10px] font-bold">→ {nextMeta.label}</span>
+            </button>
+            <button onClick={() => onEdit(contact)}
+              className="flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 border-blue-200 bg-blue-50 text-blue-700 hover:opacity-80 transition-opacity">
+              <Edit2 size={16}/>
+              <span className="text-[10px] font-bold">Edit</span>
+            </button>
+            <button onClick={() => { onDelete(contact); onClose(); }}
+              className="flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 border-red-200 bg-red-50 text-red-600 hover:opacity-80 transition-opacity">
+              <Trash2 size={16}/>
+              <span className="text-[10px] font-bold">Delete</span>
+            </button>
+          </div>
+
+          {/* Contact details */}
+          <div className="bg-gray-50 rounded-xl p-4 space-y-2.5">
+            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Contact Info</h4>
+            {[
+              { icon: Mail,     label: 'Email',   val: contact.email,   href: `mailto:${contact.email}` },
+              { icon: Phone,    label: 'Phone',   val: contact.phone    || '—', href: contact.phone ? `tel:${contact.phone}` : null },
+              { icon: Building2,label: 'Company', val: contact.company  || '—', href: null },
+              { icon: Globe,    label: 'Source',  val: contact.source   || 'manual', href: null },
+              { icon: Calendar, label: 'Added',   val: fmt(contact.createdAt), href: null },
+            ].map(({ icon: Icon, label, val, href }) => (
+              <div key={label} className="flex items-center gap-3">
+                <div className="w-6 flex-shrink-0 flex justify-center"><Icon size={13} className="text-gray-400"/></div>
+                <span className="text-xs text-gray-500 w-14 flex-shrink-0">{label}</span>
+                {href
+                  ? <a href={href} className="text-xs text-blue-600 hover:underline font-medium truncate">{val}</a>
+                  : <span className="text-xs text-gray-800 font-medium truncate">{val}</span>
+                }
+              </div>
+            ))}
+          </div>
+
+          {/* Notes */}
+          {contact.notes && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <h4 className="text-xs font-bold text-amber-700 mb-1.5 flex items-center gap-1.5"><MessageSquare size={11}/>Notes</h4>
+              <p className="text-xs text-amber-900 leading-relaxed">{contact.notes}</p>
+            </div>
+          )}
+
+          {/* Campaign history */}
+          <div>
+            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <Send size={11}/> Campaign History ({history.length})
+            </h4>
+            {history.length === 0 ? (
+              <div className="text-xs text-gray-400 text-center py-4 bg-gray-50 rounded-xl">
+                Not included in any campaign yet
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {history.map(({ campaign: c, rec }) => {
+                  const rm = RECIPIENT_STATUS_COLORS[rec.status] || '';
+                  return (
+                    <div key={c.id} className="flex items-center gap-3 px-3 py-2.5 bg-gray-50 rounded-xl">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-semibold text-gray-800 truncate">{c.name}</div>
+                        <div className="text-[10px] text-gray-500 truncate">{c.subject}</div>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${rm}`}>{rec.status}</span>
+                      <span className="text-[10px] text-gray-400">{fmt(rec.updatedAt)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Contact Card ──────────────────────────────────────────────────────────────
+function ContactCard({ contact, onStatusChange, onClick }) {
+  const sm = STATUS_META[contact.status] || STATUS_META.active;
+  const StatusIcon = sm.icon;
+  const gradIdx = contact.name?.charCodeAt(0) % GRAD.length || 0;
+  const nextStatus = STATUS_CYCLE[contact.status] || 'active';
+  const nextMeta   = STATUS_META[nextStatus];
+
+  return (
+    <div
+      onClick={onClick}
+      className="bg-white border border-gray-200 rounded-2xl p-4 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group">
+
+      {/* Top row */}
+      <div className="flex items-start gap-3 mb-3">
+        <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${GRAD[gradIdx]} flex items-center justify-center text-white font-black text-lg flex-shrink-0`}>
+          {contact.name?.charAt(0)?.toUpperCase() || '?'}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-bold text-gray-900 truncate group-hover:text-blue-700 transition-colors">{contact.name}</div>
+          <div className="text-xs text-gray-500 truncate">{contact.email}</div>
+          {contact.company && <div className="text-[10px] text-gray-400 truncate">{contact.company}</div>}
+        </div>
+        {/* Current status */}
+        <span className={`flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${sm.bg} ${sm.text} ${sm.border}`}>
+          <div className={`w-1.5 h-1.5 rounded-full ${sm.dot}`}/>
+          {sm.label}
+        </span>
+      </div>
+
+      {/* Tags */}
+      {(contact.tags || []).length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-3">
+          {(contact.tags || []).slice(0, 3).map(t => (
+            <span key={t} className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full text-[9px] font-semibold border border-blue-100">{t}</span>
+          ))}
+          {(contact.tags || []).length > 3 && (
+            <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full text-[9px]">+{contact.tags.length - 3}</span>
+          )}
+        </div>
+      )}
+
+      {/* One-click status toggle */}
+      <div className="pt-3 border-t border-gray-100 flex items-center gap-2">
+        <button
+          onClick={e => { e.stopPropagation(); onStatusChange(contact, nextStatus); }}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold border-2 ${nextMeta.border} ${nextMeta.bg} ${nextMeta.text} hover:opacity-80 transition-all`}>
+          <nextMeta.icon size={11}/>
+          → {nextMeta.label}
+        </button>
+        <div className="text-[10px] text-gray-400 flex items-center gap-1 flex-shrink-0">
+          <ChevronRight size={10}/> Details
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ContactForm({ initial, onSave, onClose, registeredUsers }) {
   const [form, setForm] = useState({
-    name: initial?.name || '',
-    email: initial?.email || '',
-    phone: initial?.phone || '',
+    name:    initial?.name    || '',
+    email:   initial?.email   || '',
+    phone:   initial?.phone   || '',
     company: initial?.company || '',
-    status: initial?.status || 'active',
-    tags: initial?.tags || [],
-    notes: initial?.notes || '',
-    source: initial?.source || 'manual',
+    status:  initial?.status  || 'active',
+    tags:    initial?.tags    || [],
+    notes:   initial?.notes   || '',
+    source:  initial?.source  || 'manual',
   });
-
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-
   const [importFromUser, setImportFromUser] = useState(false);
-  const [selectedUser, setSelectedUser] = useState('');
 
   const handleUserSelect = (uid) => {
     const u = registeredUsers.find(u => u.id === uid);
@@ -315,33 +531,30 @@ function ContactForm({ initial, onSave, onClose, registeredUsers }) {
       set('source', 'registered');
       if (!form.tags.includes('registered')) set('tags', [...form.tags, 'registered']);
     }
-    setSelectedUser(uid);
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60] backdrop-blur-sm">
       <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
           <h3 className="font-bold text-gray-900 flex items-center gap-2">
-            <User size={16} className="text-blue-600" />
+            <User size={16} className="text-blue-600"/>
             {initial ? 'Edit Contact' : 'Add Contact'}
           </h3>
-          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"><X size={18} /></button>
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"><X size={18}/></button>
         </div>
-
         <div className="p-6 space-y-4">
-          {/* Import from registered user */}
           {!initial && registeredUsers.length > 0 && (
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
               <button onClick={() => setImportFromUser(!importFromUser)}
                 className="flex items-center gap-2 text-sm font-semibold text-blue-700 w-full">
-                <Users size={14} /> Import from Registered User
-                <ChevronDown size={13} className={`ml-auto transition-transform ${importFromUser ? 'rotate-180' : ''}`} />
+                <Users size={14}/> Import from Registered User
+                <ChevronDown size={13} className={`ml-auto transition-transform ${importFromUser ? 'rotate-180' : ''}`}/>
               </button>
               {importFromUser && (
-                <select value={selectedUser} onChange={e => handleUserSelect(e.target.value)}
+                <select onChange={e => handleUserSelect(e.target.value)} defaultValue=""
                   className="mt-2 w-full px-3 py-2 border border-blue-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                  <option value="">— Select a user —</option>
+                  <option value="" disabled>— Select a user —</option>
                   {registeredUsers.map(u => (
                     <option key={u.id} value={u.id}>{u.displayName || u.name || u.email} ({u.email})</option>
                   ))}
@@ -349,37 +562,30 @@ function ContactForm({ initial, onSave, onClose, registeredUsers }) {
               )}
             </div>
           )}
-
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-gray-600 block mb-1">Full Name *</label>
-              <input value={form.name} onChange={e => set('name', e.target.value)}
-                placeholder="Ahmed Al-Rashid"
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <input value={form.name} onChange={e => set('name', e.target.value)} placeholder="Ahmed Al-Rashid"
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-600 block mb-1">Email *</label>
-              <input value={form.email} onChange={e => set('email', e.target.value)}
-                placeholder="email@example.com" type="email"
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <input value={form.email} onChange={e => set('email', e.target.value)} placeholder="email@example.com" type="email"
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
             </div>
           </div>
-
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-gray-600 block mb-1">Phone</label>
-              <input value={form.phone} onChange={e => set('phone', e.target.value)}
-                placeholder="+880 1XXX-XXXXXX"
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="+880 1XXX-XXXXXX"
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-600 block mb-1">Company / Org</label>
-              <input value={form.company} onChange={e => set('company', e.target.value)}
-                placeholder="Optional"
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <input value={form.company} onChange={e => set('company', e.target.value)} placeholder="Optional"
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
             </div>
           </div>
-
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-gray-600 block mb-1">Status</label>
@@ -396,29 +602,25 @@ function ContactForm({ initial, onSave, onClose, registeredUsers }) {
               </select>
             </div>
           </div>
-
           <div>
             <label className="text-xs font-semibold text-gray-600 block mb-2">Tags / Segments</label>
-            <TagInput tags={form.tags} onChange={v => set('tags', v)} />
+            <TagInput tags={form.tags} onChange={v => set('tags', v)}/>
           </div>
-
           <div>
             <label className="text-xs font-semibold text-gray-600 block mb-1">Notes</label>
-            <textarea value={form.notes} onChange={e => set('notes', e.target.value)}
-              rows={3} placeholder="Internal notes about this contact…"
-              className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+            <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={3}
+              placeholder="Internal notes about this contact…"
+              className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"/>
           </div>
         </div>
-
         <div className="flex gap-3 px-6 pb-6">
           <button onClick={onClose}
             className="flex-1 py-2.5 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50">
             Cancel
           </button>
-          <button onClick={() => onSave(form)}
-            disabled={!form.name.trim() || !form.email.trim()}
+          <button onClick={() => onSave(form)} disabled={!form.name.trim() || !form.email.trim()}
             className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2">
-            <Save size={14} /> {initial ? 'Update Contact' : 'Add Contact'}
+            <Save size={14}/> {initial ? 'Update' : 'Add Contact'}
           </button>
         </div>
       </div>
@@ -426,13 +628,14 @@ function ContactForm({ initial, onSave, onClose, registeredUsers }) {
   );
 }
 
-function ContactsTab({ contacts, loading, onAdd, onEdit, onDelete, onBulkDelete, onImportCSV, onExportCSV, registeredUsers }) {
-  const [search, setSearch]     = useState('');
-  const [filterTag, setFilterTag] = useState('all');
+function ContactsTab({ contacts, campaigns, recipients, loading, onAdd, onStatusChange, onDelete, onBulkDelete, onImportCSV, onExportCSV, registeredUsers }) {
+  const [search, setSearch]           = useState('');
+  const [filterTag, setFilterTag]     = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [selected, setSelected] = useState(new Set());
-  const [showForm, setShowForm] = useState(false);
-  const [editItem, setEditItem] = useState(null);
+  const [selected, setSelected]       = useState(new Set());
+  const [showForm, setShowForm]       = useState(false);
+  const [editItem, setEditItem]       = useState(null);
+  const [detailItem, setDetailItem]   = useState(null);
   const fileRef = useRef();
 
   const allTags = useMemo(() => {
@@ -450,44 +653,62 @@ function ContactsTab({ contacts, loading, onAdd, onEdit, onDelete, onBulkDelete,
   }), [contacts, search, filterTag, filterStatus]);
 
   const toggleSelect = (id) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const toggleAll    = () => setSelected(selected.size === filtered.length ? new Set() : new Set(filtered.map(c => c.id)));
-
-  const fmt = (ts) => ts?.toDate ? ts.toDate().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—';
 
   return (
     <div>
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
         <div className="relative flex-1">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search name, email, company…"
-            className="w-full pl-9 pr-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            className="w-full pl-9 pr-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
         </div>
         <select value={filterTag} onChange={e => setFilterTag(e.target.value)}
-          className="px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+          className="px-3 py-2.5 border border-gray-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
           {allTags.map(t => <option key={t} value={t}>{t === 'all' ? 'All Tags' : t}</option>)}
         </select>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-          className="px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+          className="px-3 py-2.5 border border-gray-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="all">All Status</option>
           {CONTACT_STATUSES.map(s => <option key={s} value={s} className="capitalize">{s}</option>)}
         </select>
         <div className="flex gap-2 flex-shrink-0">
           <button onClick={onExportCSV}
             className="flex items-center gap-1.5 px-3 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-50">
-            <Download size={14} /> Export
+            <Download size={14}/> Export
           </button>
           <button onClick={() => fileRef.current?.click()}
             className="flex items-center gap-1.5 px-3 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-50">
-            <Upload size={14} /> Import CSV
+            <Upload size={14}/> CSV
           </button>
-          <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={e => { onImportCSV(e.target.files[0]); e.target.value = ''; }} />
+          <input ref={fileRef} type="file" accept=".csv" className="hidden"
+            onChange={e => { onImportCSV(e.target.files[0]); e.target.value = ''; }}/>
           <button onClick={() => { setEditItem(null); setShowForm(true); }}
             className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700">
-            <Plus size={14} /> Add Contact
+            <Plus size={14}/> Add
           </button>
         </div>
+      </div>
+
+      {/* Status filter pills */}
+      <div className="flex gap-2 mb-5 flex-wrap">
+        {['all', ...CONTACT_STATUSES].map(s => {
+          const count = s === 'all' ? contacts.length : contacts.filter(c => c.status === s).length;
+          const meta  = s === 'all' ? null : STATUS_META[s];
+          return (
+            <button key={s} onClick={() => setFilterStatus(s)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
+                filterStatus === s
+                  ? (meta ? `${meta.bg} ${meta.text} ${meta.border}` : 'bg-gray-900 text-white border-gray-900')
+                  : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+              }`}>
+              {meta && <div className={`w-1.5 h-1.5 rounded-full ${meta.dot}`}/>}
+              <span className="capitalize">{s === 'all' ? 'All' : s}</span>
+              <span className={`text-[10px] ${filterStatus === s ? 'opacity-70' : 'text-gray-400'}`}>{count}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Bulk action bar */}
@@ -496,72 +717,61 @@ function ContactsTab({ contacts, loading, onAdd, onEdit, onDelete, onBulkDelete,
           <span className="text-sm font-semibold text-blue-800">{selected.size} selected</span>
           <button onClick={() => onBulkDelete([...selected], () => setSelected(new Set()))}
             className="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700">
-            <Trash2 size={12} /> Delete Selected
+            <Trash2 size={12}/> Delete Selected
           </button>
-          <button onClick={() => setSelected(new Set())}
-            className="ml-auto text-xs text-blue-600 hover:text-blue-800">Clear</button>
+          <button onClick={() => setSelected(new Set())} className="ml-auto text-xs text-blue-600 hover:text-blue-800">Clear</button>
         </div>
       )}
 
-      {/* Table */}
-      {loading ? <Spinner /> : filtered.length === 0 ? (
+      {/* Cards grid */}
+      {loading ? <Spinner/> : filtered.length === 0 ? (
         <EmptyState icon={Users} title="No contacts found"
-          desc="Add contacts manually or import a CSV file."
-          action={<button onClick={() => setShowForm(true)} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 flex items-center gap-2"><Plus size={14}/>Add First Contact</button>}
+          desc="Add contacts manually, import a CSV, or pull from registered users."
+          action={
+            <button onClick={() => setShowForm(true)}
+              className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 flex items-center gap-2">
+              <Plus size={14}/> Add First Contact
+            </button>
+          }
         />
       ) : (
-        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-          {/* Table header */}
-          <div className="grid grid-cols-[40px_1fr_1fr_100px_120px_90px_80px] gap-3 px-4 py-3 bg-gray-50 border-b border-gray-200 text-xs font-bold text-gray-500 uppercase tracking-wider">
-            <div className="flex items-center justify-center">
-              <input type="checkbox" checked={selected.size === filtered.length && filtered.length > 0}
-                onChange={toggleAll} className="rounded" />
-            </div>
-            <div>Name</div>
-            <div>Email</div>
-            <div>Tags</div>
-            <div>Status</div>
-            <div>Added</div>
-            <div>Actions</div>
-          </div>
-          {/* Rows */}
-          <div className="divide-y divide-gray-100">
+        <>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filtered.map(c => (
-              <div key={c.id} className={`grid grid-cols-[40px_1fr_1fr_100px_120px_90px_80px] gap-3 px-4 py-3 items-center hover:bg-gray-50 transition-colors ${selected.has(c.id) ? 'bg-blue-50' : ''}`}>
-                <div className="flex items-center justify-center">
-                  <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelect(c.id)} className="rounded" />
+              <div key={c.id} className="relative">
+                {/* Select checkbox */}
+                <div className="absolute top-3 left-3 z-10" onClick={e => e.stopPropagation()}>
+                  <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelect(c.id)}
+                    className="w-3.5 h-3.5 rounded accent-blue-600"/>
                 </div>
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-gray-900 truncate">{c.name}</div>
-                  {c.company && <div className="text-[11px] text-gray-500 truncate">{c.company}</div>}
-                  {c.source === 'registered' && <span className="text-[10px] text-violet-600 font-semibold">• Registered User</span>}
-                </div>
-                <div className="text-sm text-gray-600 truncate">{c.email}</div>
-                <div className="flex flex-wrap gap-1">
-                  {(c.tags || []).slice(0, 2).map(t => <TagPill key={t} tag={t} />)}
-                  {(c.tags || []).length > 2 && <span className="text-[10px] text-gray-400">+{c.tags.length - 2}</span>}
-                </div>
-                <div><StatusBadge label={c.status} color={STATUS_COLORS[c.status]} /></div>
-                <div className="text-xs text-gray-400">{fmt(c.createdAt)}</div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => { setEditItem(c); setShowForm(true); }}
-                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                    <Edit2 size={13} />
-                  </button>
-                  <button onClick={() => onDelete(c)}
-                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                    <Trash2 size={13} />
-                  </button>
-                </div>
+                <ContactCard
+                  contact={c}
+                  onStatusChange={onStatusChange}
+                  onClick={() => setDetailItem(c)}
+                />
               </div>
             ))}
           </div>
-          <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-100 text-xs text-gray-500">
+          <div className="mt-4 text-xs text-gray-400 text-center">
             Showing {filtered.length} of {contacts.length} contacts
           </div>
-        </div>
+        </>
       )}
 
+      {/* Detail modal */}
+      {detailItem && (
+        <ContactDetailModal
+          contact={contacts.find(c => c.id === detailItem.id) || detailItem}
+          campaigns={campaigns}
+          recipients={recipients}
+          onClose={() => setDetailItem(null)}
+          onEdit={(c) => { setDetailItem(null); setEditItem(c); setShowForm(true); }}
+          onDelete={(c) => { setDetailItem(null); onDelete(c); }}
+          onStatusChange={(c, st) => { onStatusChange(c, st); setDetailItem(prev => prev?.id === c.id ? {...prev, status: st} : prev); }}
+        />
+      )}
+
+      {/* Add / Edit form */}
       {showForm && (
         <ContactForm
           initial={editItem}
@@ -1231,6 +1441,15 @@ export default function AdminEmailPage() {
     });
   };
 
+  // ── Quick status change ───────────────────────────────────────────────────
+  const changeContactStatus = async (contact, newStatus) => {
+    try {
+      await updateDoc(doc(db, 'emailContacts', contact.id), { status: newStatus, updatedAt: serverTimestamp() });
+      setContacts(cs => cs.map(c => c.id === contact.id ? { ...c, status: newStatus } : c));
+      addToast(`${contact.name} → ${newStatus}`, 'success');
+    } catch (err) { addToast('Error: ' + err.message, 'error'); }
+  };
+
   // ── CSV Import ─────────────────────────────────────────────────────────────
   const importCSV = (file) => {
     if (!file) return;
@@ -1449,10 +1668,12 @@ export default function AdminEmailPage() {
         {tab === 'contacts' && (
           <ContactsTab
             contacts={contacts}
+            campaigns={campaigns}
+            recipients={recipients}
             loading={loading}
             registeredUsers={regUsers}
             onAdd={saveContact}
-            onEdit={saveContact}
+            onStatusChange={changeContactStatus}
             onDelete={deleteContact}
             onBulkDelete={bulkDeleteContacts}
             onImportCSV={importCSV}

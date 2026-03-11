@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nisab Splash</title>
+    <style>
+        :root {
+            /* Lighter, clean background */
+            --bg-color: #f8fafc; 
+            --accent-glow: rgba(0, 120, 215, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .viewport {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        /* Logo rising and fading in */
+        .logo-container {
+            position: relative;
+            width: 160px; /* Optimized for mobile viewports */
+            opacity: 0;
+            transform: translateY(30px);
+            animation: riseFade 1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+            z-index: 2;
+        }
+
+        @keyframes riseFade {
+            to { 
+                opacity: 1; 
+                transform: translateY(0); 
+            }
+        }
+
+        .logo-img {
+            width: 100%;
+            height: auto;
+            display: block;
+            /* Subtle shadow for depth on light background */
+            filter: drop-shadow(0 10px 15px rgba(0, 0, 0, 0.05));
+        }
+
+        /* Fast-loading shimmer effect */
+        .logo-container::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: -150%;
+            width: 60%;
+            height: 100%;
+            background: linear-gradient(
+                90deg, 
+                transparent, 
+                rgba(255, 255, 255, 0.6), 
+                transparent
+            );
+            transform: skewX(-20deg);
+            animation: shine 3s infinite 1.2s;
+        }
+
+        @keyframes shine {
+            0% { left: -150%; }
+            30%, 100% { left: 250%; }
+        }
+
+        /* Soft ambient background pulse */
+        .ambient-glow {
+            position: absolute;
+            width: 280px;
+            height: 280px;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            border-radius: 50%;
+            z-index: 1;
+            animation: pulse 4s infinite alternate ease-in-out;
+        }
+
+        @keyframes pulse {
+            from { transform: scale(0.9); opacity: 0.5; }
+            to { transform: scale(1.3); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="viewport">
+        <div class="ambient-glow"></div>
+
+        <div class="logo-container">
+            <img src="https://nisabwallet.vercel.app/nisab-logo.png" alt="Nisab Wallet" class="logo-img">
+        </div>
+    </div>
+
+</body>
+</html>

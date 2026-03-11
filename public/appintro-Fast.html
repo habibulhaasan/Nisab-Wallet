@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nisab Wallet Intro</title>
+    <style>
+        :root {
+            --bg-deep: #0a0e14;
+            --accent-blue: #0078d7;
+            --white: #ffffff;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-deep);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            font-family: 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .canvas {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        /* 1. Logo Slide Up Animation */
+        .logo-container {
+            width: 130px;
+            opacity: 0;
+            transform: translateY(120px); /* Starts deep at the bottom */
+            animation: slideUpLogo 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes slideUpLogo {
+            0% { opacity: 0; transform: translateY(120px) scale(0.8); filter: blur(10px); }
+            100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+        }
+
+        .logo-img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+
+        
+        @keyframes walletReveal {
+            0% { opacity: 0; letter-spacing: 20px; filter: blur(5px); }
+            100% { opacity: 1; letter-spacing: 8px; filter: blur(0); }
+        }
+
+        /* Light Ambient Glow */
+        .ambient-glow {
+            position: absolute;
+            width: 250px;
+            height: 250px;
+            background: radial-gradient(circle, rgba(0, 120, 215, 0.12) 0%, transparent 70%);
+            z-index: -1;
+            animation: pulse 4s infinite alternate;
+        }
+
+        @keyframes pulse {
+            from { transform: scale(1); opacity: 0.3; }
+            to { transform: scale(1.3); opacity: 0.6; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="canvas">
+        <div class="ambient-glow"></div>
+
+        <div class="logo-container">
+            <img src="https://nisabwallet.vercel.app/nisab-logo-white.png" alt="Logo" class="logo-img">
+        </div>
+
+    </div>
+
+</body>
+</html>
