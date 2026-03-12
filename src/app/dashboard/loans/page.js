@@ -248,11 +248,33 @@ export default function LoansPage() {
         });
         showToast('Loan updated successfully', 'success');
       } else {
+        // 1. Save the loan record
         await addDoc(collection(db, 'users', user.uid, 'loans'), {
           ...loanData,
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
         });
+
+        // 2. Credit the chosen account with the loan principal
+        const loanAccount = accounts.find((a) => a.id === loanFormData.accountId);
+        if (loanAccount) {
+          await updateAccount(user.uid, loanAccount.id, {
+            balance: loanAccount.balance + principal,
+          });
+        }
+
+        // 3. Create an Income transaction so the ledger stays accurate
+        const loanReceivedCategory = await ensureLoanReceivedCategory();
+        await addDoc(collection(db, 'users', user.uid, 'transactions'), {
+          type: 'Income',
+          amount: principal,
+          accountId: loanFormData.accountId,
+          categoryId: loanReceivedCategory.id,
+          description: `Loan received: ${loanFormData.lenderName}`,
+          date: loanFormData.startDate,
+          createdAt: Timestamp.now(),
+        });
+
         showToast('Loan added successfully', 'success');
       }
 
@@ -397,6 +419,30 @@ export default function LoansPage() {
       return { id: newCategory.id, name: 'Loan Payment', type: 'Expense', color: '#F59E0B' };
     } catch (error) {
       console.error('Error ensuring category:', error);
+      throw error;
+    }
+  };
+
+  const ensureLoanReceivedCategory = async () => {
+    try {
+      const categoriesRef = collection(db, 'users', user.uid, 'categories');
+      const q = query(categoriesRef, where('name', '==', 'Loan Received'));
+      const snapshot = await getDocs(q);
+
+      if (!snapshot.empty) {
+        return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+      }
+
+      const newCategory = await addDoc(categoriesRef, {
+        name: 'Loan Received',
+        type: 'Income',
+        color: '#3B82F6',
+        createdAt: Timestamp.now(),
+      });
+
+      return { id: newCategory.id, name: 'Loan Received', type: 'Income', color: '#3B82F6' };
+    } catch (error) {
+      console.error('Error ensuring Loan Received category:', error);
       throw error;
     }
   };
