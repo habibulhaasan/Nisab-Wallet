@@ -857,8 +857,8 @@ function CampaignForm({ initial, contacts, templates, onSave, onClose }) {
   }, [contacts]);
 
   const recipientCount = useMemo(() => {
-    if (form.segment === 'all') return contacts.filter(c => c.status === 'active').length;
-    return contacts.filter(c => c.status === 'active' && (c.tags || []).includes(form.segment)).length;
+    if (form.segment === 'all') return contacts.length;
+    return contacts.filter(c => (c.tags || []).includes(form.segment)).length;
   }, [contacts, form.segment]);
 
   const [showTemplates, setShowTemplates] = useState(false);
@@ -999,11 +999,24 @@ function buildMailto(contactList, subject, body) {
     + '&body='    + encodeURIComponent(body || '');
 }
 
-function CampaignDetail({ campaign, contacts, recipients, onClose, onUpdateRecipient, onMarkSent }) {
+function CampaignDetail({ campaign, contacts, recipients, onClose, onUpdateRecipient, onMarkSent, onInitRecipients }) {
   const [search, setSearch]             = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedRecs, setSelectedRecs] = useState(new Set());
   const [previewContact, setPreviewContact] = useState(null);
+  const [initialising, setInitialising] = useState(false);
+
+  // Auto-init recipients for ALL contacts when detail opens (works on draft too)
+  useEffect(() => {
+    const recs = recipients[campaign.id] || [];
+    const targetCount = campaign.segment === 'all'
+      ? contacts.length
+      : contacts.filter(c => (c.tags || []).includes(campaign.segment)).length;
+    if (recs.length < targetCount) {
+      setInitialising(true);
+      onInitRecipients(campaign).finally(() => setInitialising(false));
+    }
+  }, [campaign.id]);
 
   const recs     = recipients[campaign.id] || [];
   const filtered = recs.filter(r => {
@@ -1060,20 +1073,49 @@ function CampaignDetail({ campaign, contacts, recipients, onClose, onUpdateRecip
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-5 border-b border-gray-100 flex-shrink-0 bg-gray-50">
-          {[
-            { label: 'Total',   val: stats.total,   color: 'text-gray-800'    },
-            { label: 'Sent',    val: stats.sent,    color: 'text-blue-700'    },
-            { label: 'Opened',  val: stats.opened,  color: 'text-emerald-700' },
-            { label: 'Replied', val: stats.replied, color: 'text-violet-700'  },
-            { label: 'Bounced', val: stats.bounced, color: 'text-red-600'     },
-          ].map((s, i) => (
-            <div key={s.label} className={`text-center py-3 ${i < 4 ? 'border-r border-gray-200' : ''}`}>
-              <div className={`text-lg font-black ${s.color}`}>{s.val}</div>
-              <div className="text-[10px] text-gray-500">{s.label}</div>
+        {/* Stats + progress bar */}
+        <div className="border-b border-gray-100 flex-shrink-0 bg-gray-50">
+          <div className="grid grid-cols-5">
+            {[
+              { label: 'Total',   val: stats.total,   color: 'text-gray-800'    },
+              { label: 'Sent',    val: stats.sent,    color: 'text-blue-700'    },
+              { label: 'Opened',  val: stats.opened,  color: 'text-emerald-700' },
+              { label: 'Replied', val: stats.replied, color: 'text-violet-700'  },
+              { label: 'Bounced', val: stats.bounced, color: 'text-red-600'     },
+            ].map((s, i) => (
+              <div key={s.label} className={`text-center py-3 ${i < 4 ? 'border-r border-gray-200' : ''}`}>
+                <div className={`text-lg font-black ${s.color}`}>{s.val}</div>
+                <div className="text-[10px] text-gray-500">{s.label}</div>
+              </div>
+            ))}
+          </div>
+          {/* Progress bar */}
+          {stats.total > 0 && (
+            <div className="px-5 pb-3 pt-1">
+              {(() => {
+                const actioned = recs.filter(r => r.status !== 'pending').length;
+                const pct      = Math.round(actioned / stats.total * 100);
+                const barCol   = pct === 100 ? 'bg-emerald-500' : pct > 0 ? 'bg-blue-500' : 'bg-gray-300';
+                return (
+                  <>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] text-gray-500">{actioned} of {stats.total} actioned</span>
+                      <span className={`text-[10px] font-bold ${pct === 100 ? 'text-emerald-600' : pct > 0 ? 'text-blue-600' : 'text-gray-400'}`}>{pct}% complete</span>
+                    </div>
+                    <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div className={`h-2 rounded-full transition-all duration-500 ${barCol}`} style={{ width: String(pct) + '%' }}/>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
-          ))}
+          )}
+          {initialising && (
+            <div className="px-5 pb-2 text-[10px] text-blue-600 font-medium flex items-center gap-1.5">
+              <div className="w-3 h-3 border border-blue-500 border-t-transparent rounded-full animate-spin"/>
+              Initialising recipients…
+            </div>
+          )}
         </div>
 
         {/* Filters + Email All */}
@@ -1269,7 +1311,7 @@ function CampaignDetail({ campaign, contacts, recipients, onClose, onUpdateRecip
   );
 }
 
-function CampaignsTab({ campaigns, contacts, recipients, loading, onAdd, onEdit, onDelete, onMarkSent, onUpdateRecipient, templates }) {
+function CampaignsTab({ campaigns, contacts, recipients, loading, onAdd, onEdit, onDelete, onMarkSent, onUpdateRecipient, onInitRecipients, templates }) {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [detailItem, setDetailItem] = useState(null);
@@ -1308,13 +1350,24 @@ function CampaignsTab({ campaigns, contacts, recipients, loading, onAdd, onEdit,
       ) : (
         <div className="space-y-3">
           {filtered.map(c => {
-            const recs = recipients[c.id] || [];
-            const sent    = recs.filter(r => ['sent','opened','replied'].includes(r.status)).length;
-            const opened  = recs.filter(r => r.status === 'opened').length;
-            const openRate = sent > 0 ? Math.round(opened / sent * 100) : 0;
+            const recs      = recipients[c.id] || [];
+            const total     = recs.length;
+            const actioned  = recs.filter(r => r.status !== 'pending').length;
+            const sent      = recs.filter(r => ['sent','opened','replied'].includes(r.status)).length;
+            const opened    = recs.filter(r => r.status === 'opened').length;
+            const replied   = recs.filter(r => r.status === 'replied').length;
+            const bounced   = recs.filter(r => r.status === 'bounced').length;
+            const progress  = total > 0 ? Math.round(actioned / total * 100) : 0;
+            const openRate  = sent > 0 ? Math.round(opened / sent * 100) : 0;
+
+            // Progress bar colour: complete=green, partial=blue, none=gray
+            const barColor  = progress === 100 ? 'bg-emerald-500' : progress > 0 ? 'bg-blue-500' : 'bg-gray-200';
+            const barBg     = progress === 100 ? 'bg-emerald-100' : 'bg-gray-100';
+
             return (
               <div key={c.id} className="bg-white border border-gray-200 rounded-2xl p-5 hover:border-gray-300 hover:shadow-sm transition-all">
                 <div className="flex items-start gap-4">
+                  {/* Status icon */}
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
                     c.status === 'sent' ? 'bg-emerald-100 text-emerald-700' :
                     c.status === 'scheduled' ? 'bg-blue-100 text-blue-700' :
@@ -1322,39 +1375,72 @@ function CampaignsTab({ campaigns, contacts, recipients, loading, onAdd, onEdit,
                   }`}>
                     {c.status === 'sent' ? <CheckCircle size={18}/> : c.status === 'scheduled' ? <Clock size={18}/> : <PenLine size={18}/>}
                   </div>
+
+                  {/* Main content */}
                   <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setDetailItem(c)}>
+                    {/* Title row */}
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className="font-bold text-gray-900">{c.name}</span>
                       <StatusBadge label={c.status} color={CAMPAIGN_STATUS_COLORS[c.status]} />
                       {c.segment && c.segment !== 'all' && <TagPill tag={c.segment} />}
                     </div>
                     <div className="text-sm text-gray-600 mb-2 truncate">📧 {c.subject}</div>
-                    <div className="flex flex-wrap gap-4 text-xs text-gray-500">
-                      <span className="flex items-center gap-1"><Users size={11}/> {c.recipientCount || 0} recipients</span>
-                      {c.status === 'sent' && <>
-                        <span className="flex items-center gap-1 text-blue-600"><Send size={11}/> {sent} sent</span>
-                        <span className="flex items-center gap-1 text-emerald-600"><MailOpen size={11}/> {opened} opened ({openRate}%)</span>
-                      </>}
+
+                    {/* Progress bar */}
+                    {total > 0 && (
+                      <div className="mb-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px] text-gray-500 font-medium">
+                            Progress — {actioned} of {total} contacts actioned
+                          </span>
+                          <span className={`text-[10px] font-bold ${progress === 100 ? 'text-emerald-600' : progress > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                            {progress}%
+                          </span>
+                        </div>
+                        <div className={`w-full h-2 rounded-full ${barBg} overflow-hidden`}>
+                          <div
+                            className={`h-2 rounded-full transition-all duration-500 ${barColor}`}
+                            style={{ width: progress + '%' }}
+                          />
+                        </div>
+                        {/* Mini status breakdown */}
+                        <div className="flex gap-3 mt-1.5 text-[10px] flex-wrap">
+                          {sent    > 0 && <span className="text-blue-600 font-medium">→ {sent} sent</span>}
+                          {opened  > 0 && <span className="text-emerald-600 font-medium">✓ {opened} opened ({openRate}%)</span>}
+                          {replied > 0 && <span className="text-violet-600 font-medium">↩ {replied} replied</span>}
+                          {bounced > 0 && <span className="text-red-500 font-medium">✕ {bounced} bounced</span>}
+                          {actioned === 0 && <span className="text-gray-400">No activity yet — open campaign to start tracking</span>}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Meta row */}
+                    <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+                      <span className="flex items-center gap-1"><Users size={11}/> {total || c.recipientCount || 0} recipients</span>
                       {c.sentAt && <span className="flex items-center gap-1"><Calendar size={11}/> Sent {fmt(c.sentAt)}</span>}
                       {c.scheduledAt && c.status === 'scheduled' && <span className="flex items-center gap-1 text-blue-600"><Calendar size={11}/> Scheduled {c.scheduledAt}</span>}
                       <span className="flex items-center gap-1"><Clock size={11}/> Created {fmt(c.createdAt)}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
+
+                  {/* Actions */}
+                  <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                     {c.status !== 'sent' && (
                       <button onClick={() => onMarkSent(c)}
-                        className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100">
+                        className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100 whitespace-nowrap">
                         <CheckCircle size={11}/> Mark Sent
                       </button>
                     )}
-                    <button onClick={() => { setEditItem(c); setShowForm(true); }}
-                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                      <Edit2 size={13}/>
-                    </button>
-                    <button onClick={() => onDelete(c)}
-                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                      <Trash2 size={13}/>
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => { setEditItem(c); setShowForm(true); }}
+                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                        <Edit2 size={13}/>
+                      </button>
+                      <button onClick={() => onDelete(c)}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                        <Trash2 size={13}/>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1377,6 +1463,7 @@ function CampaignsTab({ campaigns, contacts, recipients, loading, onAdd, onEdit,
           campaign={detailItem}
           contacts={contacts}
           recipients={recipients}
+          onInitRecipients={onInitRecipients}
           onClose={() => setDetailItem(null)}
           onMarkSent={onMarkSent}
           onUpdateRecipient={onUpdateRecipient}
@@ -1908,28 +1995,37 @@ export default function AdminEmailPage() {
     });
   };
 
-  // Mark campaign as sent — auto-create recipient entries for targeted contacts
+  // Initialise recipients for a campaign — all targeted contacts, skip existing ones
+  const initCampaignRecipients = async (campaign) => {
+    const existing  = recipients[campaign.id] || [];
+    const existingIds = new Set(existing.map(r => r.contactId));
+    const targetContacts = contacts.filter(c =>
+      !existingIds.has(c.id) &&
+      (campaign.segment === 'all' || (c.tags || []).includes(campaign.segment))
+    );
+    if (targetContacts.length === 0) return;
+    const batch = writeBatch(db);
+    const now   = serverTimestamp();
+    const newRecs = [];
+    targetContacts.forEach(c => {
+      const rRef = doc(collection(db, 'emailCampaigns', campaign.id, 'recipients'));
+      batch.set(rRef, { contactId: c.id, status: 'pending', createdAt: now, updatedAt: now });
+      newRecs.push({ id: rRef.id, contactId: c.id, status: 'pending' });
+    });
+    await batch.commit();
+    setRecipients(r => ({ ...r, [campaign.id]: [...existing, ...newRecs] }));
+    return newRecs.length;
+  };
+
+  // Mark campaign as sent — initialise recipients if needed, then mark sent
   const markCampaignSent = async (campaign) => {
     try {
-      const targetContacts = contacts.filter(c =>
-        c.status === 'active' &&
-        (campaign.segment === 'all' || (c.tags || []).includes(campaign.segment))
-      );
-      const batch = writeBatch(db);
+      await initCampaignRecipients(campaign);
       const now = serverTimestamp();
-      // Update campaign
-      batch.update(doc(db, 'emailCampaigns', campaign.id), { status: 'sent', sentAt: now });
-      // Create recipient docs
-      const newRecs = [];
-      targetContacts.forEach(c => {
-        const rRef = doc(collection(db, 'emailCampaigns', campaign.id, 'recipients'));
-        batch.set(rRef, { contactId: c.id, status: 'sent', createdAt: now, updatedAt: now });
-        newRecs.push({ id: rRef.id, contactId: c.id, status: 'sent' });
-      });
-      await batch.commit();
+      await updateDoc(doc(db, 'emailCampaigns', campaign.id), { status: 'sent', sentAt: now });
       setCampaigns(cs => cs.map(c => c.id === campaign.id ? { ...c, status: 'sent' } : c));
-      setRecipients(r => ({ ...r, [campaign.id]: [...(r[campaign.id] || []), ...newRecs] }));
-      addToast(`Campaign marked as sent to ${targetContacts.length} contacts`, 'success');
+      const total = (recipients[campaign.id] || []).length;
+      addToast(`Campaign marked as sent — ${total} recipient records ready`, 'success');
     } catch (err) { addToast('Error: ' + err.message, 'error'); }
   };
 
@@ -2060,6 +2156,7 @@ export default function AdminEmailPage() {
             onDelete={deleteCampaign}
             onMarkSent={markCampaignSent}
             onUpdateRecipient={updateRecipientStatus}
+            onInitRecipients={initCampaignRecipients}
           />
         )}
         {tab === 'templates' && (
